@@ -297,14 +297,24 @@ def test_unknown_username_clears_assignee():
 
 # ── F7: Jerarquía ─────────────────────────────────────────────────────────────
 
-def test_link_parent_uses_issue_links_in_fallback():
-    """_link_parent en modo fallback (no native epics) usa /issues/{id}/links."""
+def test_link_parent_uses_epic_label_in_fallback():
+    """_link_parent sin épicas nativas etiqueta `epic::<iid>` (Plan 277 F3).
+
+    ANTES este test exigía un POST a `/issues/{id}/links`. Ese mecanismo se RETIRÓ:
+    un link de GitLab CE es `relates_to` SIMÉTRICO (no dice quién es el padre) y
+    `_normalize_issue` nunca lo lee, así que se escribía en un lugar que nadie
+    consultaba. El test no se borra ni se saltea: se reapunta al contrato nuevo,
+    que sí es direccional y sí lo lee el read path.
+    """
     provider, mock_client = _make_provider(epics_native=False)
     mock_client._request.return_value = ({}, {})
     provider._link_parent("10", "5")
     call_args = mock_client._request.call_args
-    path = call_args.args[1] if call_args.args else ""
-    assert "/links" in path
+    verb = call_args.args[0] if call_args.args else ""
+    path = call_args.args[1] if len(call_args.args) > 1 else ""
+    assert (verb, path) == ("PUT", "/projects/123/issues/10")
+    assert (call_args.kwargs.get("json_body") or {}) == {"add_labels": "epic::5"}
+    assert "/links" not in path
 
 
 def test_link_parent_uses_group_epic_when_native_and_group_set():

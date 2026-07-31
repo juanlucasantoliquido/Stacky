@@ -656,6 +656,186 @@ def get_hierarchy():
         return jsonify({"epics": epics, "orphans": orphans})
 
 
+# ── Plan 277 F4 — clasificación LOCAL de jerarquía ───────────────────────────
+
+_FLAG_JERARQUIA_LOCAL = "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED"
+# Tope duro del recorrido de padres. No es "por si acaso": sin él, una cadena
+# circular que este endpoint no creó (una etiqueta `epic::` escrita a mano en
+# GitLab) colgaría el request en un while infinito.
+_MAX_SALTOS_JERARQUIA = 50
+
+
+def _clasificacion_local_habilitada() -> bool:
+    """Plan 277 F4 — flag default True. `config` es el MÓDULO (import de :40)."""
+    return bool(getattr(config.config, _FLAG_JERARQUIA_LOCAL, True))
+
+
+def _padre_efectivo(fila: Ticket) -> int | None:
+    """El padre que va a valer en el grafo. §3.2: gana el del tracker; la
+    clasificación local solo llena el vacío (misma regla que `gitlab_sync`)."""
+    if fila.parent_ado_id is not None:
+        return fila.parent_ado_id
+    return fila.local_parent_iid
+
+
+def _haria_ciclo(session, ticket: Ticket, parent_iid: int) -> bool:
+    """¿Colgar `ticket` de `parent_iid` cierra un ciclo en la cadena de padres?
+
+    POR QUÉ NO ES TEÓRICO: en `get_hierarchy` (arriba), si un ticket es su propio
+    ancestro, `d["children"].append(d)` arma una AUTO-REFERENCIA y `jsonify` levanta
+    `ValueError: Circular reference detected` ⇒ **500** y la pantalla del grafo
+    entera en blanco. Un solo dato malo tumba la vista completa.
+
+    El recorrido va acotado a `_MAX_SALTOS_JERARQUIA`; agotarlo cuenta como ciclo
+    (una cadena de más de 50 niveles no es un caso legítimo y no vale colgar el
+    request para averiguarlo).
+    """
+    visitados = {ticket.ado_id}
+    actual: int | None = parent_iid
+    for _ in range(_MAX_SALTOS_JERARQUIA):
+        if actual is None:
+            return False
+        if actual in visitados:
+            return True
+        visitados.add(actual)
+        # El `iid` de GitLab se repite entre proyectos: el ancestro se busca SIEMPRE
+        # dentro del mismo proyecto Stacky y el mismo tracker.
+        arriba = (
+            session.query(Ticket)
+            .filter(
+                Ticket.stacky_project_name == ticket.stacky_project_name,
+                Ticket.tracker_type == ticket.tracker_type,
+                Ticket.ado_id == actual,
+            )
+            .first()
+        )
+        if arriba is None:
+            return False          # el padre no está en la BD: no hay cadena que cerrar
+        actual = _padre_efectivo(arriba)
+    return True
+
+
+def _error(codigo: str, mensaje: str, status: int):
+    return jsonify({"ok": False, "error": codigo, "message": mensaje}), status
+
+
+@bp.patch("/<int:ticket_id>/hierarchy")
+def set_local_hierarchy(ticket_id: int):
+    """Plan 277 F4 — clasificación LOCAL de un ticket. NO toca GitLab.
+
+    Es la promesa central de la fase: el operador puede decir "este ticket es la
+    épica X" y "estos cuelgan de ella" sin escribir una sola letra en el GitLab de
+    la empresa. Este endpoint escribe DOS columnas de la BD de Stacky y no emite
+    ninguna llamada HTTP al tracker.
+
+    Body: {"work_item_type": str | null, "parent_iid": int | null}
+      - `null` en un campo BORRA esa clasificación local (vuelve a mandar el tracker).
+      - Campo AUSENTE = no se toca (PATCH parcial de verdad).
+    Respuestas:
+      200 {"ok": true, "ticket": {...}}                          -> echo-back del ticket
+      400 {"ok": false, "error": "validation", "message": ...}   -> tipo/iid inválido o auto-padre
+      403 {"ok": false, "error": "flag_off", ...}                -> la flag está apagada
+      404 {"ok": false, "error": "not_found", ...}
+      409 {"ok": false, "error": "cycle", "message": ...}        -> el padre haría un ciclo
+    """
+    if not _clasificacion_local_habilitada():
+        return jsonify({
+            "ok": False,
+            "error": "flag_off",
+            "flag": _FLAG_JERARQUIA_LOCAL,
+            "message": (
+                f"La clasificación local de jerarquía está apagada. Encendé "
+                f"{_FLAG_JERARQUIA_LOCAL} en el panel de flags del arnés."
+            ),
+        }), 403
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _error("validation", "El cuerpo tiene que ser un objeto JSON.", 400)
+
+    # UN SOLO MOTOR: la normalización y el catálogo de tipos salen del contrato,
+    # no de una copia local. `_tipo_desde_token` es la regla 5 (lo desconocido no se
+    # descarta: se capitaliza y se trunca a 40); duplicarla acá sería el motor nº 5.
+    from services.gitlab_hierarchy import (
+        TIPOS_CANONICOS,
+        _tipo_desde_token,
+        normalizar_token,
+    )
+
+    # TODA la validación ocurre ANTES de tocar la fila. `session_scope` commitea al
+    # salir del `with` — también cuando se sale por un `return`—, así que mutar y
+    # después devolver un 400 dejaría la mitad del PATCH persistida. Los dos campos
+    # se aplican juntos o no se aplica ninguno.
+    _AUSENTE = object()
+
+    with session_scope() as session:
+        t = session.get(Ticket, ticket_id)
+        if t is None:
+            return _error("not_found", f"No existe el ticket {ticket_id}.", 404)
+
+        nuevo_tipo: object = _AUSENTE
+        if "work_item_type" in body:
+            crudo = body["work_item_type"]
+            if crudo is None:
+                nuevo_tipo = None                   # borrado explícito
+            elif not isinstance(crudo, str):
+                return _error(
+                    "validation", "'work_item_type' tiene que ser texto o null.", 400,
+                )
+            else:
+                token = normalizar_token(crudo)
+                if not token:
+                    return _error(
+                        "validation",
+                        "'work_item_type' quedó vacío tras normalizar; usá uno de: "
+                        + ", ".join(sorted(TIPOS_CANONICOS.values())),
+                        400,
+                    )
+                nuevo_tipo = _tipo_desde_token(token)
+
+        nuevo_padre: object = _AUSENTE
+        if "parent_iid" in body:
+            crudo = body["parent_iid"]
+            if crudo is None:
+                nuevo_padre = None                  # borrado explícito
+            else:
+                try:
+                    iid = int(str(crudo).strip())
+                except (TypeError, ValueError):
+                    return _error(
+                        "validation",
+                        f"'parent_iid' no es un número entero: {crudo!r}.", 400,
+                    )
+                if iid <= 0:
+                    return _error(
+                        "validation",
+                        f"'parent_iid' tiene que ser positivo, no {iid}.", 400,
+                    )
+                if iid == t.ado_id:
+                    return _error(
+                        "validation",
+                        f"Un ticket no puede ser su propio padre (iid {iid}).", 400,
+                    )
+                if _haria_ciclo(session, t, iid):
+                    return _error(
+                        "cycle",
+                        f"Colgar el ticket {t.ado_id} de {iid} cierra un ciclo en la "
+                        f"cadena de padres; el grafo no se podría dibujar.",
+                        409,
+                    )
+                nuevo_padre = iid
+
+        if nuevo_tipo is not _AUSENTE:
+            t.local_work_item_type = nuevo_tipo
+        if nuevo_padre is not _AUSENTE:
+            t.local_parent_iid = nuevo_padre
+
+        session.flush()
+        payload = t.to_dict()     # echo-back: el control abre con lo que se guardó
+
+    return jsonify({"ok": True, "ticket": payload}), 200
+
+
 @bp.get("")
 def list_tickets():
     project_name = _request_project_name()

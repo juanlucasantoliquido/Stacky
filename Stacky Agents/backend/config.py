@@ -1365,6 +1365,15 @@ class Config:
     STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED: bool = os.getenv(
         "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ON: el operador puede marcar a mano de qué tipo es un ticket de GitLab y de
+    # cuál otro cuelga, sin escribir nada en el GitLab de la empresa: la marca vive
+    # en dos columnas de la BD de Stacky y solo se aplica cuando el tracker NO dijo
+    # nada (si GitLab lo declara, gana GitLab y la marca local se conserva igual).
+    # OFF: el control desaparece de la pantalla, el sync ignora esas columnas
+    # aunque tengan valor, y el PATCH devuelve 403 nombrando esta misma clave.
+    STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
     # ── Plan 79 — Estados de tarea deterministas y configurables ─────────────
     # ON: Stacky aplica el estado-en-progreso (al iniciar) y el estado-final
     # (al completar) desde client_profile.tracker_state_machine.<agent_type>,

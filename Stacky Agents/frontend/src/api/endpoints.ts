@@ -309,6 +309,18 @@ export const Tickets = {
       { status, reason }
     ),
   /**
+   * Plan 277 F4 — clasificación LOCAL de jerarquía. NO toca el GitLab del operador:
+   * escribe dos columnas de la BD de Stacky. `null` en un campo BORRA esa
+   * clasificación; un campo AUSENTE no se toca (PATCH parcial de verdad), así que
+   * el llamador manda SOLO lo que cambió. Lanza GatewayError en 400/403/404/409:
+   * traducilo con `userFacingMessage`.
+   */
+  setLocalHierarchy: (
+    id: number,
+    payload: { work_item_type?: string | null; parent_iid?: number | null },
+  ) =>
+    api.patch<{ ok: boolean; ticket: Ticket }>(`/api/tickets/${id}/hierarchy`, payload),
+  /**
    * Cierre manual fallback de un ticket (Fase 4).
    * Envía X-Completion-Source: manual_ui para trazabilidad en SystemLogs.
    */

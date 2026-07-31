@@ -480,6 +480,11 @@ _CURATED_DEFAULTS_ON = {
     # el operador disparó; (B) no escribe en el GitLab del operador (el veredicto
     # se guarda en la BD de Stacky) ni le saca ninguna decisión.
     "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED",  # Plan 277 F1/F2 — un solo motor de type::/epic::
+    # Plan 277 F4 — nace ON por el mismo criterio: (A) no hay loop, daemon ni
+    # llamada a modelo; (B) escribe DOS columnas de la BD de Stacky, nunca el
+    # GitLab del operador, y lejos de sacarle una decisión ES su decisión, ítem
+    # por ítem. Precedente idéntico: STACKY_GITLAB_SYNC_ENABLED.
+    "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED",  # Plan 277 F4 — clasificación local
     "STACKY_RUNTIME_CAPABILITIES_ENABLED",      # Plan 264
     "STACKY_CODEX_EFFORT_PARITY_ENABLED",       # Plan 264
     "STACKY_RUN_SELECTION_PREFS_ENABLED",       # Plan 264

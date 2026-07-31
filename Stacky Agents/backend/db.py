@@ -279,6 +279,13 @@ def _migrate_add_columns() -> None:
         ("tickets", "tracker_type", "VARCHAR(40)"),
         # P6: campo de asignacion ADO en tickets
         ("tickets", "assigned_to_ado", "VARCHAR(200)"),
+        # Plan 277 F4 — clasificacion local de jerarquia (GitLab sin etiquetas).
+        # ADITIVO e idempotente. OJO: `_rebuild_tickets_table_if_needed` (mas abajo)
+        # tiene la lista de columnas HARDCODEADA y corre despues de este loop; si
+        # una columna nueva no se agrega ALLA TAMBIEN, el ALTER la crea y el rebuild
+        # la borra en silencio junto con el dato del operador.
+        ("tickets", "local_work_item_type", "VARCHAR(40)"),
+        ("tickets", "local_parent_iid", "INTEGER"),
         ("ticket_state_history", "stacky_project_name", "VARCHAR(80)"),
         # P6: campos de perfil ADO en usuarios
         ("users", "ado_unique_name", "VARCHAR(200)"),
@@ -412,7 +419,9 @@ def _rebuild_tickets_table_if_needed(conn) -> None:
                 last_synced_at DATETIME,
                 created_at DATETIME NOT NULL,
                 stacky_status VARCHAR(30),
-                assigned_to_ado VARCHAR(200)
+                assigned_to_ado VARCHAR(200),
+                local_work_item_type VARCHAR(40),      -- Plan 277 F4
+                local_parent_iid INTEGER               -- Plan 277 F4
             )
             """
         )
@@ -423,7 +432,8 @@ def _rebuild_tickets_table_if_needed(conn) -> None:
             INSERT INTO tickets__new (
                 id, ado_id, external_id, project, stacky_project_name, tracker_type,
                 title, description, ado_state, ado_url, priority, work_item_type,
-                parent_ado_id, last_synced_at, created_at, stacky_status, assigned_to_ado
+                parent_ado_id, last_synced_at, created_at, stacky_status, assigned_to_ado,
+                local_work_item_type, local_parent_iid
             )
             SELECT
                 id,
@@ -442,7 +452,11 @@ def _rebuild_tickets_table_if_needed(conn) -> None:
                 last_synced_at,
                 created_at,
                 stacky_status,
-                assigned_to_ado
+                assigned_to_ado,
+                -- Plan 277 F4: sin estas dos, el DROP TABLE de abajo borraba la
+                -- clasificacion manual del operador sin error y sin log.
+                local_work_item_type,
+                local_parent_iid
             FROM tickets
             """
         )

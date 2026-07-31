@@ -112,6 +112,12 @@ export interface Ticket {
   item_type?: string;
   parent_external_id?: number | null;
   assignee?: string | null;
+  // Plan 277 F4 — clasificación LOCAL de jerarquía (solo GitLab). OPCIONALES a
+  // propósito: con STACKY_CANONICAL_VOCABULARY_ENABLED apagada el servidor devuelve
+  // el payload legacy de 16 claves y estas dos NO vienen. Nunca asumir que existen:
+  // usar `debeMostrarControlJerarquia` de lib/jerarquiaLocal.ts.
+  local_work_item_type?: string | null;
+  local_parent_iid?: number | null;
   last_execution?: AgentExecution | null;
   pipeline_summary?: {
     done_stages: string[];

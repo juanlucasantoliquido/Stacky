@@ -244,6 +244,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan277_contrato_jerarquia.py
   tests/test_plan277_read_path.py
   tests/test_plan277_un_solo_motor.py
+  tests/test_plan277_write_path.py
+  tests/test_plan277_clasificacion_local.py
   # — Plan 117 · Insights locales de ejecuciones (IA local) —
   tests/test_plan117_insights_flags.py
   tests/test_plan117_insights_core.py

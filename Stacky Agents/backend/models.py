@@ -54,6 +54,12 @@ class Ticket(Base):
     priority: Mapped[int | None] = mapped_column(Integer)
     work_item_type: Mapped[str | None] = mapped_column(String(40))  # Epic, Task, Bug, etc.
     parent_ado_id: Mapped[int | None] = mapped_column(Integer)      # ADO id of parent Epic
+    # Plan 277 F4 — clasificación LOCAL de Stacky. Se usa SOLO cuando el tracker no
+    # dijo nada (§3.2: GitLab es el sistema de registro). Nunca se escribe en GitLab
+    # desde acá: eso es F5, detrás de otra flag. Y nunca se borra sola: si GitLab
+    # después declara un tipo distinto, gana GitLab pero el dato del operador queda.
+    local_work_item_type: Mapped[str | None] = mapped_column(String(40))
+    local_parent_iid: Mapped[int | None] = mapped_column(Integer)
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     # Estado interno de Stacky (independiente de ado_state).
@@ -132,6 +138,14 @@ class Ticket(Base):
             "priority": self.priority,
             "item_type": self.work_item_type,
             "parent_external_id": self.parent_ado_id,
+            # Plan 277 F4 — clasificación LOCAL. Van SOLO acá, NUNCA en
+            # `_legacy_payload()`: ese método declara "16 claves EXACTAS …
+            # byte-idéntico" y es el contrato de no-regresión del plan 218 F5.
+            # Consecuencia asumida: con STACKY_CANONICAL_VOCABULARY_ENABLED=False
+            # las dos claves NO viajan, así que el control de la UI se renderiza
+            # solo si la clave ESTÁ PRESENTE, nunca asumiendo su existencia.
+            "local_work_item_type": self.local_work_item_type,
+            "local_parent_iid": self.local_parent_iid,
             "last_synced_at": self.last_synced_at.isoformat() if self.last_synced_at else None,
             "stacky_status": self.stacky_status or "idle",
             "assignee": self.assigned_to_ado,

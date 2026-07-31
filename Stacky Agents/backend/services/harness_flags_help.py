@@ -49,6 +49,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: vuelve la lectura vieja, que elige el tipo según el orden en que llegan las marcas y deja a casi todos los tickets sin ninguno arriba.",
         example="Como acordar que en todas las carpetas la solapa de color dice el tema y la pestaña con número dice de qué carpeta grande cuelga: se leen igual siempre, las ordene quien las ordene.",
     ),
+    "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED": PlainHelp(
+        what="Te deja marcar a mano de qué tipo es un ticket y de cuál otro cuelga, guardándolo solo en Stacky, sin tocar el sistema de tickets de la empresa.",
+        on_effect="Si la activás: en cada ticket aparece un control para elegir el tipo y el número del ticket del que cuelga; se guarda al instante. Si el sistema de la empresa dice otra cosa, manda el de la empresa y tu marca se conserva.",
+        off_effect="Si la apagás: el control desaparece, lo que ya habías marcado queda guardado pero deja de aplicarse, y si algo intenta guardarlo te avisa que esta opción está apagada.",
+        example="Como ponerle una etiqueta tuya a una carpeta del archivo compartido: la ves vos y ordena tu vista, pero no le cambiás nada a la carpeta que usan los demás.",
+    ),
     # ── Plan 264 ──────────────────────────────────────────────────────────
     "STACKY_RUNTIME_CAPABILITIES_ENABLED": PlainHelp(
         what="Una sola tabla que dice qué modelos y qué niveles de esfuerzo acepta cada herramienta, y a qué degrada cada combinación.",

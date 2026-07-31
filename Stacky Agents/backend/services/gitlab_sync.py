@@ -42,6 +42,17 @@ _TITULO_MAX = 500      # Ticket.title es String(500) y es NOT NULL
 _TRACKER = "gitlab"
 
 
+# Plan 277 F4 — los 4 contadores de la clasificación local. Son ADITIVOS al dict de
+# retorno: `fetched/created/updated/removed/skipped` no cambian, así que el consumidor
+# (`api/tickets.py:5995-6021`) sigue andando sin tocar una línea.
+_CONTADORES_LOCAL = (
+    "usados_local_tipo",     # GitLab no dijo nada y se aplicó la clasificación local
+    "superseded_tipo",       # GitLab dijo algo distinto: gana GitLab, la local NO se borra
+    "usados_local_padre",
+    "superseded_padre",
+)
+
+
 def _a_int(valor) -> Optional[int]:
     """Convierte a int o devuelve None. `_normalize_issue` emite `id`/`iid` como
     STR (`gitlab_provider.py`) y las columnas son Integer."""
@@ -53,7 +64,28 @@ def _a_int(valor) -> Optional[int]:
         return None
 
 
-def _upsert_ticket_gitlab(session, item: dict, *, ctx, ahora: datetime) -> str:
+def _clasificacion_local_habilitada() -> bool:
+    """Plan 277 F4 — STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED (default True).
+
+    `config` acá es el MÓDULO (este archivo hace `import config` "para poder parchear
+    en tests"); la instancia de flags es `config.config`, igual que la lectura de la
+    flag del contrato en `_upsert_ticket_gitlab`.
+    """
+    return bool(
+        getattr(config.config, "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED", True)
+    )
+
+
+def _sumar(contadores: Optional[dict], clave: str) -> None:
+    """Incrementa un contador si el llamador pidió llevarlos. No-op si es None."""
+    if contadores is None:
+        return
+    contadores[clave] = contadores.get(clave, 0) + 1
+
+
+def _upsert_ticket_gitlab(
+    session, item: dict, *, ctx, ahora: datetime, contadores: Optional[dict] = None
+) -> str:
     """Alta/actualización de UNA fila de GitLab por la terna. Plan 277 F2.
 
     Extraído tal cual del bucle de `sync_gitlab_tickets` (antes gitlab_sync.py:110-158)
@@ -67,6 +99,18 @@ def _upsert_ticket_gitlab(session, item: dict, *, ctx, ahora: datetime) -> str:
 
     El llamador conserva el guard de identidad (`external_id`/`ado_id` no nulos):
     es él quien lleva la cuenta de salteados y el set de `vistos_external`.
+
+    Plan 277 F4 — CLASIFICACIÓN LOCAL Y SU CASO BORDE. `contadores` es un dict
+    opcional que esta función INCREMENTA (ver `_CONTADORES_LOCAL`); el valor de
+    retorno no cambia, para no romper a los llamadores del 277 F2. La precedencia es
+    la de §3.2 sin excepciones: GitLab es el sistema de registro y la clasificación
+    local SOLO llena el vacío.
+
+    CASO BORDE, declarado a propósito: en la PRIMERA aparición de un issue
+    `fila is None` — la fila todavía no existe, así que no hay clasificación local
+    que aplicar y los 4 contadores quedan en 0. Eso es correcto, no un bug: el
+    operador clasifica un ticket que YA está en la tabla, y su clasificación se
+    aplica desde el sync SIGUIENTE.
 
     Returns: "created" | "updated" | "noop"
     """
@@ -100,6 +144,32 @@ def _upsert_ticket_gitlab(session, item: dict, *, ctx, ahora: datetime) -> str:
         )
         .first()
     )
+
+    # Plan 277 F4 — GitLab es el sistema de registro (§3.2). La clasificación local
+    # SOLO llena el vacío; si GitLab dijo algo, gana GitLab y la local queda como
+    # `superseded` (contada, NUNCA borrada: es dato del operador). Va DESPUÉS de
+    # buscar la fila y ANTES de escribirla, porque necesita las dos cosas.
+    if _clasificacion_local_habilitada() and fila is not None:
+        origen_tipo = item.get("origen_tipo") or "defecto"
+        if origen_tipo == "defecto" and fila.local_work_item_type:
+            tipo = fila.local_work_item_type
+            _sumar(contadores, "usados_local_tipo")
+        elif (
+            origen_tipo != "defecto"
+            and fila.local_work_item_type
+            and fila.local_work_item_type != tipo
+        ):
+            _sumar(contadores, "superseded_tipo")
+
+        if parent_ado_id is None and fila.local_parent_iid:
+            parent_ado_id = fila.local_parent_iid
+            _sumar(contadores, "usados_local_padre")
+        elif (
+            parent_ado_id is not None
+            and fila.local_parent_iid
+            and fila.local_parent_iid != parent_ado_id
+        ):
+            _sumar(contadores, "superseded_padre")
 
     if fila is None:
         session.add(
@@ -167,6 +237,10 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
 
     creados = actualizados = salteados = cerrados = 0
     vistos_external: set[int] = set()
+    # Plan 277 F4 — los 4 contadores arrancan SIEMPRE en 0, incluso con la flag
+    # apagada: el consumidor lee claves fijas y una clave que aparece y desaparece
+    # es peor que una en cero.
+    contadores_local: dict = {clave: 0 for clave in _CONTADORES_LOCAL}
 
     with session_scope() as session:
         for item in items:
@@ -192,7 +266,8 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
             # traiga los padres faltantes por el MISMO camino. Acá solo se cuenta
             # por su valor de retorno.
             resultado_fila = _upsert_ticket_gitlab(
-                session, item, ctx=ctx, ahora=datetime.utcnow()
+                session, item, ctx=ctx, ahora=datetime.utcnow(),
+                contadores=contadores_local,
             )
             if resultado_fila == "created":
                 creados += 1
@@ -224,6 +299,8 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
         "removed": cerrados,
         "skipped": salteados,
         "stacky_project_name": stacky_name,
+        # Plan 277 F4 — ADITIVO: las 5 claves de arriba conservan su significado.
+        **contadores_local,
     }
     logger.info("Plan 276 sync GitLab '%s': %s", project_name, resultado)
     return resultado

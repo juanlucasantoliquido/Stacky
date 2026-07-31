@@ -170,7 +170,29 @@ class GitLabTrackerProvider:
         return None
 
     def _link_parent(self, child_iid: str, parent_id: str) -> None:
-        """Establece la relación padre-hijo (F7): epics nativos o issue-links."""
+        """Establece la relación padre-hijo. Plan 277 F3: la etiqueta es el mecanismo
+        PRIMARIO; el epic nativo queda como camino Premium; los issue-links se retiran.
+
+        POR QUÉ SE RETIRAN LOS ISSUE-LINKS: un link de GitLab CE es `relates_to`,
+        SIMÉTRICO — no dice quién es el padre — y `_normalize_issue` nunca los lee
+        (jamás hace GET /links). Se estaba escribiendo en un lugar que nadie lee, y
+        el POST estaba envuelto en `except Exception: pass`, así que su fallo era
+        invisible. La etiqueta `epic::<iid>` es direccional, viaja en el mismo
+        payload que el listado ya trae (cero requests extra al leer) y es visible y
+        filtrable en la UI de GitLab.
+
+        Solo el **403** del camino nativo degrada a etiqueta: es el código con el que
+        GitLab responde "no tenés licencia para épicas". Cualquier otro status es un
+        fallo real y se re-lanza, para que un 500 del servidor no se disfrace de
+        "esta instancia es Community Edition".
+        """
+        # Import local: evita el ciclo. `PREFIJO_PADRE` se usa en el log en vez de
+        # escribir el prefijo literal acá — este archivo es uno de los 4 motores que
+        # el gate de F2-bis vigila, y un literal de clasificación en un mensaje
+        # cuenta igual que uno en la lógica (el gate mira `ast.Constant`, no
+        # distingue). Consumir la constante del contrato es la forma correcta.
+        from services.gitlab_hierarchy import PREFIJO_PADRE, etiqueta_de_padre
+
         proj_path = self._client._project_path()
         if self._epics_native and self._group:
             # Modo: Group Epics nativos (requiere licencia Premium/Ultimate)
@@ -182,20 +204,46 @@ class GitLabTrackerProvider:
                 )
                 return
             except TrackerApiError as e:
-                if e.status == 403:
-                    # Degradar a issue-links (sin licencia)
-                    pass
-                else:
+                if e.status != 403:
                     raise
-        # Fallback: issue-links (siempre disponible)
+                logger.info(
+                    "Plan 277: épicas nativas rechazadas (403) — degradando a etiqueta "
+                    "%s para el issue %s.",
+                    PREFIJO_PADRE, child_iid,
+                )
+
+        # Camino primario en CE: la etiqueta.
+        try:
+            etiqueta = etiqueta_de_padre(parent_id)   # ValueError si no es un iid
+        except ValueError:
+            logger.warning(
+                "Plan 277: parent_id %r no es un iid válido; el hijo %s queda huérfano "
+                "(no se escribe una etiqueta basura en GitLab).",
+                parent_id, child_iid,
+            )
+            return
+
         try:
             self._client._request(
-                "POST",
-                f"/projects/{proj_path}/issues/{child_iid}/links",
-                json_body={"target_project_id": self._project, "target_issue_iid": parent_id},
+                "PUT",
+                f"/projects/{proj_path}/issues/{child_iid}",
+                json_body={"add_labels": etiqueta},
             )
-        except Exception:
-            pass  # silencioso — no bloquear la creación del issue
+        except Exception as exc:
+            # v277: NO se traga. Antes era `pass` mudo y el operador nunca sabía que
+            # la jerarquía no se había escrito. Se registra y se re-lanza envuelto:
+            # quien crea el item decide si el hijo huérfano es aceptable.
+            # El status se hereda del error original cuando existe (0 = desconocido):
+            # `TrackerApiError` lo exige posicional, y perderlo dejaría al llamador
+            # sin saber si fue un 403, un 404 o una caída de red.
+            logger.error(
+                "Plan 277: no se pudo etiquetar el padre de %s: %s", child_iid, exc
+            )
+            raise TrackerApiError(
+                getattr(exc, "status", 0) or 0,
+                f"El issue {child_iid} se creó pero no se pudo enlazar a su padre "
+                f"{parent_id} (etiqueta {etiqueta}): {exc}",
+            ) from exc
 
     def _render_note(self, body_html: str) -> str:
         """Convierte HTML a texto de nota GitLab (preserva el marker)."""
@@ -356,9 +404,17 @@ class GitLabTrackerProvider:
         )
         result = self._normalize_issue(body)
 
-        # Enlazar con padre si se especificó (F7)
+        # Enlazar con padre si se especificó (F7 / Plan 277 F3)
         if item.parent_id:
-            self._link_parent(str(body.get("iid") or body.get("id") or ""), item.parent_id)
+            try:
+                self._link_parent(str(body.get("iid") or body.get("id") or ""), item.parent_id)
+            except TrackerApiError as exc:
+                # El issue YA existe en GitLab: no se puede deshacer ni se debe. Se
+                # devuelve creado pero con la falla VISIBLE en el resultado, en vez
+                # del silencio de antes (`except Exception: pass`). Punto medio entre
+                # tragarse el error y abortar una creación que ya ocurrió.
+                result["parent_link_error"] = str(exc)
+                logger.error("Plan 277: issue creado sin enlace de padre: %s", exc)
 
         return result
 

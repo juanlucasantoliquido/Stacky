@@ -19,6 +19,8 @@ import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
 import TicketLocalInsightButton from "../components/TicketLocalInsightButton";
+// Plan 277 F4 — clasificación local de jerarquía (se auto-oculta fuera de GitLab).
+import JerarquiaLocalControl from "../components/JerarquiaLocalControl";
 import LoadErrorState from "../components/LoadErrorState";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
@@ -696,6 +698,20 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                 incoherencias entre agentes, con TODO el contexto del ticket
                 (épica, hijas, comentarios y outputs). Gratis, corre local. */}
             <TicketLocalInsightButton ticketId={ticket.id} />
+
+            {/* Plan 277 F4 — Tipo y Padre locales, precargados del payload. El
+                componente devuelve null salvo en proyectos GitLab con la flag
+                encendida y la clave presente, así que el tablero de ADO queda
+                exactamente igual. */}
+            <div onClick={(e) => e.stopPropagation()}>
+              <JerarquiaLocalControl
+                ticket={ticket}
+                onGuardado={() => {
+                  qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
+                  qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
+                }}
+              />
+            </div>
 
             {ticket.description && (
               <details className={styles.descDetails}>

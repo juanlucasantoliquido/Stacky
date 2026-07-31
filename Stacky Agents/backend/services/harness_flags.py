@@ -541,6 +541,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_GITLAB_SYNC_ENABLED",            # Plan 276 F5 — sync GitLab → BD de Stacky
         # Plan 277 — Jerarquía de GitLab con un solo contrato de tipo y padre
         "STACKY_GITLAB_HIERARCHY_CONTRACT_ENABLED",  # Plan 277 F1/F2 — un solo motor de type::/epic::
+        "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED",  # Plan 277 F4 — clasificacion local en la BD de Stacky
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -5536,6 +5537,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "todo issue termine huérfano en el grafo. Solo lectura del payload que ya se bajó: "
             "cero llamadas extra y cero escritura en el GitLab del operador. Con OFF vuelve la "
             "lectura divergente de hoy."
+        ),
+        group="global",
+    ),
+    FlagSpec(
+        key="STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED",
+        type="bool",
+        default=True,  # default ON (escribe en la BD de Stacky, NUNCA en el GitLab del operador, y es el operador quien decide ítem por ítem; curada en _CURATED_DEFAULTS_ON)
+        label="Clasificación local de jerarquía de GitLab",
+        description=(
+            "Plan 277 — El operador marca desde la pantalla de qué tipo es un ticket de GitLab y "
+            "de cuál otro cuelga, SIN escribir una sola letra en el GitLab de la empresa: la "
+            "marca vive en dos columnas de la tabla de tickets de Stacky. Es lo único que sirve "
+            "para los issues heredados que no tienen ninguna etiqueta del contrato. Precedencia "
+            "sin excepciones: si GitLab declara el tipo o el padre, gana GitLab y la marca local "
+            "queda guardada igual (se cuenta como superseded, nunca se borra). Con OFF el control "
+            "no se renderiza, el sync ignora esas columnas aunque tengan valor y la escritura "
+            "responde 403 nombrando esta flag."
         ),
         group="global",
     ),

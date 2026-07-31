@@ -1,8 +1,37 @@
-**Estado:** PROPUESTO v1 · **Autor:** StackyArchitectaUltraEficientCode · **Fecha:** 2026-07-31
+**Estado:** MEJORADO v2 · **Autor:** StackyArchitectaUltraEficientCode · **Fecha:** 2026-07-31
 **Fuente:** auditoría forense GitLab self-hosted del 2026-07-31 (caso real RIPLEY contra `srvcgit01.imsolutions.local`), con reproducción empírica de la causa raíz **y del remedio** en el venv del repo.
 **Advertencia sobre este header:** el campo `Estado:` **NO es evidencia**. Verificá siempre con `git log --all --grep="plan-276"` y con los comandos de F0.
 
 # Plan 276 — GitLab self-hosted de punta a punta: TLS que coexiste, sync real y tickets en el grafo
+
+## 0. Changelog v1 → v2
+
+Crítica adversarial del 2026-07-31, **corrida contra los archivos reales** (cada hallazgo se verificó abriendo el archivo, no desde memoria). El v1 se conserva íntegro salvo donde un hallazgo obliga a cambiarlo.
+
+**Meta que rige la v2:** *después de implementar este plan el operador VE LOS TICKETS, sí o sí.* No puede quedar ningún camino por el que el grafo siga vacío **ni** por el que el fallo sea mudo. Todo lo de abajo se juzga contra ese criterio.
+
+| # | Severidad | Qué se corrigió | Dónde |
+|---|---|---|---|
+| **C1** | **BLOQUEANTE** | El plan entero se apoya en `STACKY_GITLAB_ENABLED`, cuyo **default de fábrica es `false`** (`config.py:1209-1210`), y el v1 **no lo mencionaba ni una vez**. Ahora es prerequisito duro medido en F0, F5.3 deja de tragarse el `TrackerConfigError` para ctx GitLab, y hay test que lo vigila. | §1, §3.4-bis, F0 paso 8, F0.8, F5.3, F5.5, §6 |
+| **C2** | **BLOQUEANTE** | F5 nunca declaraba la **clave de upsert** y la tabla tiene un UNIQUE que la fuerza (`models.py:68-77`, `ux_tickets_stacky_tracker_external`). Un implementador upserteando por `ado_id` (el análogo de ADO) revienta con `IntegrityError` en la segunda corrida. | F5.2, F5.5, §6 |
+| **C3** | **IMPORTANTE** | `shouldRefreshTicketQueries` (`useTicketSync.ts:70-75`) devuelve **false** si `idempotent === true`, y las 3 invalidaciones viven dentro de ese `if` (`:105-109`) ⇒ el operador aprieta "Sincronizar", la BD tiene las filas, **y la UI no refetchea**. Ahora un trigger `manual` invalida siempre. | F6 diff 4, F6 tests |
+| **C4** | **IMPORTANTE** | F5 no decía qué `TrackerQuery` construir para `fetch_open_items`. Ahora es literal, con el import exacto. | F5.2 |
+| **C5** | **IMPORTANTE** | F7 declaraba "los 6 literales" y **dejaba afuera el mensaje de estado vacío** (`TicketBoard.tsx:1293`) — que es exactamente el texto que el operador tiene delante mientras está bloqueado. Son **7**. | F7, §10 |
+| **C6** | **MENOR** | F4 reescribía la rama GitLab a 4 sub-veredictos e ignoraba el **tercer check real, `write_permission`** (`global_config.py:383-389`). Ahora se declara explícito que se conserva y **no** entra en el `ok`. | F4 |
+| **C7** | **MENOR** (parcial) | El `_sync_in_progress_by_project.discard(sync_scope)` del diff de F6 es **redundante**: ya hay un `finally:` que lo hace (`api/tickets.py:5992-5993`). Se sacó. **Los anclajes de línea de F6 se re-verificaron uno por uno y estaban CORRECTOS** (`:717-721`, `:5988-5991`, `:700-723`): no se tocaron. Se agregó anclaje **por símbolo** además del numérico, porque las líneas caducan. | F6 |
+| **C8** | **MENOR** | El plan mata una clase de error (SSLError bajo truststore por `get_ca_certs()` ciego a la hoja) y no registraba su huella en `docs/sistema/error_fingerprints.json`. Es convención del repo. | §10 |
+| **C9** | **BLOQUEANTE** (hallazgo propio) | El caso de test de F5.5 *"flag `STACKY_GITLAB_SYNC_ENABLED=False` ⇒ vuelve a levantarse `CapabilityUnavailable`"` era **insatisfacible con el propio diff del v1**: con esa flag OFF el bloque nuevo no corre, `provider` queda `None` y el flujo cae a `sync_tickets` ⇒ **`AdoConfigError`**, no `CapabilityUnavailable`. F5.3 se reestructuró para que la resolución del provider dependa del **tipo de tracker**, no de la flag de sync. | F5.3, F5.5 |
+
+**Adiciones del arquitecto** (marcadas en el texto como `[ADICIÓN ARQUITECTO]`) — son lo que convierte *"el plan cerró"* en *"el operador ve los tickets"*:
+
+1. **F0.8 — Preflight de visibilidad.** Un solo comando read-only que verifica los **6 prerequisitos duros** que bloquean ver tickets, cada uno con su remedio en una línea. Falla rápido en F0 en vez de descubrirlo en F11.
+2. **F12 — Gate ejecutable de cierre con exit code.** `smoke_plan276_visibilidad.ps1` **y** `.sh`: dispara el sync, lee el grafo y **sale ≠ 0** si `len(epics)+len(orphans) == 0` o si el conteo no coincide con el `X-Total` real de GitLab. Reemplaza el `curl` a ojo de F11(c). Es el único criterio que prueba la meta del operador.
+
+**Lo que NO cambió** (verificado correcto en v1, no se tocó): el mapeo de F5 es compatible con `_ticket_project_filter` (`api/tickets.py:348-355`) ⇒ el grafo va a ver las filas; `ctx.tracker_project` nunca es vacío ⇒ `Ticket.project` (not null) no revienta; `get_tracker_provider` y `TrackerConfigError` **ya** están importados a nivel de módulo (`api/tickets.py:33`) ⇒ el diff de F5.3 no necesita imports nuevos para ellos; `TicketBoard.tsx` **no** gatea por `tracker_type` ⇒ el board y el botón "Sincronizar" **sí** son alcanzables en un proyecto GitLab; y los anclajes de F0 paso 6 y de F7 son todos correctos.
+
+**Flags nuevas: siguen siendo 3, las tres `default=True`.** La v2 **no agrega ninguna flag**: las dos adiciones son read-only + on-demand.
+
+---
 
 ## 1. Objetivo
 
@@ -26,8 +55,13 @@ Este plan hace las tres cosas juntas porque cualquiera sola deja al operador en 
 | Rutas de `GitLabClient` que degradan la verificación TLS en silencio | **2** (`tls_pinning.py:103-107` y `:118-119`, fallan ABIERTO) | **0** |
 | Parches globales a `urllib3` hechos por código de Stacky | **2** (`tls_pinning.py:79-80`) | **0** |
 | Tests de TLS que corren con `truststore.inject_into_ssl()` aplicado | **0 de 27** | **100 %** de los nuevos |
+| Prerequisitos duros de visibilidad verificados **antes** de empezar (v2, C1) | **0** (se descubren recién en la fase 11) | **6**, en un solo comando read-only (F0.8) |
+| Gate **ejecutable** que prueba "el operador ve los tickets" (v2) | **0** (hoy es un `curl` leído a ojo) | **1** con exit code (F12) |
 
-**Flags nuevas: 3, las tres `default=True`** (§3.4). Ninguna cae en las categorías de excepción.
+**Flags nuevas: 3, las tres `default=True`** (§3.4). Ninguna cae en las categorías de excepción. **La v2 no agrega ninguna más.**
+
+> **PREREQUISITO DURO QUE EL v1 NO DECLARABA (C1).** Todo este plan depende de `STACKY_GITLAB_ENABLED`, cuyo **default de fábrica es `false`** (`config.py:1209-1210`, comentario literal: *"master switch para el adapter GitLab. OFF default"*). Con esa flag apagada, `get_tracker_provider` lanza `TrackerConfigError` (`services/tracker_provider.py:133-136`), `_provider_for_ticket` **se la traga** y devuelve `None` (`api/tickets.py:425-426`), el sync cae al branch ADO y muere con `AdoConfigError("El proyecto no usa Azure DevOps")` ⇒ **HTTP 400 y cero tickets**. En **esta** máquina `backend/.env:7` la tiene en `true`, y por eso el defecto pasaría desapercibido en el smoke local mientras cualquier instalación nueva queda muerta.
+> **Cómo se resuelve (§3.4-bis):** el default **NO se flipea por código** — es config de operador y va por UI (`api/global_config.py:81`, ya está en `_MANAGED_KEYS`). Lo que hace este plan es volverlo **imposible de no ver**: se mide en F0, se chequea en el preflight de F0.8, y F5.3 deja de tragarse el error para un proyecto GitLab (lo re-lanza nombrando el switch y dónde encenderlo).
 
 ---
 
@@ -172,6 +206,18 @@ Ninguna nace OFF. Ninguna es config de operador (son flags del arnés, no aparec
 
 **Regla de binding:** con `import config` se lee `config.config.X`; con `from config import config` se lee `config.X`. En `backend/app.py` ya es la **instancia** (ver el comentario de `app.py:884-886`).
 
+### 3.4-bis Flags EXISTENTES de las que este plan depende (C1 — el v1 no las declaraba)
+
+Estas **no se crean ni se modifican**. Se declaran porque su valor efectivo decide si el operador ve tickets o no, y dos de las tres nacen en un valor que **bloquea** el objetivo del plan.
+
+| Flag existente | Default de fábrica | Efecto si está en ese default | Qué hace este plan |
+|---|---|---|---|
+| `STACKY_GITLAB_ENABLED` (`config.py:1209-1210`) | **`false`** ⚠ | **BLOQUEA TODO.** `get_tracker_provider` lanza `TrackerConfigError` (`tracker_provider.py:133-136`) ⇒ `_provider_for_ticket` devuelve `None` (`api/tickets.py:425-426`) ⇒ branch ADO ⇒ `AdoConfigError` ⇒ **400 y cero tickets**. | **Prerequisito duro, no se flipea por código** (riel: config de operador va por UI, y ya está en `_MANAGED_KEYS`, `api/global_config.py:81`). Se **mide** en F0 paso 8, se **chequea** en F0.8, y F5.3 lo vuelve **ruidoso** (error que nombra el switch) en vez de mudo. |
+| `STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED` (`config.py:1221-1222`) | `true` ✓ | Correcto: resuelve el destino **por proyecto** y transporta el `ca_bundle`. Si alguien lo apaga, vuelve la rama legacy. | F8.1 tapa la rama legacy para que apagarlo **no** devuelva el `SSLError` entero. F0.8 lo reporta. |
+| `STACKY_TICKETS_PROVIDER_ENABLED` (`config.py:1320-1321`) | **`false`** | `_provider_for_ticket` devuelve `None` **antes de intentar nada**. | **Deliberadamente NO se flipea** (§3.2: reenruta ~18 call sites y rompe los tests de origen del plan 70). F5.3 resuelve el provider **localmente**, por tipo de tracker, con radio de impacto de una función. |
+
+**Regla que se deriva de esto y vale para toda la implementación:** *ningún camino de este plan puede convertir "una flag está apagada" en "un error de otro proveedor"*. Si el proyecto activo es GitLab, el error tiene que **nombrar la flag de GitLab**, nunca hablar de Azure DevOps.
+
 ### 3.5 Paridad de los 3 runtimes
 
 Este plan **no toca ninguna superficie que dependa del runtime**: cero prompts, cero `.agent.md`, cero tools de agente, cero llamadas a modelo. Todo es Python de backend, TypeScript de frontend y tests. **Codex CLI, Claude Code CLI y GitHub Copilot Pro** aplican el mismo diff, corren los mismos comandos y obtienen el mismo resultado. La paridad es **estructural**, no declarada: no hay ninguna rama por runtime que pudiera divergir, y por eso ninguna fase necesita fallback por runtime. Cada fase lo repite en una línea para que quede explícito.
@@ -187,7 +233,9 @@ Este plan **no toca ninguna superficie que dependa del runtime**: cero prompts, 
 
 ## 4. Fases
 
-> **Orden obligatorio:** F1 → F2 son prerequisito de todo lo demás (sin TLS no hay ninguna llamada real). F5 depende de F2. F6 depende de F5. F7 depende de F5.
+> **Orden obligatorio:** F1 → F2 son prerequisito de todo lo demás (sin TLS no hay ninguna llamada real). F5 depende de F2. F6 depende de F5. F7 depende de F5. **F12 va último y es el gate que decide si el plan cerró** (v2).
+>
+> **Prerequisito que NO es una fase (v2/C1):** `STACKY_GITLAB_ENABLED` tiene que estar en `true` **antes de F1**. No es código de este plan — es config del operador, va por UI, y su default de fábrica es `false` (§3.4-bis). Se mide en F0 paso 8 y se chequea en F0.8. **Con esa flag apagada, las 12 fases pueden quedar perfectas y el grafo sigue vacío.**
 
 ---
 
@@ -270,9 +318,61 @@ curl.exe -s "http://localhost:5000/api/tickets/hierarchy?project=RIPLEY"
 ```
 Esperado hoy: `{"epics":[],"orphans":[]}`.
 
-**Criterio de aceptación (binario):** los 7 comandos devuelven exactamente los valores citados. Si alguno difiere, **detenerse** y re-anclar esa fase antes de seguir.
+**8. Medir el valor EFECTIVO del master switch (C1 — el prerequisito que el v1 no declaraba):**
+```
+& $PY -c "
+from config import config
+print('STACKY_GITLAB_ENABLED        =', config.STACKY_GITLAB_ENABLED)
+print('TRACKER_TARGET_PER_PROJECT   =', config.STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED)
+print('STACKY_TICKETS_PROVIDER      =', config.STACKY_TICKETS_PROVIDER_ENABLED)
+"
+```
+Esperado **en esta máquina**: `True / True / False` (`backend/.env:7` tiene `STACKY_GITLAB_ENABLED=true`).
+Esperado **de fábrica, sin `.env`**: `False / True / False` — y con ese primer `False` **este plan no puede cerrar**, porque `get_tracker_provider` rechaza el tipo `gitlab` antes de intentar ninguna conexión (`services/tracker_provider.py:133-136`).
+**Si sale `False`:** no es un bug del plan ni se arregla por código. Se enciende **por UI** (Configuración global → GitLab), porque la key ya está en `_MANAGED_KEYS` (`api/global_config.py:81`). Anotar el valor medido antes de seguir: es el dato que explica el 90 % de los "implementé todo y sigo sin ver tickets".
+
+**Criterio de aceptación (binario):** los **8** comandos devuelven exactamente los valores citados **y** el preflight de F0.8 sale con exit code 0. Si alguno difiere, **detenerse** y re-anclar esa fase antes de seguir.
 
 **Flag:** ninguna. **Impacto por runtime:** ninguno (solo lectura, idéntico en los 3). **Trabajo del operador: ninguno.**
+
+---
+
+#### F0.8 — Preflight de visibilidad `[ADICIÓN ARQUITECTO]`
+
+**Por qué existe.** Los 6 prerequisitos que bloquean *ver tickets* viven en 6 lugares distintos (una flag de config, el JSON del proyecto, dos archivos en disco, un campo de texto de la UI y otra flag). En el v1 se descubrían **de a uno y recién en la fase 11**, cada uno enmascarando al siguiente — que es exactamente el patrón que ya costó tres viajes en la corrida real de RIPLEY. Este preflight los mide **todos juntos, antes de escribir una línea**, y cada fallo trae su remedio en una línea.
+
+**Archivo a crear:** `Stacky Agents/backend/scripts/preflight_plan276.py`
+
+**Es un script, no un test:** no se registra en los ratchets (esos solo listan `tests/*.py`) y **no** entra en la allowlist. **Read-only y sin `create_app()`** — llamar `create_app()` sin `DATABASE_URL` hace `create_all` contra la BD real del operador de 181 MB (P2-6, F9). El preflight solo lee config, el JSON del proyecto y `os.path.isfile`.
+
+**Reusa lo que ya existe, no reimplementa nada:** `resolve_project_context` y `build_tracker_target` de `services/project_context.py` son **los mismos resolvedores que usa producción** (`services/tracker_provider.py:140-147`). Si el preflight dice verde y producción falla, el bug está en el resolvedor, no en dos lecturas divergentes.
+
+**Los 6 chequeos, con su remedio:**
+
+| # | Chequeo | Cómo se mide | Remedio si falla (una línea, va impreso en la salida) |
+|---|---|---|---|
+| 1 | `STACKY_GITLAB_ENABLED` efectivo | `config.STACKY_GITLAB_ENABLED` | *"Encendelo en Configuración global → GitLab (`STACKY_GITLAB_ENABLED`). Sin esto el tracker GitLab se rechaza antes de conectar."* |
+| 2 | `issue_tracker.type` del proyecto activo | `resolve_project_context().tracker_type` | *"El proyecto activo tiene tracker '<X>'. Cambialo a 'gitlab' en Editar proyecto → Issue tracker."* |
+| 3 | El **archivo de bundle** declarado existe | `os.path.isfile(tgt.ca_bundle)` | *"El certificado declarado no existe: '<ruta>'. Corregí 'Certificado de la empresa' o dejalo vacío."* |
+| 4 | El **auth file** del proyecto existe | `os.path.isfile(tgt.auth_path)` | *"Falta el archivo de credenciales '<ruta>'. Cargá el token en Editar proyecto → Archivo de credenciales."* |
+| 5 | `base_url` **sin namespace ni `/api/v4` pegado** | `_validar_base_url(tgt.base_url)` de F3 — **la misma función**, no una copia | *"La URL de GitLab debe ser solo el servidor. Sacá '<sobrante>' — eso va en el campo 'Proyecto'."* |
+| 6 | `STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED` | `config.STACKY_TRACKER_TARGET_PER_PROJECT_ENABLED` | *"Está en OFF: se usa la rama legacy. Encendela (Configuración global) o verificá F8.1."* |
+
+**Trampa a evitar (medida en el caso RIPLEY, 2026-07-30):** el chequeo 4 **solo verifica que el archivo exista**, nunca lo abre ni lo escribe. Escribir en `auth_path` desde una herramienta de diagnóstico ya destruyó un `.pem` de 3907 líneas cuando una ruta de certificado terminó en el campo equivocado. **Preflight = `isfile`, jamás `open(..., "w")`.**
+
+**Salida:** una línea por chequeo con `OK` / `FALLA` + el remedio, y una última línea `PREFLIGHT: n/6`. **Exit code 0 solo si los 6 pasan**; si no, exit 1.
+
+**Comando (idéntico en los 3 runtimes — es Python puro, sin wrapper de shell):**
+```
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" scripts\preflight_plan276.py
+```
+
+**Criterio de aceptación (binario):** `PREFLIGHT: 6/6` y `$LASTEXITCODE -eq 0`. Cualquier `FALLA` se resuelve **por UI** antes de empezar F1 — ninguno de los 6 se arregla escribiendo código de este plan.
+
+**Nota de dependencia:** el chequeo 5 usa `_validar_base_url`, que nace en **F3**. Hasta que F3 exista, el preflight reporta el chequeo 5 como `SKIP (pendiente F3)` y **no** cuenta contra el 6/6 — se vuelve obligatorio desde F3 en adelante. Está declarado así a propósito para que F0 no dependa de una fase posterior.
+
+**Flag:** ninguna (read-only + on-demand ⇒ default ON, sin flag nueva). **Impacto por runtime:** idéntico en los 3. **Trabajo del operador: ninguno** — solo recibe la lista de qué le falta, que hoy descubre a los tres viajes.
 
 ---
 
@@ -770,6 +870,14 @@ Más `:369-371`, que se traga el fallo del listado:
 ```
 *(Si `checks` no está definido en las ramas no-GitLab, `locals().get("checks")` devuelve `None` — aditivo y sin romper consumidores.)*
 
+**EL TERCER CHECK QUE EL v1 IGNORABA (C2 de la crítica → C6).** La rama GitLab **ya calcula un tercer sub-check** que este plan no mencionaba: `checks["write_permission"]` (`api/global_config.py:375-381`), vía `GET /projects/<p>/members/all/<uid>` con `access_level >= 30`, y que **puede quedar en `None` = desconocido** cuando esa llamada falla. Decisión explícita de este plan:
+
+> **`write_permission` se CONSERVA y NO entra en el `ok`.** El `ok` sigue siendo exactamente `bool(checks["auth"] and checks["read"])` — los cuatro sub-veredictos de F4 son **TLS / auth / proyecto legible / N ítems**, y `write_permission` es un **quinto dato informativo** que se muestra pero no vota.
+> **Por qué:** un token de **solo lectura** es una configuración perfectamente válida para este plan (el objetivo es *leer* issues y verlos en el grafo; escribir hacia GitLab está fuera de scope, §7). Si `write_permission` votara, un token read-only pondría el check en **rojo** con el listado funcionando — sería el mismo falso veredicto que este plan vino a matar, con el signo invertido.
+> **Caso `None`:** se muestra como `desconocido`, nunca como `False`. "No pude averiguarlo" ≠ "no tenés permiso".
+
+Esto agrega **un caso de test** a los 7 de abajo (total **8**): *un token sin permiso de escritura (`write_permission=False`) con `auth` y `read` en verde ⇒ `ok is True`*.
+
 **Diff (`services/local_diagnostics.py`).** `_probe_gitlab` (`:187-201`) hoy hace un único `GET /user` y el resultado se rotula con un **nombre** que afirma el veredicto (`:122`, `f"{label} alcanzable"`). Pasa a devolver los cuatro sub-checks:
 
 ```python
@@ -801,10 +909,10 @@ def _probe_gitlab(project_name, tracker) -> dict:
 
 y el rótulo de `:122` deja de afirmar: `f"Tracker {label}: TLS / credenciales / proyecto / ítems"`, con `status="ok"` **solo si** `tls and auth and proyecto_legible`. `items == 0` no es error (un proyecto puede estar vacío) pero **se muestra**, porque es el número que le importa al operador.
 
-**Tests (7 casos):** los cuatro sub-checks en verde ⇒ `status="ok"`; auth OK + lectura rota ⇒ `status="error"` y el mensaje nombra el proyecto; `kind="tls"` ⇒ `tls=False` y el mensaje nombra el certificado; `ok` del endpoint global es **False** cuando `read` es False; `ok` sigue siendo True para un tracker ADO (**gate del `NameError`**); el rótulo no contiene la palabra "alcanzable"; `X-Total` ausente ⇒ cae a `len(issues)`.
+**Tests (8 casos):** los cuatro sub-checks en verde ⇒ `status="ok"`; auth OK + lectura rota ⇒ `status="error"` y el mensaje nombra el proyecto; `kind="tls"` ⇒ `tls=False` y el mensaje nombra el certificado; `ok` del endpoint global es **False** cuando `read` es False; `ok` sigue siendo True para un tracker ADO (**gate del `NameError`**); el rótulo no contiene la palabra "alcanzable"; `X-Total` ausente ⇒ cae a `len(issues)`; **(C6)** `write_permission=False` con `auth` y `read` en verde ⇒ `ok is True` (**gate de que un token read-only no pone el check en rojo**).
 
-**Comando:** `& $PY -m pytest tests\test_plan276_probe_verdict.py -q` ⇒ **7 passed**.
-**Criterio de aceptación (binario):** 7 passed **y** `& $PY -m pytest tests\test_plan116_connection_probes.py tests\test_diag_tracker_gitlab_probe.py -q` sin regresión (correr **uno por archivo**).
+**Comando:** `& $PY -m pytest tests\test_plan276_probe_verdict.py -q` ⇒ **8 passed**.
+**Criterio de aceptación (binario):** 8 passed **y** `& $PY -m pytest tests\test_plan116_connection_probes.py tests\test_diag_tracker_gitlab_probe.py -q` sin regresión (correr **uno por archivo**).
 
 **Ratchet:** registrar en los dos scripts.
 **Flag:** `STACKY_TRACKER_PROBE_STRICT_ENABLED`, **default True**. Con OFF, el rótulo y el `ok` vuelven a los de hoy.
@@ -844,6 +952,17 @@ y el rótulo de `:122` deja de afirmar: `f"Tracker {label}: TLS / credenciales /
 
 `services/gitlab_sync.py`, función única `sync_gitlab_tickets(project_name, *, provider=None) -> dict`. Devuelve **la misma forma** que el sync de ADO (`{"fetched", "created", "updated", "removed", "stacky_project_name"}`) para que `api/tickets.py:5995-6021` no cambie.
 
+**LA QUERY, LITERAL (C4 — el v1 la dejaba ambigua).** El v1 decía "consume `fetch_open_items`" sin declarar qué se le pasa, que es ambigüedad pura para un modelo menor. Es exactamente esto, sin variantes:
+
+```python
+from services.tracker_provider import TrackerQuery      # import a nivel de módulo
+
+# ...dentro de sync_gitlab_tickets:
+items = provider.fetch_open_items(TrackerQuery(state="open"))
+```
+
+**Por qué `state="open"` explícito y no el default:** `TrackerQuery.state` **ya** tiene default `"open"` (`services/tracker_provider.py:23`) y `_query_to_gitlab_params` lo mapea a `state=opened` (`services/gitlab_provider.py:81-82`), así que `TrackerQuery()` a secas daría el mismo resultado **hoy**. Se escribe explícito igual porque el default es un detalle de otro módulo que puede cambiar sin que este sync se entere, y porque la semántica de borrado de más abajo (*"lo que no vino en el listado de abiertos pasa a `closed`"*) **solo es correcta si la query es de abiertos**. Si alguien alguna vez cambia esta query a `state="all"`, la regla de `removed` deja de tener sentido y hay que revisarla — por eso van juntas y en el mismo docstring.
+
 **Mapeo exacto GitLab → `models.Ticket`** (tipos verificados en `backend/models.py:41-57`):
 
 | Campo de `Ticket` | Tipo | Origen |
@@ -860,6 +979,24 @@ y el rótulo de `:122` deja de afirmar: `f"Tracker {label}: TLS / credenciales /
 | `parent_ado_id` | `Integer` | `int(item["parent"])` si es numérico, si no `None` |
 | `last_synced_at` | `DateTime` | `datetime.utcnow()` |
 
+**LA CLAVE DE UPSERT, DECLARADA (C2 — BLOQUEANTE en el v1).** El v1 daba el mapeo pero **nunca decía por qué campo se busca la fila existente**, y la tabla tiene un índice UNIQUE que lo fuerza (`backend/models.py:68-77`):
+
+```python
+Index("ux_tickets_stacky_tracker_external",
+      "stacky_project_name", "tracker_type", "external_id", unique=True)
+```
+
+> **La búsqueda de fila existente es por la TERNA `(stacky_project_name, tracker_type="gitlab", external_id)`. NUNCA por `ado_id`.**
+
+**Por qué esto era bloqueante:** `ado_id` es el análogo natural de ADO y es lo que un implementador menor va a usar por inercia. Pero `ado_id` acá lleva el **`iid`** (el número visible dentro del proyecto, que se repite entre proyectos distintos de GitLab) y **no está en el índice único**. Upsertear por `ado_id` da uno de dos desastres, los dos en la **segunda** corrida: `IntegrityError` sobre `ux_tickets_stacky_tracker_external` si el `external_id` ya existía, o **filas duplicadas** si se hizo un `INSERT` a ciegas. Y la idempotencia (`created=0, updated=0`) es **criterio binario declarado de esta fase**, así que el defecto rompe el propio gate de F5.
+
+**Corolarios obligatorios:**
+
+- **`external_id` es NOT NULL *de hecho* para GitLab.** El modelo lo permite nulo (para las filas legacy de ADO), pero un issue de GitLab **sin `id`** no se puede upsertear sin violar la unicidad — se **saltea con warning** y suma a `skipped`, igual que el `iid` no numérico. Nunca se inserta con `external_id=None`.
+- **`tracker_type="gitlab"` va en el `WHERE`, no solo en el `INSERT`.** Sin eso, un proyecto Stacky que alguna vez fue ADO y ahora es GitLab machearía filas del tracker viejo y las pisaría.
+- **`stacky_project_name` va en el `WHERE`.** Es lo que aísla RIPLEY de cualquier otro proyecto Stacky que apunte al mismo GitLab.
+- **Compatibilidad con el filtro del grafo:** esta terna es consistente con `_ticket_project_filter` (`api/tickets.py:348-355`), que filtra por `Ticket.stacky_project_name == ctx.stacky_project_name` **o** (`stacky_project_name IS NULL` **y** `project == ctx.tracker_project`). Escribiendo **los dos** campos (`stacky_project_name` = nombre Stacky, `project` = `ctx.tracker_project`) la fila cae en la primera rama del filtro y **el grafo la ve**. Verificado leyendo el filtro, no asumido.
+
 **CASO BORDE OBLIGATORIO:** `_normalize_issue` devuelve `id` e `iid` como **`str`** (`:103-104`) y `Ticket.ado_id` es **`Integer`**. Convertir con guarda: un `iid` no numérico se **saltea con warning** y suma a `skipped`; **nunca** revienta el sync entero.
 
 **Semántica de borrado — NO se borra nada.** Un issue que ya no aparece en el listado de abiertos pasa a `ado_state="closed"` y cuenta en `removed`. Riel: nunca destruir datos del operador. Documentarlo en el docstring.
@@ -870,23 +1007,41 @@ y el rótulo de `:122` deja de afirmar: `f"Tracker {label}: TLS / credenciales /
 
 `config.py:1320-1322` deja `STACKY_TICKETS_PROVIDER_ENABLED` en **False** ⇒ `_provider_for_ticket` (`api/tickets.py:420-421`) devuelve `None` ⇒ el sync cae al branch ADO ⇒ `services/project_context.py:309-311` lanza `AdoConfigError("El proyecto 'RIPLEY' no usa Azure DevOps...")` ⇒ **HTTP 400 con un error de ADO en un proyecto GitLab**.
 
-**No se flipea el default** (§3.2). Se resuelve el provider localmente, solo para trackers no-ADO, en `_sync_via_provider_or_ado` (`:700-723`):
+**No se flipea el default** (§3.2). Se resuelve el provider localmente, solo para trackers no-ADO, en `_sync_via_provider_or_ado` (`:700-723`).
+
+**DOS CORRECCIONES DE LA v2 SOBRE ESTE DIFF — leer antes de escribirlo:**
+
+- **(C1) Dejar de tragarse el `TrackerConfigError` cuando el proyecto ES GitLab.** El v1 copiaba el `except TrackerConfigError: provider = None` de `_provider_for_ticket` (`api/tickets.py:425-426`). Ese patrón es correcto **donde nació** (ahí `None` significa "caé al fallback ADO"), y es **letal acá**: si `STACKY_GITLAB_ENABLED` está en `false` — **su default de fábrica**, §3.4-bis — la fábrica lanza `TrackerConfigError` (`services/tracker_provider.py:133-136`), el `except` lo convierte en `None`, el flujo cae a `sync_tickets` y el operador recibe un **`AdoConfigError` de Azure DevOps en un proyecto GitLab**. Es el peor mensaje posible: nombra el proveedor equivocado. Para un ctx GitLab el error **se re-lanza enriquecido**, nombrando el switch y dónde encenderlo.
+- **(C9) El gate de resolución es el TIPO DE TRACKER, no la flag de sync.** En el v1 la resolución del provider estaba dentro de `if ... STACKY_GITLAB_SYNC_ENABLED`, lo que hacía **insatisfacible** su propio caso de test de F5.5 (*"con la flag de sync en OFF vuelve a levantarse `CapabilityUnavailable`"*): con esa flag OFF el bloque no corría, `provider` quedaba `None` y el flujo caía a `sync_tickets` ⇒ **`AdoConfigError`, no `CapabilityUnavailable`**. Separando las dos responsabilidades — *quién es el provider* (decide el tipo de tracker) vs *qué se hace con él* (decide la flag de sync) — el caso de test pasa a ser satisfacible y la flag recupera su semántica de kill-switch real.
 
 ```diff
      provider = _provider_for_ticket(project_name=project_name)
 +    # Plan 276 F5.3 — el sync no puede depender de STACKY_TICKETS_PROVIDER_ENABLED
-+    # (default False, config.py:1320): con esa flag OFF un proyecto GitLab caía al
-+    # branch ADO y moría con AdoConfigError. Se resuelve el provider SOLO para
-+    # trackers no-ADO; para Azure DevOps este bloque no se ejecuta y el camino
-+    # queda byte-idéntico.
-+    if provider is None and bool(getattr(config.config, "STACKY_GITLAB_SYNC_ENABLED", True)):
-+        from services.project_context import resolve_project_context
-+        ctx = resolve_project_context(project_name)
-+        if ctx is not None and ctx.tracker_type != "azure_devops":
++    # (default False, config.py:1320-1321): con esa flag OFF un proyecto GitLab caía
++    # al branch ADO y moría con AdoConfigError. Se resuelve el provider SOLO para
++    # trackers no-ADO; para Azure DevOps este bloque no se ejecuta y el camino queda
++    # byte-idéntico.
++    #
++    # OJO (v2/C9): el gate de ESTE bloque es el TIPO DE TRACKER, no
++    # STACKY_GITLAB_SYNC_ENABLED. Esa flag decide qué se HACE con el provider (más
++    # abajo), no si se resuelve: si gateara la resolución, apagarla haría caer un
++    # proyecto GitLab al branch ADO en vez de levantar CapabilityUnavailable.
++    if provider is None:
++        ctx = resolve_project_context(project_name)          # ya importado, :32
++        tipo = (getattr(ctx, "tracker_type", None) or "azure_devops").strip().lower()
++        if ctx is not None and tipo != "azure_devops":
 +            try:
-+                provider = get_tracker_provider(project_name)
-+            except TrackerConfigError:
-+                provider = None
++                provider = get_tracker_provider(project_name)   # ya importado, :33
++            except TrackerConfigError as exc:
++                # v2/C1: NO se traga. Tragarlo devuelve un AdoConfigError de Azure
++                # DevOps en un proyecto GitLab: nombra el proveedor equivocado y el
++                # operador no tiene forma de saber que le falta un master switch.
++                raise TrackerConfigError(
++                    f"El proyecto usa el tracker '{tipo}' pero no se pudo construir su "
++                    f"cliente: {exc}. Si dice STACKY_GITLAB_ENABLED=false, encendé "
++                    f"'STACKY_GITLAB_ENABLED' en Configuración global -> GitLab "
++                    f"(es config de operador y se administra por UI)."
++                ) from exc
      if provider is not None and getattr(provider, "name", "azure_devops") != "azure_devops":
 +        if provider.name == "gitlab" and bool(
 +            getattr(config.config, "STACKY_GITLAB_SYNC_ENABLED", True)
@@ -901,11 +1056,18 @@ y el rótulo de `:122` deja de afirmar: `f"Tracker {label}: TLS / credenciales /
          )
 ```
 
+**Notas de implementación (verificadas abriendo `api/tickets.py`, no asumidas):**
+
+- **No hacen falta imports nuevos.** `resolve_project_context` está a nivel de módulo en `:32`, y `get_tracker_provider` + `TrackerConfigError` en `:33`. El v1 agregaba un `from services.project_context import resolve_project_context` **local y redundante**: se saca.
+- **`tracker_type` se normaliza con `.strip().lower()`**, exactamente como lo hace la fábrica (`services/tracker_provider.py:128`). Comparar el valor crudo contra `"azure_devops"` es frágil ante un `" GitLab "` guardado desde la UI.
+- **El `TrackerConfigError` re-lanzado necesita un handler o vuelve a ser mudo.** Hoy `sync_from_ado_v2` solo captura `AdoConfigError`, `AdoApiError` y `Exception` (`:5981`, `:5985`, `:5988`) ⇒ un `TrackerConfigError` caería en el genérico y saldría como **500 `"unexpected"`**, que es el mismo defecto que F6 vino a matar. **F6 agrega el handler** (diff 1-bis), en simetría exacta con `AdoConfigError`: HTTP 400 `{"ok": false, "error": "config", "message": ...}`, que `useTicketSync` ya rutea a `setSyncError` y el operador **ve**.
+- **Backward-compat ADO intacto:** para `tracker_type == "azure_devops"` el bloque nuevo no ejecuta ni una línea (el `if` interno es falso) y el camino queda byte-idéntico. Es un caso de test de F5.5.
+
 #### F5.4 — El registro de capacidades deja de mentir
 
 `services/provider_capabilities.py:249`: `"tracker.sync.full": _a("api/tickets.py:692")` → pasa a **presente** para `"gitlab"` (usar el helper de "disponible" que ya usa ese diccionario para las capacidades soportadas; leer cómo lo hacen las entradas vecinas y replicar).
 
-#### F5.5 — Tests (12 casos, con la BD en un sqlite temporal)
+#### F5.5 — Tests (16 casos, con la BD en un sqlite temporal)
 
 `tests/test_plan276_gitlab_sync.py`. Fixture obligatoria (evita P2-6):
 ```python
@@ -915,10 +1077,22 @@ def bd(tmp_path, monkeypatch):
     ...
 ```
 
-Casos: 3 issues → 3 filas con el mapeo completo; `iid` no numérico → `skipped=1` y el resto se guarda; segunda corrida idéntica → `created=0, updated=0`; cambio de título → `updated=1`; issue que desaparece → `ado_state="closed"` y `removed=1`, **la fila sigue existiendo**; `type::epic` → `work_item_type="Epic"`; sin label → `"Issue"`; `parent` con `iid` → `parent_ado_id` int; `parent` vacío → `None`; `title` de 900 chars → truncado a 500 sin excepción; proyecto ADO → el bloque nuevo **no se ejecuta** (gate de backward-compat, monkeypatchear `resolve_project_context` y afirmar que `get_tracker_provider` **no** se llamó); flag `STACKY_GITLAB_SYNC_ENABLED=False` → vuelve a levantarse `CapabilityUnavailable`.
+**Casos 1-12 (del v1, sin cambios):** 3 issues → 3 filas con el mapeo completo; `iid` no numérico → `skipped=1` y el resto se guarda; segunda corrida idéntica → `created=0, updated=0`; cambio de título → `updated=1`; issue que desaparece → `ado_state="closed"` y `removed=1`, **la fila sigue existiendo**; `type::epic` → `work_item_type="Epic"`; sin label → `"Issue"`; `parent` con `iid` → `parent_ado_id` int; `parent` vacío → `None`; `title` de 900 chars → truncado a 500 sin excepción; proyecto ADO → el bloque nuevo **no se ejecuta** (gate de backward-compat, monkeypatchear `resolve_project_context` y afirmar que `get_tracker_provider` **no** se llamó); y el caso 12, **reescrito por C9**, abajo.
 
-**Comando:** `& $PY -m pytest tests\test_plan276_gitlab_sync.py -q` ⇒ **12 passed**.
-**Criterio de aceptación (binario):** 12 passed, y `& $PY -m pytest tests\test_plan218_capability_unavailable.py -q` sin regresión.
+**Casos 12-16 — los que agrega la v2. Cada uno es el gate corrido CONTRA un defecto medido, no un test decorativo:**
+
+| # | Caso | Gate (qué defecto mata) |
+|---|---|---|
+| **12** *(reescrito, C9)* | ctx **gitlab** + `STACKY_GITLAB_ENABLED=True` + `STACKY_GITLAB_SYNC_ENABLED=False` ⇒ se levanta **`CapabilityUnavailable`** | En el v1 este caso era **insatisfacible**: con la flag de sync OFF el provider ni se resolvía y el flujo terminaba en `AdoConfigError`. El test debe afirmar **el tipo de la excepción**, y además `assert not isinstance(exc, AdoConfigError)`. |
+| **13** *(C1)* | ctx **gitlab** + `STACKY_GITLAB_ENABLED=False` ⇒ **`TrackerConfigError`** cuyo `str(exc)` **contiene la subcadena `"STACKY_GITLAB_ENABLED"`** | El defecto BLOQUEANTE del v1: hoy esto da `AdoConfigError("El proyecto no usa Azure DevOps")` ⇒ 400 nombrando el proveedor equivocado. Assertear **la subcadena del mensaje**, no solo el tipo — un `TrackerConfigError` genérico que no nombra el switch deja al operador igual de perdido (`assert "STACKY_GITLAB_ENABLED" in str(exc)`). Y `assert not isinstance(exc, AdoConfigError)`. |
+| **14** *(C2)* | **Segunda corrida con los mismos issues no viola `ux_tickets_stacky_tracker_external`** | El gate de la clave de upsert. Correr `sync_gitlab_tickets` **dos veces** sobre el mismo payload y afirmar: (a) no se levanta `IntegrityError`, (b) `session.query(Ticket).count()` es **idéntico** después de la segunda, (c) `created=0` en la segunda. Los tres asserts juntos: (a) sola pasa si se hicieron duplicados, (b) sola pasa si el sync no escribió nada. |
+| **15** *(C2)* | Issue **sin `id`** (o con `id` no numérico) ⇒ `skipped+=1` y **ninguna fila con `external_id IS NULL`** | Sin este gate, un `external_id=None` insertado hoy hace explotar la corrida de mañana contra el índice único. Assert explícito: `session.query(Ticket).filter(Ticket.external_id.is_(None), Ticket.tracker_type == "gitlab").count() == 0`. |
+| **16** *(C2)* | El upsert **machea por la terna**, no por `ado_id` | Sembrar a mano una fila con el **mismo `ado_id`** pero **distinto `external_id`** y `tracker_type="gitlab"`; correr el sync; afirmar que quedan **DOS** filas (son issues distintos) y que **ninguna** se pisó. Si el implementador upserteó por `ado_id`, este test da 1 fila y **falla**, que es exactamente lo que tiene que pasar. |
+
+**Comando:** `& $PY -m pytest tests\test_plan276_gitlab_sync.py -q` ⇒ **16 passed**.
+**Criterio de aceptación (binario):** 16 passed **y** `& $PY -m pytest tests\test_plan218_capability_unavailable.py -q` sin regresión.
+
+> **Nota antifalso-verde para los casos 13 y 14.** El caso 13 assertea sobre el **mensaje**; si alguien "arregla" el código cambiando el texto sin nombrar el switch, el test se pone rojo — es intencional, el mensaje **es** el contrato con el operador. El caso 14 no puede reemplazarse por un `assert created == 0`: eso también pasa si el sync se rompió y no escribió nada. La condición binaria es **conteo de filas idéntico + sin excepción + `created=0`**, los tres.
 
 **Ratchet:** registrar en los dos scripts.
 **Flag:** `STACKY_GITLAB_SYNC_ENABLED`, **default True** (§3.4: escribe en la BD de Stacky, no en un sistema del operador, y es on-demand).
@@ -943,17 +1117,38 @@ Casos: 3 issues → 3 filas con el mapeo completo; `iid` no numérico → `skipp
 El falso verde de `errors.py` **sí es real**, pero es **latente**: `capability_unavailable_envelope` produce `{"ok": True, "available": False, ...}` (`api/errors.py:81-83`) y cualquier consumidor de `/sync` o del handler global de `app.py:882` lo lee como éxito. `useTicketSync.ts:98` (`if (data.ok || data.synced_at)`) tomaría la rama de éxito. Se arregla igual, antes de que F5 lo active.
 
 **Diff 1 — `api/tickets.py`, en `sync_from_ado_v2`, ANTES del `except Exception` de `:5988`:**
+
+> **ANCLAJE POR SÍMBOLO (v2/C7).** Los números de línea de esta fase se **re-verificaron uno por uno** contra el archivo real y **están correctos** (`:5988` es el `except Exception as e:`, `:5992-5993` el `finally:`, `:717-721` el `raise CapabilityUnavailable`, `:700-723` la función). Aun así los anclajes de línea **caducan**: el anclaje operativo es el **símbolo**. Ubicar el sitio así, no contando líneas:
+> `grep -n "except Exception as e:" api/tickets.py` → el que está **dentro de `sync_from_ado_v2`**, inmediatamente después de `except AdoApiError as e:` y seguido de `logger.exception("ADO sync-v2 — fallo inesperado")`. Si esa terna no coincide, **detenerse y re-anclar**.
+
 ```diff
 +    except CapabilityUnavailable:
 +        # Plan 276 F6 — una carencia DECLARADA no puede caer en el `except
 +        # Exception` de abajo y salir como 500 "unexpected": eso esconde el hueco
 +        # y anula la degradación del plan 218. Se re-lanza para que la traduzca
 +        # el handler de app.py:879-882 (200 + available:false).
-+        _sync_in_progress_by_project.discard(sync_scope)
 +        raise
      except Exception as e:
 ```
 (agregar `CapabilityUnavailable` al import local que ya existe en la función).
+
+**CORRECCIÓN v2 (C7): el `_sync_in_progress_by_project.discard(sync_scope)` que el v1 ponía en este bloque se SACÓ — es redundante.** La función ya tiene un `finally: _sync_in_progress_by_project.discard(sync_scope)` (`api/tickets.py:5992-5993`) que corre **también** cuando el `except` re-lanza. Dejarlo duplicado no rompe nada (`set.discard` es idempotente), pero instala en el archivo la idea falsa de que cada `except` tiene que limpiar a mano — y el próximo que agregue un handler y **se olvide** va a dejar un scope colgado creyendo que copió el patrón. Los `discard` de los `except` de arriba (`:5982`, `:5986`, `:5989`) son deuda preexistente **ajena a este plan**: no se tocan.
+
+**Diff 1-bis — `api/tickets.py`, el handler de `TrackerConfigError` que F5.3 necesita (v2/C1):**
+
+Sin esto, el `TrackerConfigError` enriquecido que F5.3 re-lanza cae en el `except Exception` genérico y sale como **500 `"unexpected"`** — el mismo defecto mudo que esta fase vino a matar, solo que con otra excepción. Va **antes** del `except Exception`, en simetría exacta con `AdoConfigError` (`:5981-5984`):
+
+```diff
++    except TrackerConfigError as e:
++        # Plan 276 F6/C1 — config de tracker mal resuelta (típicamente el master
++        # switch STACKY_GITLAB_ENABLED apagado). Mismo trato que AdoConfigError:
++        # 400 con el mensaje ACCIONABLE, nunca un 500 "unexpected". useTicketSync
++        # rutea {ok:false, message} a setSyncError, así que el operador LO VE.
++        logger.warning("sync-v2 — config de tracker: %s", e)
++        return jsonify({"ok": False, "error": "config", "message": str(e)}), 400
+     except Exception as e:
+```
+`TrackerConfigError` **ya está importado a nivel de módulo** (`api/tickets.py:33`): no hace falta import nuevo.
 
 **Diff 2 — `api/errors.py:81-83`:**
 ```diff
@@ -979,20 +1174,72 @@ El falso verde de `errors.py` **sí es real**, pero es **latente**: `capability_
 ```
 (y agregar `available?: boolean` al tipo del payload en el mismo archivo).
 
-**Tests backend (5 casos):** `sync-v2` con `CapabilityUnavailable` ⇒ **200** con `available:false` y `ok:false` (no 500); el log **no** dice "fallo inesperado"; `sync-v2` con una excepción cualquiera ⇒ sigue siendo 500 (no se rompió el manejo genérico); el envelope pone `ok:false` cuando `available:false`; con `STACKY_CAPABILITY_DEGRADATION_ENABLED=False` sigue el camino legacy.
+**Diff 4 — `frontend/src/hooks/useTicketSync.ts:70-75` y `:105`: un sync MANUAL siempre refetchea `[ADICIÓN implícita de C3]`**
 
-**Test frontend (`.ts` puro, 4 casos):** extraer la decisión a una función pura `clasificarRespuestaDeSync(data)` en `useTicketSync.ts` (exportada) que devuelva `"exito" | "carencia" | "rate_limited" | "error"`, y testearla sin montar el hook: `{ok:true, synced_at}` ⇒ exito; `{ok:true, available:false}` ⇒ **carencia**; `{error:"rate_limited"}` ⇒ rate_limited; `{ok:false, message}` ⇒ error.
+**El defecto, medido.** `shouldRefreshTicketQueries` (`:70-75`) es:
+
+```ts
+if (data.idempotent === true) return false;
+return Boolean((data.created ?? 0) || (data.updated ?? 0) || (data.removed ?? 0));
+```
+
+y las **tres** invalidaciones — `["ticket-sync"]`, `["tickets"]`, `["tickets-hierarchy"]` — viven **dentro** de ese `if` (`:105-109`).
+
+**Por qué esto rompe la meta del plan.** El backend marca `idempotent = created==0 and updated==0 and removed==0` (`api/tickets.py:5996`). Entonces: el operador aprieta "Sincronizar", **las filas de GitLab ya están en la BD** (porque F5 corrió antes, o porque reintenta después de un fallo visual), el sync devuelve `idempotent: true` — **y la UI no refetchea**. El operador sigue viendo **la pantalla vacía con los tickets en la base**, aprieta otra vez, y otra vez. Es el modo de falla más frustrante posible: todo funcionó y no se ve nada. En un flujo ADO normal casi no aparece (la primera corrida siempre crea filas); en el flujo de **estreno de GitLab** de este plan aparece **casi siempre**, porque la primera corrida exitosa es justo la que el operador va a repetir.
+
+**El cambio: extraer a función pura exportada y darle el `trigger`.**
+
+```diff
++/** Plan 276 F6/C3 — decide si hay que refetchear las queries de tickets.
++ *
++ * Un sync MANUAL invalida SIEMPRE, aunque el backend responda idempotente: el
++ * operador acaba de pedir explícitamente "traeme los tickets" y la causa más
++ * común de un idempotente manual es que las filas YA ESTÁN en la BD y la vista
++ * está desactualizada. No refetchear ahí deja la pantalla vacía con los datos
++ * cargados, que es indistinguible de "el sync no anda".
++ *
++ * Es una LECTURA de la BD local: no quema tokens en reposo (categoría A no
++ * aplica: no hay loop, no hay modelo) y no escribe en ningún sistema del
++ * operador (categoría B no aplica). Va ON, sin flag nueva.
++ */
++export function debeRefrescarQueriesDeTickets(
++  data: { idempotent?: boolean; created?: number; updated?: number; removed?: number },
++  trigger: "manual" | "auto_poll" | "startup",
++): boolean {
++  if (trigger === "manual") return true;
++  if (data.idempotent === true) return false;
++  return Boolean((data.created ?? 0) || (data.updated ?? 0) || (data.removed ?? 0));
++}
+```
+
+```diff
+-        if (shouldRefreshTicketQueries(data)) {
++        if (debeRefrescarQueriesDeTickets(data, lastTriggerRef.current)) {
+```
+
+**Notas de implementación (verificadas abriendo el archivo):**
+
+- **`lastTriggerRef` ya existe y ya se actualiza:** declarado en `:62`, asignado en `:135` (`lastTriggerRef.current = trigger;`) **antes** de disparar la mutación ⇒ en `onSuccess` tiene el valor correcto. No hace falta cablear nada nuevo.
+- **`shouldRefreshTicketQueries` hoy es un CLOSURE dentro del hook** (`:70`, sin `export`) ⇒ **es intesteable sin montar el componente**, y en este repo **no hay RTL ni jsdom** (§3.3). Por eso se **extrae a nivel de módulo y se exporta**: sin ese paso el test de C3 sería imposible de escribir y el fix quedaría sin gate. Mover la función es el 80 % del valor del cambio.
+- **No se toca `auto_poll` ni `startup`:** siguen con el comportamiento de hoy (idempotente ⇒ no refetchea), que es lo que evita re-renders inútiles cada 45 s. El cambio es **quirúrgico sobre la acción explícita del operador**.
+
+**Tests backend (6 casos):** `sync-v2` con `CapabilityUnavailable` ⇒ **200** con `available:false` y `ok:false` (no 500); el log **no** dice "fallo inesperado"; `sync-v2` con una excepción cualquiera ⇒ sigue siendo 500 (no se rompió el manejo genérico); el envelope pone `ok:false` cuando `available:false`; con `STACKY_CAPABILITY_DEGRADATION_ENABLED=False` sigue el camino legacy; **(v2/C1)** `sync-v2` cuando `_sync_via_provider_or_ado` levanta `TrackerConfigError` ⇒ **HTTP 400** con `error:"config"` y `"STACKY_GITLAB_ENABLED"` **dentro de `message`** — **nunca** 500 `"unexpected"`.
+
+**Tests frontend (`.ts` puro, 8 casos, un solo archivo `plan276SyncEnvelope.test.ts`):**
+
+- **4 casos de `clasificarRespuestaDeSync(data)`** — extraer la decisión a una función pura exportada en `useTicketSync.ts` que devuelva `"exito" | "carencia" | "rate_limited" | "error"`, y testearla sin montar el hook: `{ok:true, synced_at}` ⇒ exito; `{ok:true, available:false}` ⇒ **carencia**; `{error:"rate_limited"}` ⇒ rate_limited; `{ok:false, message}` ⇒ error.
+- **4 casos de `debeRefrescarQueriesDeTickets(data, trigger)` (v2/C3)** — `({idempotent:true}, "manual")` ⇒ **`true`** (**el gate corrido CONTRA el defecto**: hoy devuelve `false` y la pantalla queda vacía); `({idempotent:true}, "auto_poll")` ⇒ `false` (no se rompió el ahorro de re-renders); `({created:0,updated:0,removed:0}, "manual")` ⇒ **`true`**; `({created:3}, "auto_poll")` ⇒ `true`.
 
 **Comandos:**
 ```
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-& $PY -m pytest tests\test_plan276_capability_envelope.py -q          # 5 passed
+& $PY -m pytest tests\test_plan276_capability_envelope.py -q          # 6 passed
 & $PY -m pytest tests\test_plan218_capability_unavailable.py -q       # sin regresión
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"
-npx vitest run src/__tests__/plan276SyncEnvelope.test.ts              # 4 passed
+npx vitest run src/__tests__/plan276SyncEnvelope.test.ts              # 8 passed
 ```
 
-**Criterio de aceptación (binario):** los 3 comandos en 0 fallas, y `Select-String -Path api\errors.py -Pattern 'setdefault\("ok"'` devuelve **0 coincidencias**.
+**Criterio de aceptación (binario):** los 3 comandos en 0 fallas, `Select-String -Path api\errors.py -Pattern 'setdefault\("ok"'` devuelve **0 coincidencias**, y `Select-String -Path ..\frontend\src\hooks\useTicketSync.ts -Pattern "export function debeRefrescarQueriesDeTickets"` devuelve **1** (si es 0, la función quedó como closure y su test no prueba producción).
 
 **Ratchet:** registrar el archivo backend en los dos scripts.
 **Flag:** ninguna nueva (usa la existente `STACKY_CAPABILITY_DEGRADATION_ENABLED`, ya ON).
@@ -1004,7 +1251,29 @@ npx vitest run src/__tests__/plan276SyncEnvelope.test.ts              # 4 passed
 
 **Objetivo:** que `GET /api/tickets/hierarchy` devuelva las filas de GitLab agrupadas, y que la UI deje de decir "ADO" en un proyecto GitLab. **Valor:** es el criterio de cierre del plan.
 
-**Archivos a editar:** `Stacky Agents/frontend/src/pages/TicketBoard.tsx` (`:1082`, `:1177`, `:1179`, `:1294`), `Stacky Agents/frontend/src/components/TicketGraphView.jsx` (`:649`, `:697`)
+**Archivos a editar:** `Stacky Agents/frontend/src/pages/TicketBoard.tsx` (`:1082`, `:1177`, `:1179`, **`:1293`**, `:1294`), `Stacky Agents/frontend/src/components/TicketGraphView.jsx` (`:649`, `:697`)
+
+**Son SIETE literales, no seis (v2/C5).** El v1 contaba 6 y **dejaba afuera el mensaje de estado vacío**, `TicketBoard.tsx:1293`:
+
+```tsx
+message="No hay tickets para este proyecto. Sincronizá con ADO para traerlos."
+```
+
+Es, literalmente, **el único texto que el operador tiene delante mientras está bloqueado en un proyecto GitLab**: la pantalla está vacía y lo que lee es una instrucción para sincronizar con un tracker que su proyecto no usa. Dejarlo afuera es dejar sin arreglar la superficie exacta del problema que el plan viene a resolver. Su gemelo en `TicketGraphView.jsx:697` (*"No hay tickets. Hacé clic en Sincronizar ADO."*) **sí** estaba listado, lo que confirma que fue omisión, no decisión.
+
+El inventario completo, **verificado con `grep -n "ADO"` sobre los dos archivos**:
+
+| Archivo:línea | Literal | Función que lo reemplaza |
+|---|---|---|
+| `TicketBoard.tsx:1082` | `<h1>Tickets ADO</h1>` | `tituloDeTickets(tipo)` |
+| `TicketBoard.tsx:1177` | `title="Sincronizar tickets desde ADO"` | `` `Sincronizar tickets desde ${nombreDeTracker(tipo)}` `` |
+| `TicketBoard.tsx:1179` | `"⟳ Sincronizar ADO"` | `` `⟳ ${accionSincronizar(tipo)}` `` |
+| **`TicketBoard.tsx:1293`** | **`message="No hay tickets… Sincronizá con ADO para traerlos."`** | `` `No hay tickets para este proyecto. Sincronizá con ${nombreDeTracker(tipo)} para traerlos.` `` |
+| `TicketBoard.tsx:1294` | `actionLabel="Sincronizar ADO"` | `accionSincronizar(tipo)` |
+| `TicketGraphView.jsx:649` | `"⟳ Sincronizar ADO"` | `` `⟳ ${accionSincronizar(tipo)}` `` |
+| `TicketGraphView.jsx:697` | `"No hay tickets. Hacé clic en Sincronizar ADO."` | `` `No hay tickets. Hacé clic en ${accionSincronizar(tipo)}.` `` |
+
+**Lo que NO se toca en estos dos archivos** (son identificadores de ticket, no rótulos de tracker, y cambiarlos rompería la lectura del operador): `ADO-{ticket.ado_id}` (`TicketBoard.tsx:170`, `:494`, `:825`, `:1224`; `TicketGraphView.jsx:94`, `:275`, `:375`), `ADO_STATE_COLORS` (`:82`), el placeholder `"Buscar por título o ADO-ID…"` (`:1249`), los textos de identidad ADO del operador (`:1148`, `:1151`, `:1162`) y `"Abrir en ADO ↗"` (`TicketGraphView.jsx:438`) — todos ligados a la columna `ado_id` del modelo, que **sigue llamándose así** para GitLab por backward-compat (F5.2). Renombrar la columna está **fuera de scope** (§7).
 **Archivos a crear:** `Stacky Agents/backend/tests/test_plan276_hierarchy_gitlab.py`, `Stacky Agents/frontend/src/__tests__/plan276TrackerLabels.test.ts`
 
 **Backend:** `api/tickets.py:615-656` **no necesita cambios** — clasifica por `work_item_type` y `parent_ado_id`, que F5 ahora puebla. El test lo demuestra: sembrar 4 filas `tracker_type="gitlab"` (1 con `work_item_type="Epic"`, 2 hijas con `parent_ado_id` apuntando a ella, 1 suelta) y verificar `len(epics) == 1`, `len(epics[0]["children"]) == 2`, `len(orphans) == 1`. **4 casos**, más uno que verifica que el filtro por proyecto no mezcla tickets de ADO.
@@ -1030,19 +1299,19 @@ export function accionSincronizar(tipo: string | undefined | null): string {
 }
 ```
 
-y reemplazar los 6 literales por llamadas a estas funciones con el `tracker_type` del proyecto activo. **No se toca** `App.tsx:455`, `SettingsPage.tsx:47`, `shellNav.ts:18` ni `commandPaletteData.ts:74`: son rótulos de **navegación global** (no dependen del proyecto activo) y cambiarlos rompería los tests de la paleta de comandos (`commandPaletteDevopsActions.test.ts:109-110`, que assertean sobre el string literal `"Ir a Tickets ADO"`). **Fuera de scope declarado**, no olvido.
+y reemplazar los **7** literales de la tabla de arriba por llamadas a estas funciones con el `tracker_type` del proyecto activo. **No se toca** `App.tsx:455`, `SettingsPage.tsx:47`, `shellNav.ts:18` ni `commandPaletteData.ts:74`: son rótulos de **navegación global** (no dependen del proyecto activo) y cambiarlos rompería los tests de la paleta de comandos (`commandPaletteDevopsActions.test.ts:109-110`, que assertean sobre el string literal `"Ir a Tickets ADO"`). **Fuera de scope declarado**, no olvido.
 
-**Test frontend (`.ts` puro, 5 casos):** los 4 tipos conocidos; tipo desconocido/`undefined` ⇒ `"Tracker"` (**nunca** `"ADO"`); `tituloDeTickets("gitlab") === "Tickets GitLab"`; `accionSincronizar("azure_devops") === "Sincronizar ADO"` (backward-compat del texto de hoy).
+**Test frontend (`.ts` puro, 6 casos):** los 4 tipos conocidos; tipo desconocido/`undefined` ⇒ `"Tracker"` (**nunca** `"ADO"`); `tituloDeTickets("gitlab") === "Tickets GitLab"`; `accionSincronizar("azure_devops") === "Sincronizar ADO"` (backward-compat del texto de hoy); **(v2/C5)** el mensaje de estado vacío para `"gitlab"` **no contiene la subcadena `"ADO"`** y **sí** contiene `"GitLab"` — es el gate del literal `:1293` que el v1 omitía.
 
 **Smoke manual (no hay RTL/jsdom), paso a paso:**
-1. Levantar backend y frontend. 2. Seleccionar el proyecto **RIPLEY**. 3. Ir a la pestaña de tickets. 4. Verificar que el título dice **"Tickets GitLab"** y el botón **"Sincronizar GitLab"**. 5. Apretar el botón. 6. Verificar que aparecen tickets y que el contador coincide con el `X-Total` del smoke de F11. 7. Cambiar a un proyecto ADO. 8. Verificar que el título vuelve a **"Tickets ADO"** y que la lista de ese proyecto no cambió.
+1. Levantar backend y frontend. 2. Seleccionar el proyecto **RIPLEY**. 3. Ir a la pestaña de tickets. 4. Verificar que el título dice **"Tickets GitLab"** y el botón **"Sincronizar GitLab"**. 5. **ANTES de sincronizar**, con el board vacío, verificar que el mensaje de estado vacío dice **"Sincronizá con GitLab para traerlos"** (v2/C5: es el texto que el operador lee mientras está bloqueado; si dice "ADO", el literal `:1293` quedó sin migrar). 6. Apretar el botón. 7. Verificar que aparecen tickets y que el contador coincide con el `X-Total` del gate de F12. 8. **Apretar "Sincronizar" una SEGUNDA vez** (el backend responde `idempotent:true`) y verificar que **la lista sigue visible y no se vacía** — es el smoke visual de C3. 9. Cambiar a un proyecto ADO. 10. Verificar que el título vuelve a **"Tickets ADO"** y que la lista de ese proyecto no cambió.
 
 **Comandos:**
 ```
 & $PY -m pytest tests\test_plan276_hierarchy_gitlab.py -q     # 5 passed
-cd "...\frontend"; npx vitest run src/__tests__/plan276TrackerLabels.test.ts   # 5 passed
+cd "...\frontend"; npx vitest run src/__tests__/plan276TrackerLabels.test.ts   # 6 passed
 ```
-**Criterio de aceptación (binario):** 5 + 5 passed, y el smoke manual de 8 pasos con captura del paso 6.
+**Criterio de aceptación (binario):** 5 + 6 passed, el smoke manual de **10** pasos con captura del paso 7, y `Select-String -Path ..\frontend\src\pages\TicketBoard.tsx -Pattern "Sincronizá con ADO"` en **0 coincidencias**.
 
 **Ratchet:** registrar el archivo backend en los dos scripts.
 **Flag:** ninguna (los rótulos son corrección de defecto sobre superficie ya `default=True`).
@@ -1177,12 +1446,79 @@ Remove-Item Env:\GITLAB_TOKEN
 
 **(a) TLS.** `GET /api/v4/version` sin token ⇒ **HTTP 401**. Un `SSLError` acá significa que F1/F2 no cerraron.
 **(b) Ruteo + proyecto.** `GET /projects/<path-urlencoded>/issues?per_page=1` con el token real ⇒ **HTTP 200** y `X-Total > 0` (esperado ~53 abiertos). Un **404** significa `base_url` con el namespace pegado (F3/F8.3).
-**(c) Grafo.** `curl.exe -s "http://localhost:5000/api/tickets/hierarchy?project=RIPLEY"` **después** de apretar "Sincronizar" ⇒ `epics` **y/o** `orphans` **no vacíos**.
+**(c) Grafo. → DELEGADO A F12 (v2).** El v1 pedía acá `curl.exe -s ".../api/tickets/hierarchy?project=RIPLEY"` y **leer el JSON a ojo**. Un `curl` interpretado por una persona no es un criterio binario: no tiene exit code, no lo puede correr un modelo menor sin juicio, y "me pareció que había tickets" es exactamente el tipo de evidencia que este plan viene a eliminar. **Se reemplaza por el gate ejecutable de F12**, que hace lo mismo con exit code y además cruza el conteo contra el `X-Total` real de GitLab. F11 conserva (a), (b) y (d), que son los tres checks de **transporte**; F12 es el check de **visibilidad**.
 **(d) Control de no-regresión (Zscaler).** `GET https://gitlab.com/api/v4/version` **por la sesión normal** (sin adapter) ⇒ **HTTP 401**. Si acá aparece un `SSLError`, el adapter se montó de más y se rompió el resto del producto.
 
-**Criterio de aceptación (binario):** **(a) 401, (b) 200 con `X-Total`>0, (c) no vacío, (d) 401 — los cuatro en la misma corrida.** Si los cuatro no salen juntos, el plan **no cerró**.
+**Criterio de aceptación (binario):** **(a) 401, (b) 200 con `X-Total`>0, (d) 401 — los tres en la misma corrida**, más **F12 con exit code 0**. Si no salen juntos, el plan **no cerró**.
 
 **Flag:** ninguna. **Runtime:** idéntico en los 3. **Trabajo del operador: ninguno** (el smoke lo corre quien implementa).
+
+---
+
+### F12 — Gate ejecutable de cierre: "el operador VE los tickets" `[ADICIÓN ARQUITECTO]`
+
+**Objetivo:** un comando con **exit code** que responde la única pregunta que importa: *después de este plan, ¿hay tickets visibles en el grafo, y son todos los que hay en GitLab?* **Valor:** es el único criterio que prueba la meta del operador; todos los demás prueban piezas.
+
+**Por qué existe.** El v1 cerraba con un `curl` leído a ojo (F11(c)). Eso deja tres agujeros: no distingue *"el grafo trae 3 de 53"* de *"el grafo trae los 53"*; no lo puede ejecutar un modelo menor ni un runtime sin persona delante; y no falla — un humano cansado lee `{"epics":[],"orphans":[]}` y sigue. Un plan cuyo objetivo declarado es *ver los tickets* tiene que terminar en un **gate que se pone rojo** cuando no se ven.
+
+**Archivos a crear (3):**
+- `Stacky Agents/backend/scripts/smoke_plan276_visibilidad.py` — **toda la lógica**, Python puro.
+- `Stacky Agents/backend/scripts/smoke_plan276_visibilidad.ps1` — wrapper de 3 líneas.
+- `Stacky Agents/backend/scripts/smoke_plan276_visibilidad.sh` — wrapper de 3 líneas.
+
+**Decisión de arquitectura — la paridad es ESTRUCTURAL, no declarada.** El operador pidió `.ps1` **y** `.sh`. Se entregan los dos, pero **vacíos de lógica**: los dos invocan el mismo `.py` y propagan su exit code. Motivo medido en este repo: los **dos ratchets** (`run_harness_tests.sh` / `.ps1`) tienen la misma responsabilidad duplicada en dos sintaxis y **ya divergieron en 64 entradas**. Duplicar lógica de verificación en dos shells garantiza que dentro de tres planes uno de los dos mienta. Con la lógica en un solo `.py`, los tres runtimes (Codex CLI, Claude Code CLI, GitHub Copilot Pro) ejecutan **exactamente el mismo código** y no hay nada que pueda divergir.
+
+```powershell
+# smoke_plan276_visibilidad.ps1
+$PY = "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe"
+& $PY "$PSScriptRoot\smoke_plan276_visibilidad.py" @args
+exit $LASTEXITCODE
+```
+```sh
+# smoke_plan276_visibilidad.sh
+#!/bin/sh
+PY="N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/.venv/Scripts/python.exe"
+exec "$PY" "$(dirname "$0")/smoke_plan276_visibilidad.py" "$@"
+```
+
+**Qué hace el `.py`, en orden (todo con la stdlib — `urllib.request` + `json`; cero dependencias nuevas):**
+
+| Paso | Acción | Falla si |
+|---|---|---|
+| 1 | Resuelve el proyecto activo (`--project <nombre>` o `project_manager.get_active_project()`) | no hay proyecto activo |
+| 2 | Corre el **preflight de F0.8** e imprime su resultado | el preflight no da 6/6 ⇒ **exit 2** y no se sigue (fallar temprano y nombrar qué falta) |
+| 3 | `POST http://localhost:5000/api/tickets/sync-v2` con `{"project": "<activo>"}` | la respuesta no es 2xx, **o** trae `ok:false` (imprime `message`), **o** trae `available:false` |
+| 4 | Lee el **`X-Total` real de GitLab**: `GET /projects/<path>/issues?state=opened&per_page=1` con el cliente del proyecto (`build_tracker_target` + `GitLabClient`) | levanta `TrackerApiError` (imprime `kind` y el mensaje) |
+| 5 | `GET http://localhost:5000/api/tickets/hierarchy?project=<activo>` | la respuesta no es 2xx |
+| 6 | **Criterio 1:** `len(epics) + len(orphans) > 0` | **el grafo está vacío ⇒ exit 1** |
+| 7 | **Criterio 2:** `total_en_grafo == X-Total`, contando épicas + sus hijos + huérfanos | **el conteo no coincide ⇒ exit 1**, imprimiendo *"grafo=N, GitLab=M, faltan M-N"* |
+
+**Por qué el criterio 2 y no solo el 1.** `len(epics)+len(orphans) > 0` se satisface con **un** ticket. El modo de falla realista de este plan no es "cero tickets" sino **"algunos tickets"**: el techo de 4000 issues truncando sin log (P2-1, F9), el `skipped` del `iid` no numérico (F5.2), o una `TrackerQuery` con el `state` equivocado (C4). Los tres dan un grafo **no vacío y mentiroso**. El único número que los detecta es el `X-Total` que devuelve GitLab, que es también el número que el operador ve en la UI de GitLab y con el que va a comparar.
+
+**Tolerancia declarada y acotada:** el sync trae **abiertos** (`TrackerQuery(state="open")`, F5.2) y el grafo puede contener además issues **cerrados** de corridas anteriores (que el sync marca `closed` pero **no borra**, F5.2). El criterio 2 compara contra los **abiertos**: `contar solo las filas con ado_state != "closed"`. Está escrito así en el script y en su docstring, porque comparar el total crudo daría un rojo falso en la segunda corrida — y **un gate que da rojo falso se termina desactivando**, que es peor que no tenerlo.
+
+**No es un test de pytest, es un smoke contra el sistema vivo:** no se registra en los ratchets (que solo listan `tests/*.py`), no entra en la allowlist, y **no** corre en CI — necesita el backend arriba y el GitLab real alcanzable. Se corre a mano al cerrar el plan y queda como herramienta permanente de diagnóstico.
+
+**Comando:**
+```
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+& "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\.venv\Scripts\python.exe" scripts\smoke_plan276_visibilidad.py --project RIPLEY
+echo "exit=$LASTEXITCODE"
+```
+
+**Salida esperada al cerrar el plan:**
+```
+PREFLIGHT: 6/6
+sync-v2: ok=true created=53 updated=0 removed=0
+GitLab X-Total (abiertos): 53
+grafo: epics=<n> orphans=<m> total_abiertos=53
+VISIBILIDAD: OK  (53/53)
+exit=0
+```
+
+**Criterio de aceptación (binario):** **`exit=0` y la línea `VISIBILIDAD: OK` con los dos números iguales.** Exit 1 = el operador **no** ve (todos o parte de) los tickets ⇒ **el plan no cerró**, sin interpretación posible. Exit 2 = falta un prerequisito, y el propio script dice cuál.
+
+**Flag:** ninguna (read-only + on-demand ⇒ default ON, sin flag nueva). **Dependencias nuevas: cero** (stdlib). **Impacto por runtime:** idéntico en los 3 — la lógica vive en un solo `.py` y los wrappers no deciden nada. **Trabajo del operador: ninguno.**
 
 ---
 
@@ -1197,6 +1533,8 @@ Remove-Item Env:\GITLAB_TOKEN
    - **Capa hermética (F1, obligatoria, sin red y sin certs generados):** que el contexto sea OpenSSL genuino y no de truststore (discriminador independiente: `cert_store_stats()` responde en el genuino y lanza `NotImplementedError` en el de truststore, `truststore/_api.py:195`); que `verify_mode` se pueda setear **sin `RecursionError`**; que `VERIFY_X509_PARTIAL_CHAIN` esté puesto con `verify_mode == CERT_REQUIRED` y `check_hostname is True`; que el bundle haya entrado **incluida la hoja**, medido con `cert_store_stats()` (`x509 - x509_ca == 1`) y **nunca** con `get_ca_certs()`, que es ciego a los certificados no-CA (medido: 118 de 119, y **0 de 1** para `srvcgit01-ca.pem`); y que nada global haya cambiado.
    - **Capa de handshake real:** vive en el smoke de F11 contra el servidor real, no en `pytest`.
    - **Prohibido** agregar `cryptography`, `trustme` o cualquier dependencia nueva para saltear esta limitación. Si alguna vez se agrega por otro motivo, el test de servidor local se suma entonces — no antes.
+7. **(v2) El cierre del plan lo decide un EXIT CODE, no una lectura.** Ninguna fase, ni el DoD entero, puede darse por cerrada leyendo un JSON a ojo. El criterio final es `scripts/smoke_plan276_visibilidad.py` saliendo con **0** y con `grafo == X-Total de GitLab` (F12). Motivo: los tres modos de falla realistas de este plan — el techo de 4000 issues truncando sin log (P2-1), los `skipped` del `iid` no numérico (F5.2) y una `TrackerQuery` con el `state` equivocado (C4) — producen los tres un grafo **no vacío y mentiroso**, que pasa cualquier inspección visual. Un `len(epics)+len(orphans) > 0` se satisface con **un** ticket de 53.
+8. **(v2) Una flag apagada NUNCA se reporta como un error de otro proveedor.** Si el proyecto activo es GitLab y algo de GitLab falta, el mensaje tiene que **nombrar la pieza de GitLab que falta**. El defecto que esta regla mata: `STACKY_GITLAB_ENABLED=false` producía, en la cadena completa medida (`tracker_provider.py:133-136` → `api/tickets.py:425-426` → branch ADO → `project_context.py:309-311`), un **`AdoConfigError("El proyecto no usa Azure DevOps")`** — un mensaje sobre Azure DevOps, en un proyecto GitLab, causado por una flag de GitLab. Tres saltos de indirección, cero información útil. Cualquier test de esta clase assertea **la subcadena del mensaje**, no solo el tipo de la excepción.
 
 ---
 
@@ -1211,6 +1549,9 @@ Remove-Item Env:\GITLAB_TOKEN
 | **`NameError` para ADO/Jira/Mantis** al cambiar `"ok": True` por `"ok": ok` en `global_config.py:389`, porque `ok` solo existe en la rama GitLab. | F4 obliga a inicializar `ok = True` antes de las ramas, y agrega un caso de test específico ("`ok` sigue siendo True para un tracker ADO"). |
 | Que F5 borre tickets del operador. | El sync **nunca borra**: marca `ado_state="closed"`. Explícito en el docstring y con test propio ("la fila sigue existiendo"). |
 | Flipear `STACKY_TICKETS_PROVIDER_ENABLED` "de paso" y romper el plan 70. | Prohibido (§3.2). F5.3 resuelve el provider localmente y solo para trackers no-ADO, con un test que verifica que para ADO el bloque nuevo **no se ejecuta**. |
+| **EL RIESGO Nº 1 DE ESTE PLAN (v2/C1): implementar las 12 fases, correr los 90 tests en verde, y que el operador siga sin ver un solo ticket porque `STACKY_GITLAB_ENABLED` está en su default de fábrica `false`** (`config.py:1209-1210`). Es el escenario más probable de "implementé todo y no anda": los tests pasan (setean sus propias flags), el smoke local pasa (esta máquina tiene `.env:7` con `true`), y **cualquier instalación nueva queda muerta con un mensaje que habla de Azure DevOps**. | Cuatro capas, ninguna de las cuales flipea el default por código (riel: config de operador va por UI): **(1)** se declara como prerequisito duro en §1 y §3.4-bis; **(2)** F0 paso 8 lo **mide** e imprime el valor efectivo antes de escribir una línea; **(3)** F0.8 lo chequea con su remedio impreso; **(4)** F5.3 **deja de tragarse** el `TrackerConfigError` y lo re-lanza nombrando el switch, con handler propio en F6 (400, no 500 mudo) y dos tests que assertean **la subcadena del mensaje** (F5.5 casos 13 y F6 caso 6). Y **F12 sale con exit 2** si el preflight no da 6/6. |
+| **Upsertear por `ado_id` y reventar en la SEGUNDA corrida (v2/C2).** `ado_id` es el análogo natural de ADO y no está en el índice único `ux_tickets_stacky_tracker_external` (`models.py:68-77`) ⇒ `IntegrityError` o filas duplicadas, y en los dos casos se rompe el criterio binario de idempotencia de la propia F5. | La clave de upsert está **declarada literal** en F5.2 (terna `stacky_project_name` + `tracker_type` + `external_id`) con los cuatro corolarios, y **tres tests la vigilan** (F5.5 casos 14, 15 y 16). El caso 16 está construido para **fallar** si alguien upsertea por `ado_id`. |
+| **Arreglar todo y que la UI no refresque (v2/C3).** El operador aprieta "Sincronizar", el backend responde `idempotent:true` porque las filas ya están, y `shouldRefreshTicketQueries` (`useTicketSync.ts:70-75`) devuelve `false` ⇒ **la pantalla sigue vacía con los tickets en la base**. Indistinguible de "el sync no anda", y **se dispara justo en el reintento**, que es lo primero que hace un operador bloqueado. | F6 diff 4: un trigger `manual` invalida **siempre** las 3 queries. La función se **extrae del closure y se exporta** para que sea testeable sin RTL (que no existe en este repo), con 4 casos, el primero corrido **contra el defecto**. Y el paso 8 del smoke manual de F7 lo verifica a ojo: apretar "Sincronizar" dos veces y confirmar que la lista **no se vacía**. |
 | El expiry de la hoja: `notAfter = Jun 14 2028`. | Documentado en `deployment/README_certificados.md` (F9/P2-5). Cuando el cert se renueve, hay que reemplazar el `.pem`; el mensaje de `CaBundleInvalido` y los 4 sub-veredictos de F4 hacen que el día que pase se vea en 10 segundos en vez de en una jornada. |
 | Una sesión paralela tocando los mismos archivos. | Antes de F1, correr `git worktree list` y `git status`. Los archivos de la frontera (`gitlab_client.py`, `tls_pinning.py`, `global_config.py`, `local_diagnostics.py`, `tracker_provider.py`, `project_context.py`, `gitlab_provider.py`) tienen **cambios sin commitear** al momento de escribir este plan (§2.4): **no** hacer `stash`, `reset`, `rebase` ni `checkout`; commitear con pathspec explícito. |
 
@@ -1226,6 +1567,9 @@ Remove-Item Env:\GITLAB_TOKEN
 - **Refactor de `_request` a un cliente HTTP nuevo.** Se conserva `requests` y la forma de `_request`; solo se cambia el transporte y se agrega el `try`.
 - **Subir el techo de 4.000 issues** (P2-1). Se agrega el log, no se cambia el cap: subirlo sin medir es un problema distinto.
 - **Cualquier dependencia nueva** (`cryptography`, `trustme`, `pytest-httpserver`). Prohibido (§5 regla 6).
+- **(v2/C1) Flipear `STACKY_GITLAB_ENABLED` por código.** Es **config del operador** y ya se administra por UI (`_MANAGED_KEYS`, `api/global_config.py:81`). Cambiar su default en `config.py` violaría el riel de que la config del operador no se decide por el implementador, y además encendería el eje GitLab en instalaciones que no lo usan. Lo que este plan hace es volver su ausencia **ruidosa y accionable** (F0 paso 8, F0.8, F5.3, F6, F12), no decidir por el operador.
+- **(v2/C6) Que `write_permission` vote en el veredicto del check.** Se conserva y se muestra, pero no entra en el `ok`: un token de solo lectura es válido para el objetivo de este plan (leer issues y verlos), y hacerlo votar pondría el check en rojo con el sistema funcionando — el mismo falso veredicto que el plan combate, con el signo invertido. Si alguna vez se quiere un check de escritura, es un plan aparte junto con la escritura hacia GitLab.
+- **(v2/C5) Renombrar la columna `ado_id` / `ado_state` / `ado_url` del modelo `Ticket`.** Los rótulos visibles se traducen por tracker (F7), pero los **nombres de columna** siguen igual por backward-compat con las ~18 lecturas de `api/tickets.py` y con los `ADO-{ticket.ado_id}` de la UI, que son identificadores y no rótulos de proveedor. Migración de esquema: plan aparte.
 
 ---
 
@@ -1247,30 +1591,39 @@ Remove-Item Env:\GITLAB_TOKEN
 
 ## 9. Orden de implementación
 
-1. **F0** — línea base (solo verificación, sin código). **No saltear**: reproduce la trampa del `RecursionError` antes de que aparezca sola.
+0. **F0** — línea base, **8** comandos (solo verificación, sin código). **No saltear**: reproduce la trampa del `RecursionError` antes de que aparezca sola, y el paso 8 **mide el master switch** (v2/C1) — si sale `False`, se enciende **por UI** antes de escribir nada, o las 12 fases siguientes no pueden cerrar.
+1. **F0.8** — `scripts/preflight_plan276.py`, los 6 prerequisitos de visibilidad en un comando `[ADICIÓN ARQUITECTO]`. El chequeo 5 queda en `SKIP` hasta que exista F3; los otros 5 son obligatorios desde acá.
 2. **F1** — `services/tls_openssl_context.py` + sus 9 tests. Es la pieza de la que dependen todas las demás.
 3. **F2** — el adapter en la sesión de GitLab + `try` en `_request` + borrado del parche global de urllib3. **A partir de acá el GitLab interno responde.**
 4. **F3** — bundle estricto (fail-closed) + validación de `base_url`.
 5. **F4** — los 4 sub-veredictos del check (incluye el fix del `NameError` de `global_config.py:389`).
-6. **F5** — el sync GitLab → BD (`work_item_type`, `gitlab_sync.py`, ruteo, registro de capacidades). **Depende de F2.**
-7. **F6** — `sync-v2` deja de tragarse `CapabilityUnavailable` + `errors.py` deja de poner `ok:true` + guarda en `useTicketSync`. **Depende de F5.**
-8. **F7** — el grafo + los rótulos por tracker. **Depende de F5.**
+6. **F5** — el sync GitLab → BD (`work_item_type`, `gitlab_sync.py`, ruteo, registro de capacidades). **Depende de F2.** Los tres puntos que un implementador menor va a errar si no los lee: la **clave de upsert** (F5.2/C2), la **query literal** (F5.2/C4) y que el `TrackerConfigError` de un ctx GitLab **no se traga** (F5.3/C1).
+7. **F6** — `sync-v2` deja de tragarse `CapabilityUnavailable`, gana el handler de `TrackerConfigError` (400, no 500 mudo), `errors.py` deja de poner `ok:true`, y el sync **manual** vuelve a refrescar la UI (C3). **Depende de F5.**
+8. **F7** — el grafo + los **7** rótulos por tracker (C5). **Depende de F5.**
 9. **F8** — los tres agujeros de configuración (rama legacy, `buildPayload`, `normalizeGitlabUrl`).
 10. **F9** — los cinco P2.
 11. **F10** — endurecer los 5 tests existentes. **Va después de F1-F9** porque varios se reescriben contra el diseño nuevo.
-12. **F11** — smoke de cierre con los cuatro checks en una sola corrida.
+12. **F11** — smoke de transporte: (a) TLS 401, (b) ruteo 200 con `X-Total`, (d) `gitlab.com` 401 en la misma corrida.
+13. **F12** — **el gate ejecutable de visibilidad** `[ADICIÓN ARQUITECTO]`. **Va último y es el que decide si el plan cerró.** Todo lo anterior prueba piezas; esto prueba que el operador ve los tickets, con exit code y contra el `X-Total` real. Si F12 sale ≠ 0, el plan **no está hecho**, por más que las 12 fases anteriores estén en verde.
 
 ## 10. Definición de Hecho (DoD)
 
-- Los **10 archivos de test nuevos** existen, están en verde y **registrados en los DOS ratchets** (`run_harness_tests.sh` **y** `.ps1`, con la sintaxis de cada uno), con el conteo de casos verificado por archivo: `test_plan276_tls_context.py` (9), `test_plan276_gitlab_session_adapter.py` (9), `test_plan276_tls_bundle_estricto.py` (8), `test_plan276_probe_verdict.py` (7), `test_plan276_gitlab_sync.py` (12), `test_plan276_capability_envelope.py` (5), `test_plan276_hierarchy_gitlab.py` (5), `test_plan276_config_gaps.py` (3), `test_plan276_client_limits.py` (6) — **64 casos backend**.
-- Los **3 archivos de test de frontend** nuevos en verde, corridos **uno por uno**: `plan276SyncEnvelope.test.ts` (4), `plan276TrackerLabels.test.ts` (5), `plan276GitlabUrlNormalize.test.ts` (6) — **15 casos**.
+- Los **9 archivos de test nuevos de backend** existen, están en verde y **registrados en los DOS ratchets** (`run_harness_tests.sh` **y** `.ps1`, con la sintaxis de cada uno: el `.sh` sin comillas ni coma, el `.ps1` con comillas y coma), con el conteo de casos verificado por archivo: `test_plan276_tls_context.py` (9), `test_plan276_gitlab_session_adapter.py` (9), `test_plan276_tls_bundle_estricto.py` (8), `test_plan276_probe_verdict.py` (**8**, +1 por C6), `test_plan276_gitlab_sync.py` (**16**, +4 por C1/C2/C9), `test_plan276_capability_envelope.py` (**6**, +1 por C1), `test_plan276_hierarchy_gitlab.py` (5), `test_plan276_config_gaps.py` (3), `test_plan276_client_limits.py` (6) — **70 casos backend** (eran 64 en v1).
+- Los **3 archivos de test de frontend** nuevos en verde, corridos **uno por uno** (contaminación por orden): `plan276SyncEnvelope.test.ts` (**8**, +4 por C3), `plan276TrackerLabels.test.ts` (**6**, +1 por C5), `plan276GitlabUrlNormalize.test.ts` (6) — **20 casos** (eran 15 en v1).
 - Los **5 tests existentes endurecidos** (F10) en verde, con **≥ 27 casos** en total (nunca menos).
+- Los **3 scripts nuevos** existen y corren: `scripts/preflight_plan276.py` (F0.8), `scripts/smoke_plan276_visibilidad.py` + sus wrappers `.ps1` y `.sh` (F12). **No se registran en los ratchets ni en la allowlist** — no son `tests/*.py`. Verificar que `& $PY -m pytest tests\test_harness_ratchet_meta.py -q` sigue verde **precisamente porque no se tocaron** esos registros.
 - **Cero** parches globales: `Select-String -Path services\tls_pinning.py -Pattern "create_urllib3_context"` devuelve **0**; `grep -rn "extract_from_ssl\|REQUESTS_CA_BUNDLE *=" backend/services backend/api` no devuelve ninguna **escritura** nueva.
 - `Select-String -Path api\errors.py -Pattern 'setdefault\("ok"'` devuelve **0**.
 - `Select-String -Path api\tickets.py -Pattern "Plan 220 lo implementa"` devuelve **0**.
-- **Smoke de F11 con los cuatro checks en una sola corrida**: (a) 401, (b) 200 con `X-Total`>0, (c) `hierarchy` no vacío, (d) `gitlab.com` 401.
-- **Smoke manual de F7** (8 pasos) ejecutado, con captura del paso 6.
-- Las **3 flags nuevas** registradas en los **6 puntos** de §3.4, las tres con `default=True`, las tres en la categoría `paridad_proveedores`, y `& $PY -m pytest tests\test_harness_flags.py -q` en verde.
-- `& $PY -m pytest tests\test_harness_ratchet_meta.py -q` en verde (los 10 archivos nuevos parsean en el `.sh`).
-- **Cero dependencias nuevas**: `pip list` idéntico antes y después.
-- **Cero trabajo nuevo para el operador.** Ninguna flag nace OFF. Ninguna variable de entorno nueva de operador.
+- `Select-String -Path ..\frontend\src\pages\TicketBoard.tsx -Pattern "Sincronizá con ADO"` devuelve **0** (v2/C5: el 7º literal, el del estado vacío).
+- `Select-String -Path ..\frontend\src\hooks\useTicketSync.ts -Pattern "export function debeRefrescarQueriesDeTickets"` devuelve **1** (v2/C3: si es 0 quedó como closure y su test no prueba producción).
+- **Smoke de F11 con los tres checks de transporte en una sola corrida**: (a) 401, (b) 200 con `X-Total`>0, (d) `gitlab.com` 401.
+- **GATE DE CIERRE — F12 `[ADICIÓN ARQUITECTO]`:** `scripts\smoke_plan276_visibilidad.py --project RIPLEY` sale con **exit code 0** e imprime `VISIBILIDAD: OK (N/N)` con **los dos números iguales**. **Este es el único ítem del DoD que prueba la meta del operador**; si sale ≠ 0 el plan **no está hecho**, aunque todos los demás ítems estén tildados.
+- **Preflight de F0.8 en `6/6`** con el backend configurado, y su exit code 0.
+- **Smoke manual de F7** (**10** pasos) ejecutado, con captura del paso 7 (tickets visibles) y confirmación del paso 8 (segundo "Sincronizar" **no** vacía la lista — gate visual de C3).
+- Las **3 flags nuevas** registradas en los **6 puntos** de §3.4, las tres con `default=True`, las tres en la categoría `paridad_proveedores`, y `& $PY -m pytest tests\test_harness_flags.py -q` en verde. **La v2 no agrega ninguna flag más**: F0.8 y F12 son read-only + on-demand.
+- **Las 3 flags EXISTENTES de §3.4-bis quedan documentadas con su valor efectivo medido** (F0 paso 8) en el resumen de cierre. `STACKY_GITLAB_ENABLED` **no se modifica por código**: si estaba en `false`, se enciende por UI y se anota que se hizo.
+- `& $PY -m pytest tests\test_harness_ratchet_meta.py -q` en verde (los **9** archivos de test nuevos parsean en el `.sh`; los 3 scripts **no** van ahí).
+- **Huella de error registrada en `Stacky Agents/docs/sistema/error_fingerprints.json`** (v2/C8, convención del repo). Este plan **mata una clase de error entera** — `SSLError` bajo `truststore` porque `get_ca_certs()` es ciego a los certificados no-CA — y sin la huella el próximo que la vea vuelve a diagnosticarla desde cero. La entrada lleva: `id`, el **patrón** del mensaje que ve el operador, `plan: 276` + el commit, la fecha, y `guard_test: "backend/tests/test_plan276_tls_context.py::test_el_bundle_llega_a_openssl_incluida_la_hoja"` — que es el test que se pone rojo si la clase de error vuelve. Verificar con `& $PY -c "import json; json.load(open(r'..\docs\sistema\error_fingerprints.json', encoding='utf-8'))"` que el archivo **sigue parseando** después de agregarla (ese JSON ya se rompió una vez por un byte ESC crudo).
+- **Cero dependencias nuevas**: `pip list` idéntico antes y después. F0.8 y F12 usan **solo stdlib** (`urllib.request`, `json`, `os.path`).
+- **Cero trabajo nuevo para el operador.** Ninguna flag nace OFF. Ninguna variable de entorno nueva de operador. Lo único que el operador puede tener que hacer — encender `STACKY_GITLAB_ENABLED` — **ya existía antes de este plan**, es config suya y va por UI; lo que agrega la v2 es que ahora **se le dice, en una línea, que le falta eso** (F0.8, F5.3, F12) en vez de dejarlo con un error de Azure DevOps.

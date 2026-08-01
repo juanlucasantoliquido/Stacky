@@ -651,18 +651,18 @@ def run_brief():
         return jsonify({"ok": False, "error": "invalid_work_item_type"}), 400
     if work_item_type == "Issue" and not config.STACKY_ISSUE_FROM_BRIEF_ENABLED:
         return jsonify({"ok": False, "error": "issue_from_brief_disabled"}), 400
-    # Plan 52 F0 — Paridad de runtimes: el autopublish (Epic/Issue) SOLO lo ejecuta
-    # el finalizador de claude_code_cli_runner (_maybe_autopublish_epic). Codex CLI y
-    # GitHub Copilot NO autopublican → degradación controlada: rechazo explícito y
-    # temprano (antes de gastar tokens) para no dar falsa sensación de éxito.
-    _AUTOPUBLISH_RUNTIME = "claude_code_cli"
-    if work_item_type in ("Epic", "Issue") and runtime_raw != _AUTOPUBLISH_RUNTIME:
+    # Plan 278 F4-bis — el publicador ya es agnostico de runtime (post-hook en
+    # ticket_status.on_execution_end), asi que el rechazo por RUNTIME desaparece.
+    # Lo que NO desaparece es el rechazo cuando el autopublish esta APAGADO: sin
+    # el, un run_brief de Epic/Issue con la flag OFF terminaria 'completed' sin
+    # work item y sin error — el falso verde que el Plan 41 vino a cerrar.
+    if work_item_type in ("Epic", "Issue") and not config.STACKY_EPIC_AUTOPUBLISH_BACKEND:
         return jsonify({
             "ok": False,
-            "error": "autopublish_requires_claude_cli",
+            "error": "autopublish_disabled",
             "detail": (
-                f"work_item_type={work_item_type!r} requiere runtime "
-                f"{_AUTOPUBLISH_RUNTIME!r}; recibido {runtime_raw!r}."
+                f"work_item_type={work_item_type!r} requiere STACKY_EPIC_AUTOPUBLISH_BACKEND=ON; "
+                "la flag esta apagada y el work item no se crearia."
             ),
         }), 400
     # Plan 42 F3 / Plan 53 F2 — modelo y effort por-run con selector adaptativo.

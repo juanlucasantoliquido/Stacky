@@ -1030,6 +1030,20 @@ def _run_in_background(
         )
 
         spawn_epoch = time.time()
+        # Plan 278 F1-bis — sellar spawn_epoch en la FILA (no en el dict local, que
+        # recién nace en :1570). El publicador vive ahora en el post-hook
+        # (services/epic_autopublish.py) y necesita este valor como min_mtime del
+        # rescate desde disco (api/tickets.py: "solo artefactos de ESTA run").
+        # Derivarlo de AgentExecution.started_at ampliaría la ventana hacia atrás.
+        try:
+            with session_scope() as _se_session:
+                _se_row = _se_session.get(AgentExecution, execution_id)
+                if _se_row is not None:
+                    _se_md = dict(_se_row.metadata_dict or {})
+                    _se_md["spawn_epoch"] = spawn_epoch
+                    _se_row.metadata_dict = _se_md
+        except Exception:  # noqa: BLE001 — nunca tumbar el spawn por telemetría
+            logger.debug("[exec=%s] sello de spawn_epoch falló", execution_id, exc_info=True)
         log("info", f"claude code cli process started pid={proc.pid}")
         with _PROCESSES_LOCK:
             _PROCESSES[execution_id] = proc
@@ -1667,89 +1681,18 @@ def _run_in_background(
                 "stop_reason": _p58.get("stop_reason"),
                 "global_budget_spent": _p58.get("global_budget_spent"),
             }
-        # Plan 41 — Autopublicación backend de la épica brief→épica.
-        # Mueve la garantía de creación de la épica del navegador al backend:
-        # si la run es brief→épica (one-shot del BusinessAgent) y el output trae
-        # HTML de épica, se publica en ADO de forma autónoma, idempotente y con
-        # fallo RUIDOSO (needs_review). Sella metadata["epic_ado_id"].
-        def _maybe_autopublish_epic(current_status: str) -> str:
-            if not config.STACKY_EPIC_AUTOPUBLISH_BACKEND:
-                return current_status
-            if not (_one_shot and (agent_type or "").lower() == "business"):
-                return current_status
-            # Plan 45 F2 — bifurcación Epic vs Issue según el tipo destino sellado
-            # en metadata. Issue solo si el flag global está ON (defensa en
-            # profundidad: run_brief ya rechaza Issue con flag OFF).
-            _is_issue = (
-                str(metadata.get("work_item_type") or "Epic") == "Issue"
-                and config.STACKY_ISSUE_FROM_BRIEF_ENABLED
-            )
-            _label = "issue" if _is_issue else "épica"
-            try:
-                from api.tickets import (
-                    autopublish_epic_from_run,
-                    publish_issue_from_run,
-                )
-            except Exception as exc:  # noqa: BLE001
-                log("warn", f"autopublish {_label}: import falló (no crítico): {exc}")
-                return current_status
-            _brief_text = ""
-            for _b in (raw_blocks or []):
-                if isinstance(_b, dict) and _b.get("id") == "brief":
-                    _brief_text = str(_b.get("content") or "")
-                    break
-            _proj = project_ctx.stacky_project_name if project_ctx else None
-            _seal_key = "issue_ado_id" if _is_issue else "epic_ado_id"
-            _publish = publish_issue_from_run if _is_issue else autopublish_epic_from_run
-            try:
-                _publish_kwargs = {
-                    "output": output,
-                    "brief": _brief_text,
-                    "project_name": _proj,
-                    "already_published_id": metadata.get(_seal_key),
-                }
-                # Plan 47 F2bis — ventana temporal del rescate del disco (R-STALE):
-                # solo aplica al path de épica (publish_issue_from_run no lo acepta).
-                if not _is_issue:
-                    _publish_kwargs["run_started_at"] = spawn_epoch
-                _res = _publish(**_publish_kwargs)
-            except Exception as exc:  # noqa: BLE001 — nunca tumbar el finalizador
-                log("error", f"autopublish {_label}: error inesperado: {exc}")
-                metadata["epic_publish_error"] = str(exc)
-                return "needs_review"
-            if _res.error is not None:
-                # Fallo RUIDOSO: el WI NO se creó → needs_review visible.
-                metadata["epic_publish_error"] = _res.error
-                log("error", f"autopublish {_label}: publicación falló → needs_review: {_res.error}")
-                return "needs_review"
-            if _res.ado_id is not None and not _res.skipped:
-                metadata[_seal_key] = _res.ado_id
-                log("info", f"autopublish {_label}: {_label} creado autónomamente ado_id={_res.ado_id}")
-            elif _res.ado_id is not None and _res.skipped:
-                metadata[_seal_key] = _res.ado_id  # ya sellado, re-afirmar
-            # Plan 42 F2/F4 — sellar warnings de grounding y resumen post-épica.
-            # Plan 52 F4 — el path Issue también produce grounding_warnings y
-            # epic_summary (publish_issue_from_run los puebla reusando las helpers).
-            if _res.grounding_warnings:
-                metadata["grounding_warnings"] = _res.grounding_warnings
-            if _res.epic_summary is not None:
-                metadata["epic_summary"] = _res.epic_summary
-            # Plan 47 F3 — telemetría del método de recuperación de la épica.
-            if _res.recovery_method:
-                metadata["epic_recovery"] = _res.recovery_method
-            # Plan 60 F1 — sellar baseline para aprendizaje bidireccional.
-            if not _is_issue and not _res.skipped:
-                if _res.published_html is not None:
-                    metadata["epic_baseline_html"] = _res.published_html
-                if _res.baseline_rev is not None:
-                    metadata["epic_baseline_rev"] = _res.baseline_rev
-            return current_status
-
+        # Plan 278 F3 — el closure _maybe_autopublish_epic vivía acá y era el
+        # ÚNICO publicador de la épica/issue del brief, lo que ataba la feature
+        # a claude_code_cli. Se mudó ENTERO a services/epic_autopublish.py, que
+        # corre como post-hook de ticket_status.on_execution_end y por lo tanto
+        # publica igual en los 3 runtimes. NO reintroducir un segundo motor acá:
+        # el censo por AST de tests/test_epic_autopublish_runtime_parity.py falla.
         # H5 — trazabilidad del runaway guard.
         if _runaway_triggered:
-            # Incluso en runaway intentamos publicar la épica si el agente alcanzó
-            # a entregar el HTML (no perder trabajo); el status sigue needs_review.
-            _maybe_autopublish_epic("needs_review")
+            # Plan 278 F3 — la publicación en runaway tampoco se pierde: este
+            # camino llama on_execution_end(final_status="needs_review") más
+            # abajo, y `needs_review` es uno de los dos estados que el post-hook
+            # publicador acepta. _mark_terminal ya persistió el output antes.
             metadata["runaway"] = {
                 "reason": _runaway_triggered[0],
                 "turns": stream_telemetry.get("num_turns"),
@@ -1931,9 +1874,10 @@ def _run_in_background(
                              log=log) == "needs_review" and final_status == "completed":
                 final_status = "needs_review"
                 log("warn", "assumption_overload → needs_review")
-            # Plan 41 — autopublicar la épica antes de marcar terminal. Puede
-            # forzar needs_review si la publicación falla (fallo ruidoso).
-            final_status = _maybe_autopublish_epic(final_status)
+            # Plan 278 F3 — la autopublicación de la épica ya NO vive acá. Se
+            # mudó al post-hook runtime-agnóstico services/epic_autopublish.py,
+            # que corre en ticket_status.on_execution_end (:2016 más abajo) y
+            # publica igual para Claude, Codex y Copilot. UN solo publicador.
             # Plan 38 C1 — Trazabilidad: agent_type, agent_name, produced_files
             if config.STACKY_EXECUTION_TRACE_ENABLED:
                 try:

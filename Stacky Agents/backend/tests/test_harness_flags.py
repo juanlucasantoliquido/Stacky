@@ -465,6 +465,15 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 278 — la épica se publica en los 3 runtimes ────────────────────
+    # NO es una flag nueva: existe desde el Plan 41 en config.py con default
+    # "true", y el Plan 278 solo la REGISTRA en el arnés para que el operador
+    # pueda verla y apagarla desde la UI (antes solo se tocaba editando .env).
+    # Nace ON porque ya estaba ON: apagarla sería una regresión de
+    # comportamiento, no una mejora de seguridad. Es la palanca de rollback
+    # documentada del plan, y con ella OFF run_brief rechaza Epic/Issue con
+    # 'autopublish_disabled' en vez de terminar en un falso verde.
+    "STACKY_EPIC_AUTOPUBLISH_BACKEND",
     # ── Plan 276 — GitLab self-hosted de punta a punta ──────────────────────
     # Las 3 nacen ON. Ninguna cae en las categorías de excepción: (A) no hay
     # loop, daemon, barrido ni llamada a modelo — nada gasta en reposo; (B) no

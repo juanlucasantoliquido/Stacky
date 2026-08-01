@@ -85,6 +85,8 @@ $HarnessTestFiles = @(
   # Plan 57 - FA-36 Especulacion anticipatoria
   "tests/test_speculative_hash.py",
   "tests/test_speculative_parity.py",
+  "tests/test_epic_autopublish_service.py",
+  "tests/test_epic_autopublish_runtime_parity.py",
   "tests/test_speculative_flag.py",
   "tests/test_speculative_claim_flow.py",
   # Plan 58 - Bucle de convergencia de calidad determinista

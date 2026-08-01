@@ -991,6 +991,12 @@ def create_app() -> Flask:
     # cualquier runtime). No hubo registro previo de register_post_hook en
     # create_app; este es el primero.
     from services import ticket_status, incident_autopublish, incident_dev_autocommit
+    # Plan 278 F4 — publicador unico de la epica/issue del brief, agnostico de
+    # runtime. Va PRIMERO en la lista de post-hooks: degrada la fila y el ticket
+    # antes de que completion_dispatcher sincronice el tracker y de que
+    # qa_uat_enqueue encole una validacion E2E.
+    from services import epic_autopublish
+    epic_autopublish.register(ticket_status.register_post_hook)
     incident_autopublish.register(ticket_status.register_post_hook)
     # Plan 177 F4 — auto-PR del Dev Resolutor (commit+PR de lo que tocó el agente).
     incident_dev_autocommit.register(ticket_status.register_post_hook)

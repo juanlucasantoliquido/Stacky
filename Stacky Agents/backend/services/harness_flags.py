@@ -199,6 +199,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "epicas_ado": (
         "STACKY_EPIC_FROM_BRIEF_ENABLED", "STACKY_BRIEF_MODEL_SELECT_ENABLED",
+        "STACKY_EPIC_AUTOPUBLISH_BACKEND",   # Plan 278 F6 — gobierna el autopublish en los 3 runtimes
         "STACKY_EPIC_GROUNDING_PREFLIGHT_ENABLED", "STACKY_EPIC_SUMMARY_ENABLED",
         "STACKY_GROUNDING_OBSERVATORY_ENABLED", "STACKY_PROCESS_CATALOG_SUGGESTIONS_ENABLED",
         "STACKY_EPIC_SANITIZE_ENABLED", "STACKY_EPIC_STRUCTURE_WARNINGS_ENABLED",
@@ -2859,6 +2860,18 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
+    ),
+    FlagSpec(
+        key="STACKY_EPIC_AUTOPUBLISH_BACKEND",
+        type="bool",
+        default=True,          # ya era true en config.py:1054; NO se cambia el default
+        label="Autopublicar la épica del brief (41)",
+        description=(
+            "Plan 41 / Plan 278 — Si ON, al cerrar una run brief→épica el backend publica "
+            "la Épica/Issue en el tracker del proyecto, en los 3 runtimes. OFF = run_brief "
+            "rechaza Epic/Issue con 'autopublish_disabled' en vez de terminar en falso verde."
+        ),
+        group="global",
     ),
     FlagSpec(
         key="INTENT_PREFLIGHT_ENABLED",

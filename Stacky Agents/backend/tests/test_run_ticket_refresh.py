@@ -139,14 +139,47 @@ def test_ticket_id_none_o_inexistente_es_noop(monkeypatch, mock_upsert):
 
 
 def test_tracker_no_ado_es_noop(monkeypatch, mock_upsert):
+    """Plan 281 F6 — el no-op lo decide el CONFIG DEL PROYECTO, no la columna.
+
+    ACTUALIZADO CON MOTIVO ESCRITO: antes este caso ponía `tracker_type="gitlab"`
+    en la fila y esperaba el no-op. `Ticket.tracker_type` tiene default
+    'azure_devops' y las filas de GitLab creadas antes del fix del publicador de
+    épica nacieron con ese default AUN SIENDO de GitLab, así que rutear por esa
+    columna dejaba pasar tickets de GitLab hasta `build_ado_client` y terminaba en
+    AdoConfigError. Ojo al detalle que hacía verde al test viejo por la razón
+    equivocada: la fila NO traía `stacky_project_name`, y el resolvedor canónico es
+    fail-closed a True sin nombre de proyecto.
+
+    El CONTRATO no cambió: el `reason` sigue siendo exactamente "non_ado_tracker".
+    """
     from config import config
-    from services import run_ticket_refresh
+    from services import project_context, run_ticket_refresh
 
     monkeypatch.setattr(config, "STACKY_RUN_TICKET_REFRESH_ENABLED", True)
-    ticket_id = _make_ticket(tracker_type="gitlab")
+    monkeypatch.setattr(project_context, "tracker_is_azure_devops", lambda _n: False)
+    ticket_id = _make_ticket(tracker_type="gitlab", stacky_project_name="RIPLEY")
     result = run_ticket_refresh.refresh_ticket_snapshot(ticket_id)
     assert result == {"refreshed": False, "reason": "non_ado_tracker"}
     assert mock_upsert.calls == 0
+
+
+def test_la_columna_sola_ya_no_rutea(monkeypatch, mock_upsert):
+    """Plan 281 F6 — EL GATE CORRIDO CONTRA EL DEFECTO.
+
+    Una fila que MIENTE en la columna (dice "gitlab") pero cuyo proyecto sí es de
+    Azure DevOps se refresca igual. Con el guard viejo la columna cortaba sola y
+    este refresh no ocurría. Es el reverso exacto del caso de arriba: juntos
+    prueban que la decisión se mudó de la columna al config del proyecto.
+    """
+    from config import config
+    from services import project_context, run_ticket_refresh
+
+    monkeypatch.setattr(config, "STACKY_RUN_TICKET_REFRESH_ENABLED", True)
+    monkeypatch.setattr(project_context, "tracker_is_azure_devops", lambda _n: True)
+    ticket_id = _make_ticket(tracker_type="gitlab", stacky_project_name="PACIFICO")
+    result = run_ticket_refresh.refresh_ticket_snapshot(ticket_id)
+    assert result == {"refreshed": True, "reason": "ok"}
+    assert mock_upsert.calls == 1
 
 
 def test_usa_cache_ttl(monkeypatch, mock_upsert):

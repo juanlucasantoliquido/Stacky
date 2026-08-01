@@ -354,7 +354,54 @@ def documenter_status():
         # al frontend actual que los ignora).
         "files": rec.get("files", []),
         "modes_skipped": rec.get("modes_skipped", []),
+        # Plan 284 — todas aditivas: con las flags OFF el backend no las llena
+        # y el frontend actual las ignora sin romperse.
+        "stages": rec.get("stages", []),
+        "verdict": rec.get("verdict", ""),
+        "radiography": rec.get("radiography", {}),
+        "radiography_delta": rec.get("radiography_delta", {}),
+        "ticket_mining": rec.get("ticket_mining", {}),
+        "operator_note": rec.get("operator_note", ""),
     })
+
+
+@bp.post("/documenter/stage/approve")
+def documenter_stage_approve():
+    """Plan 284 F5.3 — el operador aprueba (o cancela) pasar a IMPLEMENTAR.
+
+    Body: {"run": "<run_id>", "approve": true|false, "keep_branch": true|false}
+    404 si STACKY_DOCS_DOCUMENTER_ENABLED o STACKY_DOCS_PIPELINE_STAGES_ENABLED
+        están OFF (capacidad desactivada, NO "permiso denegado": mono-operador).
+    404 run_not_found si el run_id no existe (reinicio del backend).
+    409 si el run no está en state == "awaiting_approval".
+    200 {"ok": true, "state": "running"|"cancelled_by_operator"}
+    """
+    if not _documenter_enabled():
+        return jsonify({"ok": False, "error": "documenter_disabled",
+                        "message": "Capacidad desactivada."}), 404
+    if not bool(getattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)):
+        return jsonify({"ok": False, "error": "pipeline_stages_disabled",
+                        "message": "Capacidad desactivada."}), 404
+    body = request.get_json(silent=True) or {}
+    run_id = (body.get("run") or "").strip()
+    approve = bool(body.get("approve"))
+    keep_branch = body.get("keep_branch")
+    keep_branch = True if keep_branch is None else bool(keep_branch)
+
+    from services import doc_documenter
+    rec = doc_documenter.get_run(run_id)
+    if rec is None:
+        return jsonify({"ok": False, "error": "run_not_found"}), 404
+    if rec.get("state") != "awaiting_approval":
+        return jsonify({"ok": False, "error": "run_not_awaiting_approval",
+                        "state": rec.get("state")}), 409
+    try:
+        state = doc_documenter.resolve_stage_approval(
+            run_id, approve=approve, keep_branch=keep_branch)
+    except Exception as exc:
+        logger.warning("docs_api", "stage_approve_failed", run_id=run_id, error=str(exc))
+        return jsonify({"ok": False, "error": "approve_failed", "message": str(exc)}), 500
+    return jsonify({"ok": True, "state": state})
 
 
 @bp.get("/documenter/runs")

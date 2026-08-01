@@ -152,3 +152,89 @@ class TestDocsSourcesFlags:
         data = resp.get_json()
         assert "graph_explorer_enabled" in data
         assert isinstance(data["graph_explorer_enabled"], bool)
+
+
+# ===========================================================================
+# Plan 284 F5.3 - aprobacion human-in-the-loop del paso a IMPLEMENTAR
+# ===========================================================================
+
+class TestPlan284StageApprove:
+    """El camino POR DEFECTO del producto pasa por aca: con STAGES=ON y
+    AUTOAPPLY=OFF todo run se detiene en awaiting_approval, asi que este
+    endpoint es la unica salida."""
+
+    def _registrar_run(self, state="awaiting_approval"):
+        from services import doc_documenter
+        run_id = "run284test"
+        doc_documenter._run_registry[run_id] = {
+            "state": state, "project": "P", "runtime": "claude_code_cli",
+            "target_root": "/tmp/x", "branch": "stacky/doc-x",
+            "operator_note": "", "stages": [], "written": [], "skipped": [],
+        }
+        return run_id
+
+    def test_plan284_approve_404_con_stages_off(self, client, monkeypatch):
+        from config import config
+        monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
+        run_id = self._registrar_run()
+        r = client.post("/api/docs/documenter/stage/approve",
+                        json={"run": run_id, "approve": True})
+        assert r.status_code == 404
+        body = r.get_json()
+        # Capacidad desactivada, NO "permiso denegado" (mono-operador, sin auth).
+        assert body["error"] == "pipeline_stages_disabled"
+        assert "desactivada" in body["message"].lower()
+        assert "permiso" not in body["message"].lower()
+
+    def test_plan284_approve_409_si_no_espera(self, client, monkeypatch):
+        from config import config
+        from services import doc_documenter
+        monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+        run_id = self._registrar_run(state="running")
+        r = client.post("/api/docs/documenter/stage/approve",
+                        json={"run": run_id, "approve": True})
+        assert r.status_code == 409
+        # AUSENCIA: el run NO cambio de estado.
+        assert doc_documenter._run_registry[run_id]["state"] == "running"
+        # PRESENCIA: y sigue existiendo.
+        assert doc_documenter.get_run(run_id) is not None
+
+    def test_plan284_approve_true_reanuda(self, client, monkeypatch):
+        from config import config
+        from services import doc_documenter
+        monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+        monkeypatch.setattr(doc_documenter, "_resume_after_approval",
+                            lambda *a, **k: None)
+        run_id = self._registrar_run()
+        r = client.post("/api/docs/documenter/stage/approve",
+                        json={"run": run_id, "approve": True})
+        assert r.status_code == 200
+        assert r.get_json()["state"] != "awaiting_approval"
+        assert doc_documenter._run_registry[run_id]["state"] != "awaiting_approval"
+
+    def test_plan284_approve_false_cancela_y_descarta(self, client, monkeypatch):
+        from config import config
+        from services import doc_documenter
+        monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+
+        llamadas = []
+        monkeypatch.setattr(doc_documenter, "discard_doc_branch",
+                            lambda root, branch: llamadas.append((root, branch)))
+        monkeypatch.setattr(doc_documenter, "_persist_run_report", lambda *a, **k: None)
+
+        run_id = self._registrar_run()
+        r = client.post("/api/docs/documenter/stage/approve",
+                        json={"run": run_id, "approve": False})
+        assert r.status_code == 200
+        assert r.get_json()["state"] == "cancelled_by_operator"
+        assert doc_documenter._run_registry[run_id]["state"] == "cancelled_by_operator"
+        # La rama se descarta EXACTAMENTE una vez.
+        assert len(llamadas) == 1
+
+    def test_plan284_approve_404_run_inexistente(self, client, monkeypatch):
+        from config import config
+        monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+        r = client.post("/api/docs/documenter/stage/approve",
+                        json={"run": "no_existe_284", "approve": True})
+        assert r.status_code == 404
+        assert r.get_json()["error"] == "run_not_found"

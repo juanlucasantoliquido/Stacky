@@ -278,3 +278,105 @@ def test_plan284_evaluate_citation_gate_tabla():
     # Degradacion: None nunca lanza y no bloquea.
     r = g(None, min_ratio=0.8)
     assert r["passed"] is True
+
+
+# ===========================================================================
+# Plan 284 F6 - radiografia: cobertura sobre el grafo existente + delta (A2)
+# ===========================================================================
+
+def _grafo(uncovered, modulos=3, notas=2, orphans=None):
+    nodes = [{"kind": "code", "path": f"mod{i}.py"} for i in range(modulos)]
+    nodes += [{"kind": "note", "path": f"docs/n{i}.md"} for i in range(notas)]
+    return {"nodes": nodes, "orphans": orphans or [],
+            "doc_health": {"uncovered_modules": list(uncovered)}}
+
+
+def test_plan284_compute_coverage_forma_garantizada(monkeypatch):
+    from config import config
+    from services.doc_radiography import compute_coverage
+
+    monkeypatch.setattr(config, "STACKY_DOCS_RADIOGRAPHY_ENABLED", True)
+    out = compute_coverage(_grafo([]), None)
+
+    esperadas = {"enabled", "modules_total", "modules_covered", "coverage_ratio",
+                 "uncovered", "orphan_notes", "by_doc_class"}
+    assert set(out.keys()) == esperadas
+    assert out["enabled"] is True
+
+    # Con la flag OFF: la MISMA forma, con enabled=False.
+    monkeypatch.setattr(config, "STACKY_DOCS_RADIOGRAPHY_ENABLED", False)
+    off = compute_coverage(_grafo([]), None)
+    assert set(off.keys()) == esperadas
+    assert off["enabled"] is False
+
+
+def test_plan284_coverage_ratio_fronteras(monkeypatch):
+    from config import config
+    from services.doc_radiography import compute_coverage
+
+    monkeypatch.setattr(config, "STACKY_DOCS_RADIOGRAPHY_ENABLED", True)
+
+    # Sin modulos: ratio 1.0. NOTA DE HONESTIDAD (hallazgo del juez): si la
+    # salud viene SANA/SIN_DOCS, uncovered llega [] y el ratio da 1.0 aunque no
+    # haya ni una nota. El veredicto lo compensa: con written==0 el run es
+    # INSUFICIENTE sin importar el ratio.
+    vacio = {"nodes": [], "orphans": [], "doc_health": {"uncovered_modules": []}}
+    assert compute_coverage(vacio, None)["coverage_ratio"] == 1.0
+
+    # 4 de 5 cubiertos -> 0.8
+    g = _grafo(["mod4.py"], modulos=5)
+    r = compute_coverage(g, None)
+    assert (r["modules_total"], r["modules_covered"], r["coverage_ratio"]) == (5, 4, 0.8)
+
+    # 0 de 5 -> 0.0
+    g0 = _grafo([f"mod{i}.py" for i in range(5)], modulos=5)
+    r0 = compute_coverage(g0, None)
+    assert r0["coverage_ratio"] == 0.0
+
+
+def test_plan284_coverage_no_recalcula_health(monkeypatch):
+    """Lee graph["doc_health"]: NO reconstruye el grafo ni recalcula la salud."""
+    from config import config
+    from services import doc_graph
+    from services.doc_radiography import compute_coverage
+
+    monkeypatch.setattr(config, "STACKY_DOCS_RADIOGRAPHY_ENABLED", True)
+
+    def _boom(*a, **k):
+        raise AssertionError("compute_coverage NO debe recalcular la salud")
+
+    monkeypatch.setattr(doc_graph, "classify_doc_health", _boom)
+    monkeypatch.setattr(doc_graph, "build_graph", _boom)
+
+    out = compute_coverage(_grafo(["mod2.py"]), None)
+    # PRESENCIA: devuelve la forma completa igual.
+    assert out["enabled"] is True and out["modules_total"] == 3
+    assert out["uncovered"] == ["mod2.py"]
+
+
+def test_plan284_coverage_delta_tabla():
+    from services.doc_radiography import compute_coverage_delta
+
+    claves = {"has_previous", "ratio_delta", "modules_closed", "modules_opened"}
+
+    # Sin run previo: las 4 claves presentes, has_previous False.
+    sin = compute_coverage_delta({"coverage_ratio": 0.5, "uncovered": ["a"]}, None)
+    assert set(sin.keys()) == claves
+    assert sin["has_previous"] is False
+
+    previo = {"enabled": True, "coverage_ratio": 0.4,
+              "uncovered": ["a", "b", "c", "d", "e"]}
+    actual = {"enabled": True, "coverage_ratio": 0.8, "uncovered": ["a", "b"]}
+    d = compute_coverage_delta(actual, previo)
+    assert d["has_previous"] is True
+    assert round(d["ratio_delta"], 4) == 0.4
+    assert d["modules_closed"] == ["c", "d", "e"]   # PRESENCIA
+    assert d["modules_opened"] == []                # AUSENCIA GEMELA
+
+    # Regresion inversa: lo que antes estaba cubierto ahora no.
+    inv = compute_coverage_delta(previo, actual)
+    assert inv["modules_opened"] == ["c", "d", "e"]
+    assert inv["modules_closed"] == []
+
+    # Nunca lanza.
+    assert compute_coverage_delta(None, None)["has_previous"] is False

@@ -413,6 +413,8 @@ HARNESS_TEST_FILES=(
   tests/test_executions_ticket_context.py
   # — Plan 137 F0 — Documentador v2: flags + esqueleto de evidencia —
   tests/test_doc_evidence.py
+  # — Plan 284 F5.3 — endpoints del Documentador, incluido /documenter/stage/approve —
+  tests/test_docs_api.py
   # — Plan 137 F3 — Documentador v2: pipeline short-circuit + persistencia —
   tests/test_documenter_v2_pipeline.py
   # — Plan 137 F4 — Documentador v2: endpoint historial de corridas —

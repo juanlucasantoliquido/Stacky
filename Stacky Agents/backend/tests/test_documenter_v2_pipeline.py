@@ -53,6 +53,11 @@ def test_should_invoke_mode_tabla_completa():
 def test_short_circuit_no_invoca_modos_sin_targets(monkeypatch, tmp_path, clean_run_registry):
     import config
     monkeypatch.setattr(config.config, "STACKY_DOCS_DOCUMENTER_V2_ENABLED", True)
+    # Plan 284 — este test es del short-circuit de MODOS, ortogonal al pipeline
+    # de etapas. Se fija la flag explícitamente en vez de depender del default:
+    # con las etapas ON el run se detiene en awaiting_approval antes de llegar
+    # a los modos, y el test mediría otra cosa.
+    monkeypatch.setattr(config.config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
 
     from services import doc_documenter
     from services.doc_documenter import DocumenterMode, DocumenterPlan
@@ -90,6 +95,9 @@ def test_short_circuit_no_invoca_modos_sin_targets(monkeypatch, tmp_path, clean_
 def test_flag_off_invoca_todos_los_modos(monkeypatch, tmp_path, clean_run_registry):
     import config
     monkeypatch.setattr(config.config, "STACKY_DOCS_DOCUMENTER_V2_ENABLED", False)
+    # Plan 284 — ver la nota del test anterior: se fija la flag de etapas para
+    # que este test siga midiendo la invocación de modos y no el gate humano.
+    monkeypatch.setattr(config.config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
 
     from services import doc_documenter
     from services.doc_documenter import DocumenterMode, DocumenterPlan
@@ -774,3 +782,257 @@ def test_plan284_build_tickets_block_solo_signal():
     # Sin ningun signal, no hay bloque (no se ensucia el prompt con nada).
     assert build_tickets_context_block({"total": 1, "noise": 1,
                                         "verdicts": [_v(9, "noise", "X")]}) is None
+
+
+# ===========================================================================
+# Plan 284 F5.0 - habilitar lo que F5 da por sentado
+# ===========================================================================
+
+def test_plan284_invoke_documenter_acepta_override(monkeypatch):
+    """El override es un PARAMETRO real, no un literal hardcodeado."""
+    import agent_runner
+    from services import doc_documenter
+    from services.doc_documenter import DocumenterMode, invoke_documenter
+
+    capturado = {}
+
+    def _fake_run_agent(**kw):
+        capturado.update(kw)
+        return 4242
+
+    monkeypatch.setattr(agent_runner, "run_agent", _fake_run_agent)
+    monkeypatch.setattr(doc_documenter, "_ensure_documenter_ticket", lambda p: 1)
+    monkeypatch.setattr(doc_documenter, "_wait_and_read_output", lambda e: "")
+
+    # PRESENCIA: lo que le paso es lo que llega a run_agent.
+    invoke_documenter(DocumenterMode.ENRIQUECER, [], "P", "claude_code_cli",
+                      system_prompt_override="PROMPT_X")
+    assert capturado["system_prompt_override"] == "PROMPT_X"
+
+    # AUSENCIA GEMELA (backward-compat exacta): sin el kwarg vuelve el default.
+    capturado.clear()
+    invoke_documenter(DocumenterMode.ENRIQUECER, [], "P", "claude_code_cli")
+    assert capturado["system_prompt_override"] == doc_documenter._DEFAULT_DOCUMENTADOR_PROMPT
+
+
+def test_plan284_invoke_raw_stage_devuelve_texto(monkeypatch):
+    """Devuelve texto crudo y NO pasa por parse_proposals."""
+    import agent_runner
+    from services import doc_documenter
+    from services.doc_documenter import invoke_raw_stage
+
+    monkeypatch.setattr(agent_runner, "run_agent", lambda **kw: 77)
+    monkeypatch.setattr(doc_documenter, "_ensure_documenter_ticket", lambda p: 1)
+    monkeypatch.setattr(doc_documenter, "_wait_and_read_output",
+                        lambda e: "TEXTO_CRUDO_DE_LA_ETAPA")
+
+    def _boom(raw):
+        raise AssertionError("invoke_raw_stage NO debe parsear: es prosa, no bloques DOC")
+
+    monkeypatch.setattr(doc_documenter, "parse_proposals", _boom)
+
+    out = invoke_raw_stage("PROMPT_ETAPA", [], "P", "claude_code_cli")
+    assert out == "TEXTO_CRUDO_DE_LA_ETAPA"
+
+
+def test_plan284_invoke_raw_stage_degrada_sin_lanzar(monkeypatch):
+    """Ante error devuelve "" y nunca propaga la excepcion."""
+    import agent_runner
+    from services import doc_documenter
+    from services.doc_documenter import invoke_raw_stage
+
+    def _explota(**kw):
+        raise RuntimeError("runtime caido")
+
+    monkeypatch.setattr(agent_runner, "run_agent", _explota)
+    monkeypatch.setattr(doc_documenter, "_ensure_documenter_ticket", lambda p: 1)
+    assert invoke_raw_stage("P", [], "P", "claude_code_cli") == ""
+
+
+# ===========================================================================
+# Plan 284 F5 - pipeline de 5 etapas con veredicto + A1 presupuesto
+# ===========================================================================
+
+def test_plan284_stage_order_es_el_contrato():
+    from services.doc_documenter import STAGE_ORDER
+
+    assert len(STAGE_ORDER) == 5
+    assert [s.value for s in STAGE_ORDER] == [
+        "PROPONER", "CRITICAR", "MEJORAR", "IMPLEMENTAR", "VERIFICAR"]
+
+
+def test_plan284_verdict_tabla():
+    from services.doc_documenter import (VERDICT_COMPLETA, VERDICT_INSUFICIENTE,
+                                         VERDICT_PARCIAL, compute_verify_verdict)
+
+    # Regla 1: sin archivos escritos, INSUFICIENTE sin importar el ratio.
+    assert compute_verify_verdict(0, 0, 1.0) == VERDICT_INSUFICIENTE
+    # Regla 2: mas rechazados que escritos.
+    assert compute_verify_verdict(2, 3, 1.0) == VERDICT_INSUFICIENTE
+    # Regla 3 + frontera exacta 0.8.
+    assert compute_verify_verdict(5, 0, 0.8) == VERDICT_COMPLETA
+    assert compute_verify_verdict(5, 0, 1.0) == VERDICT_COMPLETA
+    # 0.79 cae a PARCIAL (frontera del otro lado).
+    assert compute_verify_verdict(5, 0, 0.79) == VERDICT_PARCIAL
+    # Regla 4: con rechazos, PARCIAL.
+    assert compute_verify_verdict(5, 1, 1.0) == VERDICT_PARCIAL
+    # Nunca lanza.
+    assert compute_verify_verdict(None, None, None) == VERDICT_INSUFICIENTE
+
+
+def test_plan284_stage_artifact_is_usable_tabla():
+    from services.doc_documenter import stage_artifact_is_usable as u
+
+    ctx = [{"content": "el modulo services/doc_graph.py hace el grafo"}]
+    assert u("", ctx) is False
+    assert u("x" * 199, ctx) is False
+    # 250 chars SIN ninguna ruta del contexto: es prosa, no un plan.
+    # Este es el caso que la v1 dejaba pasar y disparaba 2 invocaciones al pedo.
+    assert u("bla " * 80, ctx) is False
+    # 250 chars que SI mencionan una ruta real del contexto.
+    bueno = "Voy a documentar services/doc_graph.py. " + ("detalle " * 40)
+    assert len(bueno) >= 200 and u(bueno, ctx) is True
+    # Nunca lanza.
+    assert u(None, None) is False
+
+
+def test_plan284_budget_exhausted_tabla():
+    from services.doc_documenter import budget_exhausted as b
+
+    assert b(0, 12) is False
+    assert b(11, 12) is False
+    assert b(12, 12) is True          # frontera
+    # EL CASO QUE IMPORTA: cero NO es infinito.
+    assert b(3, 0) is True
+    assert b(3, -1) is True
+    # Nunca lanza.
+    assert b("x", 12) is False
+
+
+def _stub_para_run(monkeypatch, tmp_path):
+    from services import doc_documenter
+    from services.doc_documenter import DocumenterMode, DocumenterPlan
+    monkeypatch.setattr(doc_documenter, "plan_documenter_run",
+                        lambda *a, **k: DocumenterPlan(
+                            status="SANA", modes=[DocumenterMode.ENRIQUECER],
+                            notes_to_normalize=[], notes_to_update=[], reason="t"))
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "sg", "kind": "sg", "title": "SG", "content": "x"})
+    monkeypatch.setattr(doc_documenter, "prepare_doc_branch",
+                        lambda *a, **k: (str(tmp_path), None, "rama", False))
+    monkeypatch.setattr(doc_documenter, "_health_for_root",
+                        lambda *a, **k: {"status": "SANA", "reasons": [],
+                                         "frontmatter_ratio": 0.0,
+                                         "wikilink_edges": 0, "uncovered_modules": []})
+    monkeypatch.setattr(doc_documenter, "_persist_run_report", lambda *a, **k: None)
+    monkeypatch.setattr(doc_documenter, "list_runs", lambda *a, **k: [])
+
+
+def test_plan284_sin_autoaplicado_el_run_espera_aprobacion(monkeypatch, tmp_path,
+                                                           clean_run_registry):
+    """[RIEL HUMAN-IN-THE-LOOP] El run se detiene ANTES de escribir."""
+    from config import config
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_AUTOAPPLY", False)
+    monkeypatch.setattr(doc_documenter, "invoke_raw_stage",
+                        lambda *a, **k: "PLAN: documentar services/doc_graph.py. " + "d" * 300)
+
+    escrituras = []
+    monkeypatch.setattr(doc_documenter, "apply_proposals",
+                        lambda *a, **k: escrituras.append(1))
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    _stub_para_run(monkeypatch, tmp_path)
+
+    report = doc_documenter.run_documenter("P", "claude_code_cli")
+
+    # PRESENCIA: el run quedo esperando al operador y con veredicto explicito.
+    assert report["state"] == "awaiting_approval"
+    assert report["verdict"] == doc_documenter.VERDICT_PENDIENTE
+    # AUSENCIA: no se escribio NI UN archivo.
+    assert report["written"] == []
+    assert escrituras == [], "apply_proposals no debe llamarse antes de aprobar"
+
+
+def test_plan284_corte_de_costo_sin_plan(monkeypatch, tmp_path, clean_run_registry):
+    """Si PROPONER vuelve vacio, CRITICAR y MEJORAR se saltean: 1 sola llamada."""
+    from config import config
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+    # PRECONDICION OBLIGATORIA: con AUTOAPPLY True el run seguiria a IMPLEMENTAR
+    # y el contador subiria por los modos del 113 => el "exactamente 1" seria
+    # un falso rojo.
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_AUTOAPPLY", False)
+
+    llamadas = []
+
+    def _raw(*a, **k):
+        llamadas.append(1)
+        return ""
+
+    monkeypatch.setattr(doc_documenter, "invoke_raw_stage", _raw)
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    _stub_para_run(monkeypatch, tmp_path)
+
+    report = doc_documenter.run_documenter("P", "claude_code_cli")
+
+    assert len(llamadas) == 1, f"se gastaron {len(llamadas)} invocaciones en vez de 1"
+    estados = {s["stage"]: s["state"] for s in report["stages"]}
+    assert estados["CRITICAR"] == "skipped"
+    assert estados["MEJORAR"] == "skipped"
+
+
+def test_plan284_run_respeta_el_presupuesto(monkeypatch, tmp_path, clean_run_registry):
+    """Con presupuesto 2, se invoca EXACTAMENTE 2 veces: no se excede en uno."""
+    from config import config
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_AUTOAPPLY", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS", 2)
+
+    llamadas = []
+
+    def _raw(*a, **k):
+        llamadas.append(1)
+        return "PLAN: documentar services/doc_graph.py. " + "d" * 300
+
+    monkeypatch.setattr(doc_documenter, "invoke_raw_stage", _raw)
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    # El corte de costo exige que el artefacto mencione una ruta PRESENTE en el
+    # contexto. El bloque canónico real no trae ninguna ruta de archivo, así que
+    # sin esto CRITICAR se saltearía por "sin plan que criticar" y el tope
+    # nunca se ejercitaría (el test mediría otra cosa).
+    monkeypatch.setattr(doc_documenter, "_sistema_readonly_block",
+                        lambda p: {"id": "sis", "kind": "canonical-index",
+                                   "title": "canonico",
+                                   "content": "el modulo services/doc_graph.py arma el grafo"})
+    _stub_para_run(monkeypatch, tmp_path)
+
+    report = doc_documenter.run_documenter("P", "claude_code_cli")
+
+    assert len(llamadas) == 2, f"el tope no se respeto: {len(llamadas)}"
+    assert report["state"] == "budget_exhausted"
+    assert report["llm_calls_budget"] == 2
+
+
+def test_plan284_pipeline_off_es_backward_compatible(monkeypatch, tmp_path,
+                                                     clean_run_registry):
+    """Con las etapas OFF el reporte NO trae stages ni verdict."""
+    from config import config
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    _stub_para_run(monkeypatch, tmp_path)
+
+    report = doc_documenter.run_documenter("P", "claude_code_cli")
+
+    assert "stages" not in report          # AUSENCIA
+    assert "verdict" not in report
+    # PRESENCIA de control: el reporte sigue teniendo las claves de siempre.
+    for clave in ("state", "written", "skipped", "health_before", "health_after",
+                  "branch", "degraded", "diff_stat", "modes_skipped", "files"):
+        assert clave in report, f"falta la clave historica {clave}"

@@ -407,9 +407,15 @@ def _wait_and_read_output(execution_id: int, timeout_s: int = _INVOKE_TIMEOUT_S)
 
 def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
                       project_name: str, runtime: str, *,
-                      on_execution_started: Callable[[int], None] | None = None
+                      on_execution_started: Callable[[int], None] | None = None,
+                      system_prompt_override: str | None = None,   # Plan 284 F5.0
                       ) -> list[DocProposal]:
     """Invoca al agente Documentador para un modo y devuelve las propuestas parseadas.
+
+    Plan 284 F5.0 — ``system_prompt_override`` (default None) permite inyectar el
+    prompt de sistema desde afuera. Hasta el 284 estaba hardcodeado adentro, así
+    que las etapas de papel de F5 eran imposibles de construir. Con None el
+    comportamiento es byte-idéntico al de antes: aditivo puro.
 
     Fallo/timeout → lista vacía (el run sigue con el modo siguiente).
 
@@ -422,7 +428,7 @@ def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
     from config import config as _config
     ticket_id = _ensure_documenter_ticket(project_name)
     # Fallback de persona built-in si el .agent.md no está (patrón plan 112 F5).
-    system_override = _DEFAULT_DOCUMENTADOR_PROMPT
+    system_override = system_prompt_override or _DEFAULT_DOCUMENTADOR_PROMPT
     try:
         from services.runtime_capabilities import resolve_run_selection
         _sel = resolve_run_selection(runtime=runtime, project_name=project_name)
@@ -462,6 +468,49 @@ def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
             mode, execution_id, _empty_result_reason(execution_id, raw),
         )
     return proposals
+
+
+def invoke_raw_stage(stage_prompt: str, context_blocks: list[dict],
+                     project_name: str, runtime: str, *,
+                     on_execution_started: Callable[[int], None] | None = None
+                     ) -> str:
+    """Plan 284 F5.0 — invoca al agente y devuelve el TEXTO CRUDO, sin parsear.
+
+    Es el gemelo de invoke_documenter para las etapas de papel (PROPONER,
+    CRITICAR, MEJORAR), que producen prosa y no bloques <<<DOC>>>.
+    Reusa exactamente el mismo camino de invocación (agent_runner.run_agent),
+    así que es agnóstico de runtime igual que invoke_documenter.
+    Nunca lanza: ante error devuelve "".
+    """
+    import agent_runner
+    try:
+        from services.runtime_capabilities import resolve_run_selection
+        ticket_id = _ensure_documenter_ticket(project_name)
+        _sel = resolve_run_selection(runtime=runtime, project_name=project_name)
+        execution_id = agent_runner.run_agent(
+            agent_type="Documentador",
+            ticket_id=ticket_id,
+            context_blocks=context_blocks,
+            user="documenter",
+            runtime=runtime,
+            vscode_agent_filename="Documentador.agent.md",
+            system_prompt_override=stage_prompt,
+            project_name=project_name,
+            use_few_shot=False,
+            use_anti_patterns=False,
+            work_item_type="Doc",
+            model_override=_sel["model"],
+            effort_override=_sel["effort"],
+        )
+        if on_execution_started is not None:
+            try:
+                on_execution_started(execution_id)
+            except Exception as exc:  # noqa: BLE001 — el callback nunca tumba el run
+                logger.warning("doc_documenter: on_execution_started falló: %s", exc)
+        return _wait_and_read_output(execution_id) or ""
+    except Exception as exc:
+        logger.warning("invoke_raw_stage: fallo en etapa de papel: %s", exc)
+        return ""
 
 
 def _empty_result_reason(execution_id: int, raw: str) -> str:
@@ -602,6 +651,193 @@ def _safe_rel_path(path: str) -> str | None:
 def _is_canonical(norm: str) -> bool:
     """True si el path cae bajo docs/sistema/ (canónico, read-only)."""
     return norm == "docs/sistema" or "docs/sistema/" in (norm + "/")
+
+
+# ---------------------------------------------------------------------------
+# Plan 284 F5 — pipeline interno de 5 etapas con veredicto
+# ---------------------------------------------------------------------------
+
+class DocumenterStage(str, Enum):
+    PROPONER = "PROPONER"        # el agente propone un plan de documentación
+    CRITICAR = "CRITICAR"        # el agente critica su propio plan
+    MEJORAR = "MEJORAR"          # el agente reescribe el plan corregido
+    IMPLEMENTAR = "IMPLEMENTAR"  # se ejecutan los modos del 113 (escribe)
+    VERIFICAR = "VERIFICAR"      # verificación DETERMINISTA, sin LLM
+
+
+# Orden canónico. La UI y el reporte lo respetan.
+STAGE_ORDER: tuple[DocumenterStage, ...] = (
+    DocumenterStage.PROPONER, DocumenterStage.CRITICAR, DocumenterStage.MEJORAR,
+    DocumenterStage.IMPLEMENTAR, DocumenterStage.VERIFICAR,
+)
+
+
+@dataclass
+class StageResult:
+    stage: str
+    state: str                 # "pending"|"running"|"done"|"skipped"|"failed"|"awaiting_approval"
+    summary: str = ""
+    artifact: str = ""         # texto producido por la etapa
+    verdict: str = ""          # sólo VERIFICAR
+    started_at: str = ""
+    ended_at: str = ""
+    execution_id: int | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "stage": self.stage, "state": self.state, "summary": self.summary,
+            "artifact": self.artifact, "verdict": self.verdict,
+            "started_at": self.started_at, "ended_at": self.ended_at,
+            "execution_id": self.execution_id,
+        }
+
+
+_STAGE_PROMPT_PROPONER = (
+    "Sos el Documentador de Stacky en la etapa PROPONER.\n"
+    "NO escribas documentación todavía. NO uses bloques <<<DOC>>>.\n"
+    "Devolvé TEXTO PLANO con un plan de documentación para este proyecto:\n"
+    "1. Qué módulos hay que documentar y por qué, EN ORDEN DE PRIORIDAD.\n"
+    "2. Para cada uno, qué archivo de doc le corresponde y qué debe contener.\n"
+    "3. Qué NO se puede afirmar todavía por falta de evidencia en el contexto.\n"
+    "Citá rutas reales del contexto provisto. Si no tenés evidencia, decilo."
+)
+_STAGE_PROMPT_CRITICAR = (
+    "Sos el Documentador de Stacky en la etapa CRITICAR.\n"
+    "Arriba tenés TU PROPIO plan de la etapa anterior. Atacalo sin piedad.\n"
+    "NO escribas documentación. NO uses bloques <<<DOC>>>. TEXTO PLANO.\n"
+    "Listá C1..Cn: qué afirma el plan sin evidencia, qué módulo importante "
+    "omite, qué ruta citada no aparece en el contexto, y qué parte no se "
+    "puede verificar contra el código provisto."
+)
+_STAGE_PROMPT_MEJORAR = (
+    "Sos el Documentador de Stacky en la etapa MEJORAR.\n"
+    "Arriba tenés tu plan y su crítica. Reescribí el plan corrigiendo cada "
+    "punto de la crítica. NO escribas documentación todavía. TEXTO PLANO.\n"
+    "Si un punto de la crítica no se puede resolver con la evidencia "
+    "disponible, sacá ese ítem del plan en vez de inventarlo."
+)
+
+_STAGE_PROMPTS = {
+    DocumenterStage.PROPONER: _STAGE_PROMPT_PROPONER,
+    DocumenterStage.CRITICAR: _STAGE_PROMPT_CRITICAR,
+    DocumenterStage.MEJORAR: _STAGE_PROMPT_MEJORAR,
+}
+
+VERDICT_COMPLETA = "RADIOGRAFIA_COMPLETA"
+VERDICT_PARCIAL = "RADIOGRAFIA_PARCIAL"
+VERDICT_INSUFICIENTE = "INSUFICIENTE"
+VERDICT_PENDIENTE = "PENDIENTE_DE_APROBACION"   # FIX C7
+
+
+def compute_verify_verdict(written_count: int, files_rejected: int,
+                           coverage_ratio: float) -> str:
+    """Plan 284 — veredicto del run. PURA, sin I/O. Nunca lanza.
+
+    Reglas EXACTAS, en este orden (la primera que matchea gana):
+      1. written == 0                      -> INSUFICIENTE
+      2. files_rejected > written          -> INSUFICIENTE
+      3. files_rejected == 0 y ratio>=0.8  -> RADIOGRAFIA_COMPLETA
+      4. cualquier otro caso               -> RADIOGRAFIA_PARCIAL
+    """
+    try:
+        w = int(written_count or 0)
+        r = int(files_rejected or 0)
+        c = float(coverage_ratio or 0.0)
+        if w == 0 or r > w:
+            return VERDICT_INSUFICIENTE
+        if r == 0 and c >= 0.8:
+            return VERDICT_COMPLETA
+        return VERDICT_PARCIAL
+    except Exception:
+        return VERDICT_INSUFICIENTE
+
+
+def stage_artifact_is_usable(artifact: str, context_blocks: list[dict],
+                             *, min_chars: int = 200) -> bool:
+    """Plan 284 — ¿el artefacto de PROPONER amerita gastar CRITICAR + MEJORAR?
+
+    PURA, sin I/O. Nunca lanza. Dos condiciones, ambas necesarias:
+      1. Longitud >= min_chars.
+      2. Menciona al menos UNA ruta que aparezca en el contexto que le dimos.
+         Un plan que no nombra ni un archivo del repo no es un plan: es prosa.
+    """
+    try:
+        txt = (artifact or "").strip()
+        if len(txt) < min_chars:
+            return False
+        ctx = "\n".join(str(b.get("content", "")) for b in (context_blocks or []))
+        candidatos = {w.strip(".,;:()[]\"'") for w in ctx.split()
+                      if "/" in w and "." in w and len(w) > 6}
+        return any(c in txt for c in candidatos)
+    except Exception:
+        return False
+
+
+def budget_exhausted(llm_calls: int, budget: int) -> bool:
+    """Plan 284 A1 — ¿se agotó el presupuesto de invocaciones del run?
+
+    OJO: budget <= 0 significa AGOTADO, nunca "sin límite". Un 0 que
+    significa infinito es la forma más cara de romper un tope.
+    """
+    try:
+        return int(llm_calls) >= int(budget) if int(budget) > 0 else True
+    except Exception:
+        return False
+
+
+def _now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def _run_paper_stage(stage: DocumenterStage, project_name: str, runtime: str,
+                     operator_note: str, prior_artifact: str,
+                     base_blocks: list[dict] | None = None) -> StageResult:
+    """Plan 284 F5.2 — una etapa de papel (PROPONER / CRITICAR / MEJORAR).
+
+    Produce PROSA, no bloques <<<DOC>>>: por eso usa invoke_raw_stage (F5.0) y
+    NO invoke_documenter/parse_proposals.
+    """
+    started = _now_iso()
+    blocks: list[dict] = list(base_blocks or [])
+    note_block = _operator_note_block(operator_note)
+    if note_block is not None:
+        blocks.insert(0, note_block)
+    if (prior_artifact or "").strip():
+        blocks.append({
+            "id": "prior-stage", "kind": "prior-stage",
+            "title": "RESULTADO DE LA ETAPA ANTERIOR",
+            "content": prior_artifact,
+        })
+    texto = invoke_raw_stage(_STAGE_PROMPTS[stage], blocks, project_name, runtime)
+    return StageResult(
+        stage=str(stage.value),
+        state="done" if (texto or "").strip() else "failed",
+        summary=(f"{len((texto or '').strip())} caracteres"
+                 if (texto or "").strip() else "el runtime no devolvió texto"),
+        artifact=texto or "",
+        started_at=started, ended_at=_now_iso(),
+    )
+
+
+def _stages_enabled() -> bool:
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False))
+
+
+def _cfg284_budget():
+    from config import config as _cfg
+    return _cfg
+
+
+def _resolve_autoapply(override: bool | None) -> bool:
+    """El override sólo lo setea la aprobación explícita del operador
+    (POST /documenter/stage/approve). None ⇒ manda la flag."""
+    return _autoapply_enabled() if override is None else bool(override)
+
+
+def _autoapply_enabled() -> bool:
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_DOCS_PIPELINE_AUTOAPPLY", False))
 
 
 def evaluate_citation_gate(citations: dict, *, min_ratio: float | None = None,
@@ -821,6 +1057,67 @@ def start_documenter_run(project_name: str, runtime: str, *,
     return run_id
 
 
+def resolve_stage_approval(run_id: str, *, approve: bool,
+                           keep_branch: bool = True) -> str:
+    """Plan 284 F5.3 — resuelve la parada human-in-the-loop de un run.
+
+    approve=False ⇒ state="cancelled_by_operator" y la rama se descarta.
+    approve=True  ⇒ el run reanuda en IMPLEMENTAR (modos del 113) y sigue a
+                    VERIFICAR, reusando las etapas de papel YA producidas (no
+                    se vuelven a pagar).
+
+    `keep_branch` (FIX C8) viaja en ESTA misma llamada: el operador toma UNA
+    decisión por run, no dos. POST /documenter/decide se conserva por
+    backward-compat pero con etapas ON ya no hace falta tocarlo.
+    """
+    rec = get_run(run_id)
+    if rec is None:
+        raise ValueError("run_not_found")
+
+    if not approve:
+        target_root = rec.get("target_root")
+        branch = rec.get("branch")
+        if target_root and branch:
+            try:
+                discard_doc_branch(target_root, branch)
+            except Exception as exc:
+                logger.warning("doc_documenter: no se pudo descartar la rama: %s", exc)
+        _update_run(run_id, state="cancelled_by_operator")
+        _persist_run_report(run_id, dict(rec, state="cancelled_by_operator"))
+        return "cancelled_by_operator"
+
+    _update_run(run_id, state="running")
+    t = threading.Thread(
+        target=_resume_after_approval,
+        args=(run_id, rec, keep_branch),
+        daemon=True)
+    t.start()
+    return "running"
+
+
+def _resume_after_approval(run_id: str, rec: dict, keep_branch: bool) -> None:
+    """Reanuda el run aprobado. Nunca deja el run colgado."""
+    try:
+        run_documenter(
+            rec.get("project") or "", rec.get("runtime") or "claude_code_cli",
+            run_id=run_id,
+            operator_note=rec.get("operator_note") or "",
+            autoapply_override=True,           # el operador ya dijo que sí
+            _prior_stages=rec.get("stages") or None,
+        )
+        if not keep_branch:
+            fresh = get_run(run_id) or {}
+            target_root, branch = fresh.get("target_root"), fresh.get("branch")
+            if target_root and branch:
+                try:
+                    discard_doc_branch(target_root, branch)
+                except Exception as exc:
+                    logger.warning("doc_documenter: descarte post-run falló: %s", exc)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("doc_documenter: reanudación de %s falló: %s", run_id, exc, exc_info=True)
+        _update_run(run_id, state="failed", error=str(exc))
+
+
 def _update_run(run_id: str, **fields) -> None:
     with _registry_lock:
         rec = _run_registry.get(run_id)
@@ -932,7 +1229,9 @@ def _run_documenter_thread(run_id: str, project_name: str, runtime: str, *,
 def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None,
                    only_note: str | None = None,
                    forced_modes: list[DocumenterMode] | None = None,
-                   operator_note: str = "") -> dict:
+                   operator_note: str = "",
+                   autoapply_override: bool | None = None,
+                   _prior_stages: list | None = None) -> dict:
     """Ejecuta el pipeline completo (sincrono). Devuelve el report dict.
 
     Plan 114: si forced_modes viene, reemplaza los modos del plan (p. ej. [ACTUALIZAR]);
@@ -978,6 +1277,63 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
     # Plan 137 F3 — short-circuit: no invocar el LLM para un modo sin targets.
     # orphan_count se calcula UNA vez, solo si la V2 está ON (ahorra el cómputo
     # del grafo cuando nadie lo va a consultar).
+    # ── Plan 284 F5 — etapas de papel + human-in-the-loop ────────────────────
+    # PROPONER -> CRITICAR -> MEJORAR corren ANTES de escribir una sola línea.
+    # Con AUTOAPPLY OFF (default) el run se detiene acá y espera al operador.
+    stages: list[StageResult] = []
+    llm_calls = 0
+    budget = int(getattr(_cfg284_budget(), "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS", 12))
+    if _stages_enabled() and not _prior_stages:
+        base_blocks = [_sistema_readonly_block(project_name)]
+        prior = ""
+        for stage in (DocumenterStage.PROPONER, DocumenterStage.CRITICAR,
+                      DocumenterStage.MEJORAR):
+            if budget_exhausted(llm_calls, budget):
+                stages.append(StageResult(stage=str(stage.value), state="skipped",
+                                          summary="presupuesto de invocaciones agotado"))
+                continue
+            # Corte de costo (C17): sin un plan usable no se gastan CRITICAR ni
+            # MEJORAR. Longitud sola no alcanza: 250 chars de prosa sin ninguna
+            # ruta del contexto no son un plan.
+            if stage is not DocumenterStage.PROPONER and not stage_artifact_is_usable(prior, base_blocks):
+                stages.append(StageResult(stage=str(stage.value), state="skipped",
+                                          summary="sin plan que criticar"))
+                continue
+            sr = _run_paper_stage(stage, project_name, runtime, operator_note,
+                                  prior, base_blocks)
+            llm_calls += 1
+            stages.append(sr)
+            if sr.state == "done":
+                prior = sr.artifact
+    elif _prior_stages:
+        stages = [StageResult(**s) if isinstance(s, dict) else s for s in _prior_stages]
+
+    if _stages_enabled() and not _resolve_autoapply(autoapply_override):
+        # HITL: el run se detiene ANTES de escribir. Emite veredicto explícito
+        # (FIX C7: KPI-7 exige que ningún run termine sin veredicto).
+        stages.append(StageResult(stage=str(DocumenterStage.IMPLEMENTAR.value),
+                                  state="awaiting_approval",
+                                  summary="esperando tu aprobación para escribir"))
+        pending = {
+            "state": "awaiting_approval",
+            "verdict": VERDICT_PENDIENTE,
+            "stages": [s.to_dict() for s in stages],
+            "reason": plan.reason,
+            "modes": [str(m.value) for m in plan.modes],
+            "written": [], "skipped": [],
+            "health_before": health_before, "health_after": None,
+            "branch": branch, "degraded": degraded, "diff_stat": "",
+            "target_root": target_root, "worktree": worktree,
+            "error": None, "current_execution_id": None,
+            "modes_skipped": [], "files": [],
+            "operator_note": operator_note,
+            "llm_calls": llm_calls, "llm_calls_budget": budget,
+        }
+        if run_id:
+            _update_run(run_id, **pending)
+        _persist_run_report(persist_id, pending)
+        return pending
+
     orphan_count = -1  # -1 = no evaluado (flag OFF) ⇒ should_invoke_mode no se consulta
     if _v2_enabled():
         try:
@@ -989,7 +1345,14 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
     all_props: list[DocProposal] = []
     mode_diagnostics: list[str] = []
     modes_skipped: list[dict] = []
+    budget_hit = False
     for mode in plan.modes:
+        # Plan 284 A1 — tope duro: al agotarse el run NO falla, se detiene
+        # ordenadamente y conserva lo ya escrito.
+        if budget_exhausted(llm_calls, budget):
+            budget_hit = True
+            modes_skipped.append({"mode": str(mode.value), "reason": "budget_exhausted"})
+            continue
         if _v2_enabled():
             ok, why = should_invoke_mode(mode, plan, orphan_count)
             if not ok:
@@ -1010,6 +1373,7 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
 
         props = invoke_documenter(mode, ctx, project_name, runtime,
                                   on_execution_started=_on_exec_started)
+        llm_calls += 1  # Plan 284 A1 — observabilidad del gasto real
         all_props += props
         if not props:
             # Fix "no me hizo nada" (Tarea 1) — el diagnóstico ya se logueó
@@ -1069,6 +1433,56 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         "files": result.files,
         "operator_note": operator_note,  # Plan 284 F2.4
     }
+
+    # ── Plan 284 F6 + F5.4 — radiografía y veredicto determinista (sin LLM) ──
+    radiography: dict = {}
+    try:
+        from config import config as _cfg284
+        if bool(getattr(_cfg284, "STACKY_DOCS_RADIOGRAPHY_ENABLED", False)):
+            from services import doc_graph, doc_radiography
+            try:
+                _graph = doc_graph.build_graph(project_name=project_name)
+            except Exception:
+                _graph = {}
+            radiography = doc_radiography.compute_coverage(_graph, workspace_root)
+            report["radiography"] = radiography
+            # A2 — delta contra el run inmediatamente anterior. Cero LLM.
+            try:
+                _previos = list_runs(limit=2) or []
+                _prev_radio = None
+                for _r in _previos:
+                    if _r.get("run_id") != persist_id:
+                        _prev_radio = (_r.get("radiography") or None)
+                        break
+                report["radiography_delta"] = doc_radiography.compute_coverage_delta(
+                    radiography, _prev_radio)
+            except Exception:
+                report["radiography_delta"] = {
+                    "has_previous": False, "ratio_delta": 0.0,
+                    "modules_closed": [], "modules_opened": []}
+    except Exception as exc:
+        logger.warning("doc_documenter: radiografía falló: %s", exc)
+
+    if _stages_enabled():
+        files_rejected = sum(1 for f in (result.files or []) if f.get("rejected"))
+        veredicto = compute_verify_verdict(
+            len(result.written), files_rejected,
+            float((radiography or {}).get("coverage_ratio", 0.0)))
+        stages.append(StageResult(
+            stage=str(DocumenterStage.IMPLEMENTAR.value), state="done",
+            summary=f"{len(result.written)} archivos escritos, {files_rejected} rechazados"))
+        stages.append(StageResult(
+            stage=str(DocumenterStage.VERIFICAR.value), state="done",
+            verdict=veredicto,
+            summary=(f"citas y cobertura verificadas; {files_rejected} archivos "
+                     f"rechazados por citas inválidas")))
+        report["stages"] = [s.to_dict() for s in stages]
+        report["verdict"] = veredicto
+        if budget_hit:
+            report["state"] = "budget_exhausted"
+            report["verdict"] = VERDICT_PARCIAL
+    report["llm_calls"] = llm_calls          # Plan 284 A1
+    report["llm_calls_budget"] = budget
     if run_id:
         _update_run(run_id, **report)
     _persist_run_report(persist_id, report)

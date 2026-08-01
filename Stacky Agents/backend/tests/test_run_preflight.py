@@ -179,6 +179,146 @@ class TestPreflightPatMissing:
 
 
 # ---------------------------------------------------------------------------
+# Predicado duro 3 — el PAT de ADO SOLO aplica a proyectos cuyo tracker ES ADO
+# ---------------------------------------------------------------------------
+
+class TestPreflightPatTrackerAware:
+    """El predicado 3 no debe exigir PAT de Azure DevOps a un proyecto no-ADO.
+
+    Defecto reproducido en vivo (proyecto RIPLEY, tracker GitLab, 2026-08-01):
+    el gate bloqueaba TODA corrida con `ado_pat_missing` antes del spawn, aunque
+    el proyecto no use ADO y por lo tanto el auto-create de Tasks en ADO no
+    pueda ocurrir jamás. Evidencia: `agent_executions` 206-209 en la DB del
+    operador, todas `failed` con
+    `metadata_json.precondition_failure.check == "ado_pat_missing"`.
+    """
+
+    @staticmethod
+    def _cfg(tracker_type: str | None) -> dict:
+        tracker: dict = {}
+        if tracker_type is not None:
+            tracker["type"] = tracker_type
+            tracker["auth_file"] = f"auth/{tracker_type}_auth.json"
+        return {"name": "PROY", "workspace_root": "C:/ws/proy", "issue_tracker": tracker}
+
+    def test_gitlab_project_without_ado_pat_does_not_block(
+        self, tmp_path, preflight_enabled, monkeypatch
+    ):
+        """Tracker GitLab + sin PAT de ADO + auto-create ON → NO bloquea."""
+        writable = tmp_path / "outputs"
+        writable.mkdir()
+        monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+        monkeypatch.setenv("ADO_PAT", "")
+        with (
+            patch("services.run_preflight._resolve_outputs_dir", return_value=writable),
+            patch("services.run_preflight._is_writable", return_value=True),
+            patch("services.run_preflight._resolve_repo_root", return_value=None),
+            patch("project_manager.get_project_config", return_value=self._cfg("gitlab")),
+            patch("services.run_preflight._binary_resolvable", return_value=True),
+            patch("services.ado_client.ado_pat_present", return_value=False) as pat_probe,
+        ):
+            from services.run_preflight import check
+            result = check(
+                ticket=_make_ticket("PROY"),
+                runtime="github_copilot",  # no requiere repo
+                project="PROY",
+            )
+        assert result.ok is True
+        assert result.failure_check is None
+        # La cadena de resolución del PAT de ADO ni siquiera se consulta. Esto
+        # cierra el riesgo de que `_auth_path_for` entregue el auth_file de OTRO
+        # tracker (p. ej. auth/gitlab_auth.json) a `ado_client._read_pat_file`,
+        # que lo abriría buscando el campo "pat".
+        assert pat_probe.call_count == 0
+
+    def test_ado_project_without_pat_still_blocks(
+        self, tmp_path, preflight_enabled, monkeypatch
+    ):
+        """Regresión: tracker ADO + sin PAT → sigue bloqueando igual que antes."""
+        writable = tmp_path / "outputs"
+        writable.mkdir()
+        monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+        monkeypatch.setenv("ADO_PAT", "")
+        with (
+            patch("services.run_preflight._resolve_outputs_dir", return_value=writable),
+            patch("services.run_preflight._is_writable", return_value=True),
+            patch("services.run_preflight._resolve_repo_root", return_value=None),
+            patch("project_manager.get_project_config", return_value=self._cfg("azure_devops")),
+            patch("services.run_preflight._binary_resolvable", return_value=True),
+            patch("services.ado_client.ado_pat_present", return_value=False) as pat_probe,
+        ):
+            from services.run_preflight import check
+            result = check(
+                ticket=_make_ticket("PROY"),
+                runtime="github_copilot",
+                project="PROY",
+            )
+        assert result.ok is False
+        assert result.failure_check == "ado_pat_missing"
+        assert pat_probe.call_count == 1
+
+    def test_tracker_desconocido_falla_cerrado_y_bloquea(
+        self, tmp_path, preflight_enabled, monkeypatch
+    ):
+        """Sin `issue_tracker.type` resoluble → se asume ADO y se bloquea.
+
+        Fail-closed a propósito: el default histórico del repo es
+        `azure_devops` (local_diagnostics.py:105). Si no sabemos el tracker,
+        el gate se comporta EXACTAMENTE como antes del fix.
+        """
+        writable = tmp_path / "outputs"
+        writable.mkdir()
+        monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+        monkeypatch.setenv("ADO_PAT", "")
+        with (
+            patch("services.run_preflight._resolve_outputs_dir", return_value=writable),
+            patch("services.run_preflight._is_writable", return_value=True),
+            patch("services.run_preflight._resolve_repo_root", return_value=None),
+            patch("project_manager.get_project_config", return_value=self._cfg(None)),
+            patch("services.run_preflight._binary_resolvable", return_value=True),
+            patch("services.ado_client.ado_pat_present", return_value=False),
+        ):
+            from services.run_preflight import check
+            result = check(
+                ticket=_make_ticket("PROY"),
+                runtime="github_copilot",
+                project="PROY",
+            )
+        assert result.ok is False
+        assert result.failure_check == "ado_pat_missing"
+
+    def test_ticket_tracker_type_no_manda_sobre_el_config_del_proyecto(
+        self, tmp_path, preflight_enabled, monkeypatch
+    ):
+        """El `tracker_type` de la FILA del ticket no decide: manda el config.
+
+        El Brief Pool Ticket (`api/agents.py:777-785`) se crea sin pasar
+        `tracker_type`, así que hereda el default `azure_devops` de la columna
+        aunque el proyecto sea GitLab (verificado: tickets.id=1167, project
+        RIPLEY, tracker_type='azure_devops'). Si el gate leyera el ticket, el
+        proyecto GitLab seguiría bloqueado.
+        """
+        writable = tmp_path / "outputs"
+        writable.mkdir()
+        monkeypatch.setenv("STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true")
+        monkeypatch.setenv("ADO_PAT", "")
+        ticket = _make_ticket("PROY")
+        ticket.tracker_type = "azure_devops"  # mentira heredada del default de la columna
+        with (
+            patch("services.run_preflight._resolve_outputs_dir", return_value=writable),
+            patch("services.run_preflight._is_writable", return_value=True),
+            patch("services.run_preflight._resolve_repo_root", return_value=None),
+            patch("project_manager.get_project_config", return_value=self._cfg("gitlab")),
+            patch("services.run_preflight._binary_resolvable", return_value=True),
+            patch("services.ado_client.ado_pat_present", return_value=False),
+        ):
+            from services.run_preflight import check
+            result = check(ticket=ticket, runtime="github_copilot", project="PROY")
+        assert result.ok is True
+        assert result.failure_check is None
+
+
+# ---------------------------------------------------------------------------
 # Predicado duro 2: repo ausente para runtime que lo exige
 # ---------------------------------------------------------------------------
 

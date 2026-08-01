@@ -5,7 +5,7 @@ check(ticket, runtime, project) -> PreflightResult
 Predicados duros (cualquiera falla → bloquea con metadata["precondition_failure"]):
   - outputs_dir existe y es escribible
   - repo presente si el runtime lo requiere
-  - PAT presente si auto-create de tasks está habilitado
+  - PAT presente si auto-create de tasks está habilitado Y el tracker es ADO
   - binario/CLI del runtime resolvible
 
 Predicados blandos → PreflightResult.warnings, no bloquean.
@@ -125,7 +125,12 @@ def check(
     auto_create_on = os.getenv(
         "STACKY_OUTPUT_WATCHER_AUTO_CREATE_TASKS", "true"
     ).lower() not in ("false", "0", "no", "off")
-    if auto_create_on:
+    # El auto-create de Tasks que este predicado protege escribe en AZURE DEVOPS.
+    # En un proyecto cuyo tracker NO es ADO no puede ocurrir jamás, así que exigir
+    # un PAT de ADO condenaba TODA corrida del proyecto (medido en vivo: RIPLEY /
+    # GitLab, agent_executions 206-209, todas `failed` con `ado_pat_missing`
+    # antes del spawn).
+    if auto_create_on and _tracker_is_ado(ticket, project):
         # La cadena completa de resolución del PAT (env ADO_PAT, config,
         # Tools/PAT-ADO y auth del proyecto activo) vive en ado_client.
         # Chequear solo env/config daba falsos negativos cuando el operador
@@ -185,6 +190,35 @@ def _resolve_outputs_dir(ticket: Any, project: str | None) -> Path | None:
         pass
     # Fallback: directorio de trabajo actual.
     return Path.cwd()
+
+
+def _tracker_is_ado(ticket: Any, project: str | None) -> bool:
+    """¿El tracker del proyecto es Azure DevOps?
+
+    Fuente de verdad: `issue_tracker.type` del config del proyecto, que es lo
+    que el operador setea por UI y lo que usa el resto del backend
+    (`local_diagnostics.py:105`, `project_context._auth_path_for`).
+
+    Deliberadamente NO se lee `ticket.tracker_type`: el Brief Pool Ticket se crea
+    sin ese campo (`api/agents.py:777-785`) y hereda el default `azure_devops` de
+    la columna aunque el proyecto sea GitLab, así que la fila MIENTE.
+
+    Fail-closed: si no se puede resolver el config (proyecto desconocido, error
+    de lectura), se asume ADO y el predicado se comporta igual que antes del fix.
+    """
+    try:
+        proj = _ticket_project(ticket, project)
+        if not proj:
+            return True
+        from project_manager import get_project_config
+        cfg = get_project_config(proj) or {}
+        tracker = cfg.get("issue_tracker") or {}
+        declared = (tracker.get("type") or "").strip().lower()
+        if not declared:
+            return True
+        return declared == "azure_devops"
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _resolve_repo_root(ticket: Any, project: str | None) -> Path | None:

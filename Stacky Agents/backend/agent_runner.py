@@ -794,7 +794,18 @@ def _run_in_background(
                 output_data={"cache_key": cached["cache_key"][:8], "hits": cached.get("hits")},
                 tags=["agent", "cache"],
             )
-            webhooks.fire_for_execution(execution_id)
+            # Plan 280 F1-bis — guarda DEDICADA: un webhook no decide el estado
+            # de la corrida. Paridad con claude_code_cli_runner.py:81-84 y
+            # codex_cli_runner.py:71-74, que ya la tenian.
+            try:
+                webhooks.fire_for_execution(execution_id)
+            except Exception:  # noqa: BLE001
+                import logging as _wh_log
+
+                _wh_log.getLogger("stacky.agent_runner").debug(
+                    "[exec=%s] webhook fire_for_execution failed",
+                    execution_id, exc_info=True,
+                )
             try:
                 if config.STACKY_DESKTOP_NOTIFY_ENABLED:
                     desktop_notifier.notify(
@@ -1008,7 +1019,19 @@ def _run_in_background(
             )
 
         # FA-52/U0.3 — Webhooks out
-        webhooks.fire_for_execution(execution_id)
+        # Plan 280 F1-bis — guarda DEDICADA. Esta llamada estaba DESNUDA dentro
+        # del try grande del run: el TypeError de webhooks.py:219 escapaba hasta
+        # el `except` de mas abajo, que marcaba `error` una corrida ya exitosa
+        # (ejecuciones 164-167, agente incident_dev, contrato passed:true).
+        try:
+            webhooks.fire_for_execution(execution_id)
+        except Exception:  # noqa: BLE001
+            import logging as _wh_log
+
+            _wh_log.getLogger("stacky.agent_runner").debug(
+                "[exec=%s] webhook fire_for_execution failed",
+                execution_id, exc_info=True,
+            )
         try:
             if config.STACKY_DESKTOP_NOTIFY_ENABLED:
                 desktop_notifier.notify(
@@ -1069,7 +1092,19 @@ def _run_in_background(
     except Exception as exc:  # noqa: BLE001
         _mark_terminal(execution_id, status="error", error=str(exc))
         log("error", f"× {exc}")
-        webhooks.fire_for_execution(execution_id)
+        # Plan 280 F1-bis — guarda DEDICADA. Sin ella, un segundo TypeError acá
+        # (mismo webhooks.py:219, ahora con status='error') escapaba DESDE
+        # DENTRO del except hacia el finally, y el run nunca cerraba su ciclo:
+        # eso explica el completion_source='recovery' de las 4 corridas medidas.
+        try:
+            webhooks.fire_for_execution(execution_id)
+        except Exception:  # noqa: BLE001
+            import logging as _wh_log
+
+            _wh_log.getLogger("stacky.agent_runner").debug(
+                "[exec=%s] webhook fire_for_execution failed",
+                execution_id, exc_info=True,
+            )
         try:
             if config.STACKY_DESKTOP_NOTIFY_ENABLED:
                 desktop_notifier.notify(

@@ -208,6 +208,14 @@ def _compact_execution_payload(row: AgentExecution) -> dict:
     if isinstance(telem, dict):
         cost_usd = telem.get("total_cost_usd")
     failure_kind = md.get("failure_kind")
+    # Plan 280 F1-bis — `duration_ms` es un METODO (models.py:330), no una
+    # @property: sus vecinos `metadata_dict` (:314) y `contract_result` (:322)
+    # SI lo son, y por eso este call-site lo leia como campo. Un bound method es
+    # siempre truthy, asi que el guard `if row.duration_ms` pasaba y la division
+    # tiraba `TypeError: unsupported operand type(s) for /: 'method' and 'int'`,
+    # que en el path Copilot marcaba la corrida `error` con el trabajo ya hecho
+    # (ejecuciones 164-167). Se llama UNA vez y se cachea.
+    _dms = row.duration_ms()
 
     return {
         "id": row.id,
@@ -216,7 +224,7 @@ def _compact_execution_payload(row: AgentExecution) -> dict:
         "runtime": md.get("runtime"),
         "status": row.status,
         "error_message": row.error_message,
-        "duration_s": round((row.duration_ms or 0) / 1000, 3) if row.duration_ms else None,
+        "duration_s": round(_dms / 1000, 3) if _dms else None,
         "cost_usd": cost_usd,
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,

@@ -16,11 +16,12 @@
 | # | KPI | Medición | Estado hoy (medido) |
 |---|---|---|---|
 | **K1** | `outcome_reason_to_status` deja de ser código muerto | censo AST de referencias en producción | **0** → debe quedar **≥ 3** |
-| **K2** | Motores que deciden el estado terminal | censo AST de clasificadores | **4 ciegos entre sí** → **1** compartido |
+| **K2** | Motores que deciden el estado terminal | censo AST de clasificadores | **4 ciegos entre sí** → **1** compartido en los 3 runtimes de agentes (`qa_browser` = deuda declarada, ver F3) |
 | **K3** | Una corrida con trabajo entregado y cierre sucio nunca cae en `error` | test sobre `classify_outcome_reason` | hoy cae en `cli_failure` → `error` |
 | **K4** | Los 4 call-sites pasan el juego COMPLETO de señales | censo AST de kwargs por call-site | **2 / 3 / 4 / 4 de 8** → **8 de 8** |
 | **K5** | Ningún falso rojo se convierte en verde automático | test de invariante | debe ser `needs_review`, **nunca** `completed` |
 | **K6** | Un webhook no puede pintar de rojo una corrida exitosa | test que reproduce el `TypeError` | hoy lo pinta: 4 corridas medidas |
+| **K7** | Un cierre sucio con trabajo no termina en `completed` | simulación contra las 15 corridas con taxonomía | hoy **2 falsos verdes vivos** (execs 190 y 213) |
 
 **K5 es un guardarraíl, no una métrica de mejora.** El plan corrige un falso ROJO; no se le permite crear un falso VERDE. Human-in-the-loop es riel duro: Stacky no declara éxito por su cuenta.
 
@@ -112,7 +113,19 @@ def outcome_reason_to_status(reason: str) -> str:   # :113
   outcome_reason_to_status: 2
 ```
 
-El plan 254 **construyó la respuesta correcta, la testeó, quedó verde, y nunca la cableó**. Los 17 tests de `test_plan254_outcome_reason.py` y los 16 de `test_plan254_stream_drain.py` pasan hoy — verifican una función que producción no invoca.
+El plan 254 **construyó la respuesta correcta, la testeó, quedó verde, y nunca la cableó**.
+
+**Baseline REAL medido, por archivo** (`DATABASE_URL="sqlite:///:memory:"`, venv `backend/venv`):
+
+```
+tests/test_plan254_outcome_reason.py  -> 11 passed
+tests/test_plan254_stream_drain.py    ->  6 passed
+tests/test_plan254_reconciliation.py  -> 10 passed
+tests/test_plan254_falso_rojo.py      ->  9 passed
+tests/test_stall_watchdog.py          -> 16 passed
+```
+
+Los 11 de `outcome_reason` verifican una función que **producción no invoca**. (Nota: correr los dos primeros archivos juntos reporta `17 passed`, que es la SUMA `11+6` — no el conteo del primero. Los gates de este plan usan los conteos **por archivo**.)
 
 ### E6 — El defecto 3: cuatro motores ciegos entre sí
 
@@ -253,6 +266,12 @@ Los 4 call-sites pasan el juego completo. El gate cuenta los kwargs **por AST** 
 
 `STACKY_OUTCOME_WORK_EVIDENCE_ENABLED`. OFF = comportamiento byte-idéntico al de hoy. No se agrega sección DevOps nueva (evita arrastrar sus dos gates).
 
+### D5-bis — CERO cambio de frontend (verificado)
+
+La capa de visualización **ya existe y ya está cableada**: el plan 254 F4 construyó `frontend/src/utils/outcomeReason.ts` (mapa puro `outcome_reason` → etiqueta + tono + acción), consumido por `ExecutionDetailDrawer.tsx:18,87`, con el campo declarado en `types.ts:163` y tests en `utils/__tests__/plan254OutcomeReason.test.ts`. El estado `needs_review` ya es ciudadano de primera en **8 componentes** (`OutputPanel.tsx`, `HarnessHealthCard.tsx`, `reconciliationActions.ts`, …).
+
+Este plan cambia **qué estado se emite**, no cómo se muestra. **No se toca un solo archivo de frontend**, y por lo tanto no corre `tsc` como gate. Es otra instancia de la misma patología: las piezas existen, faltaba conectarlas.
+
 ### D6 — Fuera de alcance explícito
 
 - No se toca `qa_browser_runner.py:272` (el `error` incondicional). Es un defecto real pero de otro subsistema; se documenta como pendiente.
@@ -268,7 +287,11 @@ Los 4 call-sites pasan el juego completo. El gate cuenta los kwargs **por AST** 
 
 **Objetivo:** dejar la foto vieja medida y los tests que fallan **por la razón correcta** antes de tocar producción.
 
-Archivo nuevo: `backend/tests/test_plan280_desenlace.py`.
+**Archivo host: `backend/tests/test_plan254_falso_rojo.py` — NO se crea archivo nuevo.**
+
+Razón (decisión de implementación, no cosmética): el arnés **no barre directorios**, es una **lista explícita de 788 archivos** iterada en `scripts/run_harness_tests.sh:1039`. Un archivo nuevo obliga a editar **los dos** ratchets (`.sh` y `.ps1`), y ambos están **modificados sin commitear por una sesión paralela viva**. Commitearlos con pathspec arrastraría el trabajo ajeno al commit de este plan (gotcha del índice compartido).
+
+`tests/test_plan254_falso_rojo.py` **ya está registrado en los dos ratchets** (verificado: `sh=1 ps=1`), trata literalmente el mismo defecto (el falso rojo), y ya trae la fixture de DB con `sqlite:///:memory:`. **Cero fricción, cero trámite de ratchet.**
 
 **F0.1 — El censo AST reproduce la foto vieja.** Test que corre el censo de referencias y asserta la foto de HOY:
 
@@ -308,7 +331,7 @@ def test_trabajo_entregado_nunca_va_a_completed():
 **F0.4 — Paridad de señales, foto vieja:** censo AST de kwargs por call-site que asserta `{2, 3, 4, 5}` hoy.
 
 **Gate F0:** el archivo corre y **falla** en F0.2 (y en F0.4 tras F4). Comando:
-`pytest tests/test_plan280_desenlace.py -q` → debe reportar **≥1 failed** ANTES de F1.
+`pytest tests/test_plan254_falso_rojo.py -q` → debe reportar **≥1 failed** ANTES de F1.
 
 ---
 
@@ -321,7 +344,14 @@ def test_trabajo_entregado_nunca_va_a_completed():
 3. Modificar **solo** las reglas 5 y 8 (líneas `:93` y `:99`), sin tocar el orden de precedencia.
 4. Actualizar el docstring de precedencia (`:71-83`) — el orden es contrato.
 
-**Gate F1:** F0.2 pasa a verde. `pytest tests/test_plan254_outcome_reason.py tests/test_plan280_desenlace.py -q` → **33 + N passed, 0 failed** (los 17 del 254 no se mueven: el default `False` los preserva).
+**Gate F1:** F0.2 pasa a verde. Por archivo, con los conteos reales de E5:
+
+```
+pytest tests/test_plan254_outcome_reason.py -q   -> 11 passed  (SIN CAMBIO)
+pytest tests/test_plan254_falso_rojo.py -q       ->  9 + N passed
+```
+
+Los 11 del 254 **no se mueven**: el default `work_delivered=False` los preserva. Verificado en particular contra `test_cli_failure_es_actionable_y_quota_no` (`tests/test_plan254_outcome_reason.py:82-84`), que llama `classify_outcome_reason(return_code=1)` **sin** `last_result_text` ni `work_delivered` — sigue devolviendo `cli_failure`.
 
 ---
 
@@ -329,7 +359,7 @@ def test_trabajo_entregado_nunca_va_a_completed():
 
 **Independiente de F1..F6.** Se puede implementar sola; es el cambio más chico y de mayor certeza del plan.
 
-**Test primero** (en `tests/test_plan280_desenlace.py`), reproduciendo el `TypeError` con un `AgentExecution` real:
+**Test primero** (en `tests/test_plan254_falso_rojo.py`), reproduciendo el `TypeError` con un `AgentExecution` real:
 
 ```python
 def test_payload_del_webhook_no_revienta_con_duration_ms():
@@ -358,7 +388,7 @@ _dms = row.duration_ms()
 **Bomba latente relacionada (se documenta, no se toca):** `services/ado_publisher.py:60` tiene el mismo patrón (`md.get("duration_ms") or execution.duration_ms`), hoy inofensivo porque `md["duration_ms"]` existe y porque `:62-66` lo envuelve en `try/except`.
 
 **Gate F1-bis:** el test nace ROJO con `TypeError` y queda verde tras el fix.
-`pytest tests/test_plan280_desenlace.py -k webhook -q` → exigir el **conteo de seleccionados** (`-k` sin match da exit 0).
+`pytest tests/test_plan254_falso_rojo.py -k webhook -q` → exigir el **conteo de seleccionados** (`-k` sin match da exit 0).
 
 ---
 
@@ -374,27 +404,79 @@ if config.STACKY_OUTCOME_WORK_EVIDENCE_ENABLED:
     _status_taxonomia = outcome_reason_to_status(_outcome_meta["outcome_reason"])
 ```
 
-**Regla de aplicación (G1 + G5):** el estado de la taxonomía solo puede **subir** un `error` a `needs_review`. **Nunca** puede bajar un `completed` ya alcanzado ni subir nada a `completed`. Se implementa como una función pura auxiliar en `run_outcome.py`:
+**Regla de aplicación — la taxonomía es un TECHO, nunca un ascenso (G1 + G5):**
 
 ```python
 def reconciliar_estado(actual: str, taxonomia: str) -> str:
-    """Solo rescata falsos rojos. Jamás crea un verde ni degrada un verde."""
-    if actual == "error" and taxonomia == "needs_review":
+    """La taxonomía solo puede BAJAR a 'needs_review'. Jamás asciende nada.
+
+    - error     + needs_review → needs_review  (rescata el falso ROJO)
+    - completed + needs_review → needs_review  (tapa el falso VERDE)
+    - needs_review + completed → needs_review  (NO asciende: preserva el gate
+      de calidad de `_evaluate_output_quality`)
+    """
+    if taxonomia == "needs_review" and actual in ("error", "completed"):
         return "needs_review"
     return actual
 ```
 
-**Gate F2:** el censo de F0.1 se invierte — `outcome_reason_to_status` pasa de **0 a ≥3** referencias de producción. El test se actualiza en la misma fase y debe asertar el valor nuevo con el guard de presencia intacto.
+**Por qué un techo y no una sustitución.** Verificado contra las 15 ejecuciones reales que hoy tienen `outcome_reason` en la BD: la ejecución **210** tiene `reason=clean_exit` (la taxonomía diría `completed`) pero su estado real es `needs_review` porque `_evaluate_output_quality` la degradó por contrato. Una sustitución la **ascendería de vuelta a `completed`, destruyendo el gate de calidad**. El techo la deja intacta.
+
+**Simulación del diseño contra los datos reales de producción** (15 ejecuciones con taxonomía activa):
+
+```
+  exec  186 out=   612 cli_failure  -> dirty_exit_after_work  error     => needs_review
+  exec  187 out=  2055 cli_failure  -> dirty_exit_after_work  error     => needs_review
+  exec  188 out=   294 cli_failure  -> dirty_exit_after_work  error     => needs_review
+  exec  189 out=  1212 cli_failure  -> dirty_exit_after_work  error     => needs_review
+  exec  190 out=  4031 dirty_exit_after_work                  completed => needs_review
+  exec  211 out=   474 cli_failure  -> dirty_exit_after_work  error     => needs_review
+  exec  212 out= 19593 cli_failure  -> dirty_exit_after_work  error     => needs_review
+  exec  213 out= 23390 stall_after_work                       completed => needs_review
+
+CAMBIAN 8 de 15 — 6 falsos ROJOS rescatados, 2 falsos VERDES tapados.
+La 210 NO cambia (gate de calidad preservado). CERO ascensos a 'completed'.
+```
+
+**Hallazgo colateral que esto corrige:** las ejecuciones **190** y **213** son **falsos VERDES vivos en producción** — `dirty_exit_after_work` y `stall_after_work` que terminaron en `completed`, exactamente lo que `run_outcome.py:117-119` declara que **nunca** debe pasar. El plan 254 escribió la regla; el runner nunca la aplicó. El techo la hace cumplir en las dos direcciones.
+
+**Gate F2:** el censo de F0.1 se invierte — `outcome_reason_to_status` pasa de **0 a ≥3** referencias de producción. El test se actualiza en la misma fase **conservando el guard de presencia** (`classify_outcome_reason >= 4`), para que un censo roto que devuelva todo cero no lo haga pasar por accidente.
 
 ---
 
 ### F3 — Un solo motor (K2: 4 → 1)
 
-`_classify_run_outcome` (`claude_code_cli_runner.py:399-414`) se convierte en envoltorio que delega en el motor compartido (D3). Su contrato público (3 kwargs, 3 valores de retorno) **no cambia**, para no romper `test_stall_watchdog.py` (16 passed hoy).
+`_classify_run_outcome` (`claude_code_cli_runner.py:399-414`) se convierte en envoltorio que delega en el motor compartido (D3).
+
+**El contrato se preserva agregando un kwarg con default, no cambiando los existentes:**
+
+```python
+def _classify_run_outcome(*, stall_fired, result_ok_seen, return_code,
+                          work_delivered: bool = False) -> str:
+    reason = classify_outcome_reason(
+        return_code=return_code, result_ok_seen=result_ok_seen,
+        stall_fired=stall_fired, work_delivered=work_delivered,
+    )
+    return _REASON_TO_RUN_KIND[reason]
+```
+
+**Mapa de los 9 reasons a los 3 valores** (obligatorio y explícito, para que un modelo menor no lo resuelva de dos maneras):
+
+| reason | valor | ¿por qué |
+|---|---|---|
+| `stall_no_work` | `failed_stall` | cuelgue real |
+| `stall_after_work` | `success` | fija el test `:163` |
+| `clean_exit` | `success` | fija el test `:172` |
+| `dirty_exit_after_work` | `success` | fija el test `:181` — y el **techo de F2** le pone `needs_review` después |
+| `cli_failure`, `quota_exhausted`, `preflight_blocked`, `reaper_timeout`, `reaper_heartbeat` | `error` | fija el test `:190` |
+
+**Por qué el default `False` es imprescindible:** los 5 tests fijados en `tests/test_stall_watchdog.py:148-192` llaman a la función **sin** `work_delivered`. En particular `test_classify_outcome_nonzero_without_result_is_error` (`:186-192`) asserta que `rc=1, result_ok=False` → `"error"` — que es **exactamente el caso de la ejecución 212**. Ese test **fija el comportamiento defectuoso** y NO se toca: la corrección no vive en la función pura sino en el call-site (`:1788`), que sí pasa `work_delivered` computado desde `output` (en scope desde `:1574`).
+
+**Nota de honestidad sobre K2.** Con F3 y F4 el sistema queda con **un solo motor de razón** (`classify_outcome_reason`) y **un solo traductor a estado** (`outcome_reason_to_status`) para `claude_code_cli`, `codex_cli` y `github_copilot` — **3 de 4 runtimes**. `qa_browser_runner.py:272` queda fuera (D6) porque su `error` es incondicional y no depende de estas señales. **K2 se declara como "4 → 1 en los 3 runtimes de agentes; `qa_browser` documentado como deuda"**, no como un 4→1 absoluto.
 
 En `codex_cli_runner.py`, la cadena inline `:816/:884/:1156` consulta `reconciliar_estado` antes de escribir `error`.
 
-**Gate F3:** `pytest tests/test_stall_watchdog.py tests/test_plan254_stream_drain.py -q` → **32 passed, 0 failed** (sin cambios: el contrato se preservó).
+**Gate F3:** `pytest tests/test_stall_watchdog.py -q` → **16 passed, 0 failed** (los 5 tests fijados siguen verdes: el contrato se preservó).
 
 ---
 
@@ -428,7 +510,7 @@ En `codex_cli_runner.py`, la cadena inline `:816/:884/:1156` consulta `reconcili
 
 Test que congela los invariantes: G1 (nunca verde automático), el orden de precedencia de los 9 reasons, y que `reconciliar_estado` jamás devuelva `completed` si el actual no lo era.
 
-Los tests nuevos van **todos** en `tests/test_plan280_desenlace.py`. Registrarlo en **los dos** ratchets (`.sh` y `.ps1`), o confirmar que el directorio ya está barrido.
+Los tests nuevos van **todos** en `tests/test_plan254_falso_rojo.py`, que **ya está registrado en los dos ratchets** (F0). No se toca `scripts/run_harness_tests.sh` ni `.ps1`.
 
 ---
 

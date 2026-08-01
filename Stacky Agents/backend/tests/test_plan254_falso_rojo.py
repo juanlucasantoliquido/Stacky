@@ -317,3 +317,130 @@ def test_guard_solo_usa_estados_del_vocabulario():
     # Riel duro: cancelar es del operador y jamás se bloquea.
     assert "cancelled" not in ticket_status._NEVER_DOWNGRADE_TO
     assert "needs_review" not in ticket_status._NEVER_DOWNGRADE_TO
+
+
+# ── 9. PLAN 280 F1-bis — EL WEBHOOK QUE PINTA DE ROJO UNA CORRIDA EXITOSA ─────
+#
+# Segundo falso rojo, independiente del clasificador y con la misma tesis: el
+# trabajo se hizo y el camino de REPORTE lo destruye.
+#
+# `AgentExecution.duration_ms` (models.py:330) es un METODO sin @property, y
+# `services/webhooks.py:219` lo consume como si fuera un campo:
+#     round((row.duration_ms or 0) / 1000, 3) if row.duration_ms else None
+# Un bound method es SIEMPRE truthy, asi que el guard pasa y la division
+# explota con TypeError. Ese TypeError escapa por `agent_runner.py:1011`
+# (llamada DESNUDA, a diferencia de claude_code_cli_runner.py:82 y
+# codex_cli_runner.py:72 que la envuelven) y cae en el `except` de :1069,
+# que marca la corrida `error`.
+#
+# Medido en la BD viva: ejecuciones 164, 165, 166 y 167 (2026-07-26, agente
+# incident_dev, outputs de 7382/5621/3999/4859 chars, contrato passed:true
+# score:100) con error_message EXACTAMENTE igual al TypeError de abajo.
+
+
+def test_duration_ms_sigue_siendo_metodo_no_property():
+    """Guard de PRESENCIA del defecto: fija la forma real de models.py:330.
+
+    Sin este assert, el test de abajo podria pasar por accidente el dia que
+    alguien convierta `duration_ms` en @property (lo que romperia a su vez
+    AgentExecution.to_dict y ado_publisher.py:60, que ya lo llaman con
+    parentesis). Si este assert falla, el fix de webhooks.py hay que revisarlo.
+    """
+    from models import AgentExecution
+
+    assert not isinstance(
+        AgentExecution.__dict__.get("duration_ms"), property
+    ), "duration_ms paso a ser property: revisar webhooks.py y to_dict"
+
+
+def test_payload_del_webhook_no_revienta_con_una_corrida_completa():
+    """Reproduce el TypeError de las ejecuciones 164-167. ROJO antes del fix.
+
+    El payload V2 se arma sobre una corrida EXITOSA (started/completed
+    poblados, 49.308 s de duracion real, como las 4 corridas medidas).
+    """
+    from datetime import datetime, timedelta
+
+    from models import AgentExecution
+    from services.webhooks import _compact_execution_payload
+
+    row = AgentExecution()
+    row.id = 164
+    row.ticket_id = 812
+    row.agent_type = "incident_dev"
+    row.status = "completed"
+    row.started_at = datetime(2026, 7, 26, 17, 12, 0)
+    row.completed_at = row.started_at + timedelta(seconds=49.308)
+    row.metadata_json = '{"runtime": "github_copilot", "vscode_bridge": true}'
+
+    payload = _compact_execution_payload(row)
+
+    # 49308 ms / 1000 = 49.308 s — el valor que el webhook debia publicar.
+    assert payload["duration_s"] == 49.308, (
+        f"duration_s mal calculado: {payload['duration_s']!r}"
+    )
+
+
+def test_el_webhook_del_path_copilot_no_puede_tumbar_la_corrida():
+    """Defensa en profundidad: `fire_for_execution` va envuelta en los 3 paths.
+
+    claude_code_cli_runner.py:82 y codex_cli_runner.py:72 ya la protegen; las
+    tres llamadas de agent_runner.py (797, 1011, 1072) estaban DESNUDAS. Se
+    verifica por AST: toda llamada a `fire_for_execution` debe estar dentro de
+    un `ast.Try`. Se cuenta primero la PRESENCIA para que el test no pase por
+    accidente si el simbolo se renombra y el censo deja de ver nada.
+    """
+    import ast
+    from pathlib import Path
+
+    backend = Path(__file__).resolve().parent.parent
+    archivos = [
+        backend / "agent_runner.py",
+        backend / "services" / "claude_code_cli_runner.py",
+        backend / "services" / "codex_cli_runner.py",
+    ]
+
+    # "Protegida" NO es "estar dentro de cualquier try": la llamada de
+    # agent_runner.py:1011 vive dentro del try GIGANTE de la funcion, cuyo
+    # except es justamente el que marca la corrida `error` (:1069). Eso es el
+    # bug, no la defensa. El criterio real es una guarda DEDICADA: el try
+    # inmediatamente envolvente tiene un cuerpo corto, como
+    # claude_code_cli_runner.py:81-84 (cuerpo = 1 sentencia).
+    MAX_CUERPO_GUARDA = 2
+
+    total = 0
+    desnudas: list[str] = []
+    for path in archivos:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        padre: dict[int, ast.AST] = {}
+        for nodo in ast.walk(tree):
+            for hijo in ast.iter_child_nodes(nodo):
+                padre[id(hijo)] = nodo
+
+        for nodo in ast.walk(tree):
+            if not isinstance(nodo, ast.Call):
+                continue
+            fn = nodo.func
+            if (getattr(fn, "attr", None) or getattr(fn, "id", None)) != "fire_for_execution":
+                continue
+            total += 1
+
+            # Subir hasta el primer Try que contenga a la llamada EN SU BODY.
+            actual: ast.AST | None = nodo
+            guarda: ast.Try | None = None
+            while actual is not None:
+                p = padre.get(id(actual))
+                if isinstance(p, ast.Try) and any(
+                    actual is stmt for stmt in p.body
+                ):
+                    guarda = p
+                    break
+                actual = p
+            if guarda is None or len(guarda.body) > MAX_CUERPO_GUARDA:
+                desnudas.append(f"{path.name}:{nodo.lineno}")
+
+    assert total >= 5, f"el censo AST no ve las llamadas conocidas (vio {total})"
+    assert desnudas == [], (
+        f"fire_for_execution sin guarda DEDICADA (un webhook puede tumbar la "
+        f"corrida): {desnudas}"
+    )

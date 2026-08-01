@@ -444,3 +444,222 @@ def test_el_webhook_del_path_copilot_no_puede_tumbar_la_corrida():
         f"fire_for_execution sin guarda DEDICADA (un webhook puede tumbar la "
         f"corrida): {desnudas}"
     )
+
+
+# ── 10. PLAN 280 F1/F2 — EL DESENLACE MIRA EL TRABAJO ENTREGADO ──────────────
+#
+# `classify_outcome_reason` RECIBE el output (`last_result_text`,
+# run_outcome.py:61) y lo usa SOLO para buscar marcadores de cuota (:91). La
+# regla 8 (:99), la que decide "hubo trabajo pese al cierre sucio", no lo mira.
+# Por eso la ejecucion 212 —19.593 chars de analisis tecnico entregado— quedo
+# etiquetada `cli_failure`, que el propio modulo define (:22) como "rc != 0 SIN
+# evidencia de trabajo".
+#
+# Y `outcome_reason_to_status` (:113), que ya mapea dirty_exit_after_work ->
+# needs_review, tiene CERO referencias de produccion (censo AST). El plan 254
+# escribio la respuesta correcta y nunca la cableo.
+
+
+def test_has_delivered_work_usa_evidencia_objetiva():
+    """G2: el trabajo se prueba con artefacto, no con el auto-reporte del agente."""
+    from services.run_outcome import WORK_EVIDENCE_MIN_CHARS, has_delivered_work
+
+    assert WORK_EVIDENCE_MIN_CHARS == 200
+    # Sin nada: no hay trabajo.
+    assert has_delivered_work() is False
+    assert has_delivered_work(output="   ") is False
+    assert has_delivered_work(output="x" * 199) is False
+    # Output real por encima del umbral.
+    assert has_delivered_work(output="x" * 200) is True
+    # Un archivo escrito alcanza aunque el output sea corto.
+    assert has_delivered_work(output="", artifact_count=1) is True
+    # Las señales clasicas se siguen respetando.
+    assert has_delivered_work(result_ok_seen=True) is True
+    assert has_delivered_work(ticket_already_terminal=True) is True
+
+
+def test_regla8_mira_el_trabajo_entregado_ejecucion_212():
+    """Reproduce la ejecucion 212: rc=1, sin result ok, 19.593 chars entregados.
+
+    Antes del fix devolvia 'cli_failure' -> 'error'. Es EL caso del operador:
+    el analisis tecnico se genero, se valido y se reporto como fallo.
+    """
+    from services.run_outcome import classify_outcome_reason
+
+    # Guard de PRESENCIA: sin trabajo, el veredicto duro NO cambia.
+    assert classify_outcome_reason(return_code=1, work_delivered=False) == "cli_failure"
+
+    reason = classify_outcome_reason(
+        return_code=1,
+        result_ok_seen=False,
+        stall_fired=False,
+        last_result_text="x" * 19593,
+        work_delivered=True,
+    )
+    assert reason == "dirty_exit_after_work", (
+        f"19.593 chars de trabajo entregado clasificados como {reason!r}"
+    )
+
+
+def test_stall_con_trabajo_entregado_no_es_cuelgue():
+    """Regla 5: el watchdog cerro una sesion ociosa que YA habia entregado."""
+    from services.run_outcome import classify_outcome_reason
+
+    assert classify_outcome_reason(
+        return_code=-15, stall_fired=True, work_delivered=False
+    ) == "stall_no_work"
+    assert classify_outcome_reason(
+        return_code=-15, stall_fired=True, work_delivered=True
+    ) == "stall_after_work"
+
+
+def test_reconciliar_estado_es_un_TECHO_nunca_un_ascenso():
+    """La taxonomia solo puede BAJAR a needs_review. Riel G1 + gate de calidad.
+
+    La ejecucion 210 tiene reason=clean_exit (la taxonomia diria 'completed')
+    pero su estado real es needs_review porque _evaluate_output_quality la
+    degrado por contrato. Una sustitucion la ascenderia de vuelta y destruiria
+    el gate de calidad. El techo la deja intacta.
+    """
+    from services.run_outcome import reconciliar_estado
+
+    # Rescata el falso ROJO (execs 186-189, 211, 212).
+    assert reconciliar_estado("error", "needs_review") == "needs_review"
+    # Tapa el falso VERDE (execs 190 y 213, vivos en produccion).
+    assert reconciliar_estado("completed", "needs_review") == "needs_review"
+    # NO asciende: preserva la degradacion por calidad (exec 210).
+    assert reconciliar_estado("needs_review", "completed") == "needs_review"
+    # Un error genuino sigue siendo error.
+    assert reconciliar_estado("error", "error") == "error"
+    # Jamas fabrica un verde.
+    for actual in ("error", "needs_review", "completed", "cancelled"):
+        for tax in ("completed", "needs_review", "error"):
+            assert reconciliar_estado(actual, tax) != "completed" or actual == "completed"
+
+
+def test_ningun_reason_con_trabajo_termina_en_completed_automatico():
+    """K5/K7: invariante duro. Stacky no declara exito por su cuenta."""
+    from services.run_outcome import outcome_reason_to_status
+
+    for reason in ("dirty_exit_after_work", "stall_after_work"):
+        assert outcome_reason_to_status(reason) == "needs_review"
+        assert outcome_reason_to_status(reason) != "completed"
+
+
+def test_outcome_reason_to_status_dejo_de_ser_codigo_muerto():
+    """K1: el censo AST de REFERENCIAS pasa de 0 a >=1 en produccion.
+
+    Se cuenta por REFERENCIA (Name/Attribute/ImportFrom) y no solo por Call,
+    porque una llamada por alias haria dar CERO a un censo de llamadas.
+    """
+    import ast
+    from pathlib import Path
+
+    backend = Path(__file__).resolve().parent.parent
+    prod = 0
+    control = 0
+    for path in backend.rglob("*.py"):
+        partes = path.parts
+        if "__pycache__" in partes or "venv" in partes or ".venv" in partes:
+            continue
+        if "tests" in partes or path.name.startswith("test_"):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+        except SyntaxError:
+            continue
+        for nodo in ast.walk(tree):
+            if isinstance(nodo, ast.FunctionDef):
+                continue  # la DEFINICION no es consumo
+            nombres: list[str] = []
+            if isinstance(nodo, ast.Name):
+                nombres = [nodo.id]
+            elif isinstance(nodo, ast.Attribute):
+                nombres = [nodo.attr]
+            elif isinstance(nodo, ast.ImportFrom):
+                nombres = [a.name for a in nodo.names]
+            if "outcome_reason_to_status" in nombres:
+                prod += 1
+            if "classify_outcome_reason" in nombres:
+                control += 1
+
+    # Guard de PRESENCIA: si el censo no ve lo que SI existe, esta roto y el
+    # assert de abajo pasaria por accidente.
+    assert control >= 4, f"el censo AST esta roto: vio {control} refs de control"
+    assert prod >= 1, "outcome_reason_to_status sigue sin consumidores de produccion"
+
+
+def test_codex_puede_producir_dirty_exit_after_work_sin_tocar_su_call_site():
+    """C1(b) — la derivacion desde `last_result_text` le da paridad GRATIS a codex.
+
+    codex_cli_runner.py:804 pasa `last_result_text` pero NO `result_ok_seen` ni
+    `work_delivered` (quedan en su default False). Antes de este plan eso hacia
+    que codex NUNCA pudiera producir `dirty_exit_after_work`: todo rc!=0 con
+    trabajo entregado caia en `cli_failure` -> `error`. Reproduce la forma EXACTA
+    de esa llamada.
+    """
+    from services.run_outcome import classify_outcome_reason
+
+    # Guard de PRESENCIA: con output corto sigue siendo un fallo real.
+    assert classify_outcome_reason(
+        return_code=1, stall_fired=False, stderr_excerpt="", last_result_text="ups",
+    ) == "cli_failure"
+
+    # Misma firma que codex_cli_runner.py:804, ahora con trabajo entregado.
+    assert classify_outcome_reason(
+        return_code=1,
+        stall_fired=False,
+        stderr_excerpt="",
+        last_result_text="x" * 5000,
+    ) == "dirty_exit_after_work"
+
+
+def test_un_cierre_sucio_con_trabajo_no_puede_terminar_en_completed():
+    """C3 — cierra la divergencia entre los dos traductores.
+
+    `_classify_run_outcome` manda `dirty_exit_after_work` a la familia
+    `success`, donde `_evaluate_output_quality` puede devolver 'completed'.
+    Sin el techo de F2, la MISMA razon daria 'completed' en Claude y
+    'needs_review' en Codex. Las ejecuciones 190 y 213 son ese falso verde,
+    vivo en produccion.
+    """
+    from services.claude_code_cli_runner import _REASON_TO_RUN_KIND
+    from services.run_outcome import outcome_reason_to_status, reconciliar_estado
+
+    for reason in ("dirty_exit_after_work", "stall_after_work"):
+        # La familia del runner efectivamente lo rutea como exito...
+        assert _REASON_TO_RUN_KIND[reason] == "success"
+        # ...y aun asi el techo impide el verde, venga de donde venga.
+        for estado_previo in ("completed", "error", "failed", "needs_review"):
+            final = reconciliar_estado(estado_previo, outcome_reason_to_status(reason))
+            assert final == "needs_review", (
+                f"{reason} desde {estado_previo!r} termino en {final!r}"
+            )
+
+
+def test_el_techo_esta_cableado_en_el_runner_de_claude():
+    """K1 en el sitio que importa: el runner CONSUME el traductor, no lo ignora.
+
+    Se verifica por AST sobre el archivo del runner (no por grep: un grep sobre
+    el comentario que explica el fix lo daria por cableado).
+    """
+    import ast
+    from pathlib import Path
+
+    runner = Path(__file__).resolve().parent.parent / "services" / "claude_code_cli_runner.py"
+    tree = ast.parse(runner.read_text(encoding="utf-8"))
+
+    simbolos: set[str] = set()
+    for nodo in ast.walk(tree):
+        if isinstance(nodo, ast.ImportFrom):
+            simbolos.update(a.name for a in nodo.names)
+        elif isinstance(nodo, ast.Name):
+            simbolos.add(nodo.id)
+        elif isinstance(nodo, ast.Attribute):
+            simbolos.add(nodo.attr)
+
+    # Guard de PRESENCIA: el censo ve lo que ya existia antes de este plan.
+    assert "classify_outcome_reason" in simbolos, "el censo AST del runner esta roto"
+    assert "outcome_reason_to_status" in simbolos, "el techo NO esta cableado"
+    assert "reconciliar_estado" in simbolos, "el reconciliador NO esta cableado"
+    assert "has_delivered_work" in simbolos, "el runner no computa la evidencia"

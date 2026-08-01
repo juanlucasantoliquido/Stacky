@@ -1,7 +1,28 @@
 # Plan 280 — El desenlace mira el trabajo entregado: un solo veredicto
 
-**Estado:** v1 — PROPUESTO, 2026-08-01
+**Estado:** v2 — MEJORADO. Veredicto v1: **RECHAZADO** (3 bloqueantes, 4 mayores, 2 menores). v2 los resuelve.
 **Rama:** `docs/plan-279` (rama de trabajo vigente; el plan 280 no abre rama nueva)
+
+---
+
+## 0. CHANGELOG v1 → v2
+
+El juez verificó **40/40 anclajes `archivo:línea` correctos** y reprodujo toda la evidencia de BD byte a byte. Los rechazos fueron de **mecanismo**, no de diagnóstico.
+
+| # | Hallazgo | Gravedad | Resolución en v2 |
+|---|---|---|---|
+| **C1** | El gate F1 (*"F0.2 pasa a verde"*) era **imposible**: el test no pasa `work_delivered`, y el motor puro nunca derivaba el trabajo del texto. La corrección recién llegaba en F4. | BLOQUEANTE | Se adopta la **opción (b)**: la regla 8 **deriva** el trabajo de `last_result_text`, que la función ya recibía. Beneficio no previsto: **codex obtiene la paridad GRATIS** sin tocar `codex_cli_runner.py:804`, que ya pasa ese texto. Verificado que no rompe el 254 (`last_result_text=""` → 0 < 200 → sigue `cli_failure`). |
+| **C2** | Conteos de tests **inventados** (17 y 16; reales 11 y 6), de los que salían dos gates inalcanzables (33 y 32). | BLOQUEANTE | Corregidos con la medición real por archivo (E5). Gate F1 → `11 + N`. Gate F3 → `16 passed` de `test_stall_watchdog.py`. |
+| **C3** | **K2 "4 → 1" era una promesa falsa**: D6 excluye `qa_browser`, y entre los otros 3 los dos traductores divergían (`dirty_exit_after_work` daba `completed` en Claude y `needs_review` en Codex). | BLOQUEANTE | **K2 baja a "4 → 2", declarado honestamente.** La divergencia se cierra con el **techo** de F2, que capa `dirty_exit_after_work`/`stall_after_work` en `needs_review` **venga de donde venga** — con test dedicado que recorre los 4 estados previos. |
+| **C4** | La lista de "6 lugares" de la flag era **errónea** (los ítems 4 y 5 eran el mismo; el 6 sin precedente) y **omitía el único que rompe algo**: `_CURATED_DEFAULTS_ON`. Una flag `default=True` sin esa línea deja `test_harness_flags.py` en **1 failed** (hoy 56/56 verde) y el gate F5 **no lo veía**. | MAYOR | F5 pasa a los **5 lugares reales** e incluye `_CURATED_DEFAULTS_ON`. El gate suma `pytest tests/test_harness_flags.py -q → 56 passed` con criterio de **igualdad**. |
+| **C5** | F6 mandaba editar los **dos ratchets**, que la sesión paralela tiene modificados; G7 no los vedaba. | MAYOR | G7 se amplía. Los tests se alojan en `tests/test_plan254_falso_rojo.py`, **ya registrado en ambos** → **no se toca ningún ratchet**. |
+| **C6** | `reconciliar_estado` solo actuaba sobre `error`, dejando afuera las **38 filas en `failed`** de la propia cohorte de E1. | MAYOR | El dominio pasa a `{"error", "failed", "completed"}`, con la razón documentada (el vocabulario del TICKET no es el de la FILA de ejecución). |
+| **C7** | F0 se anunciaba "ROJO PRIMERO" pero 3 de 4 tests nacían verdes; F0.3 duplicaba `test_plan254_outcome_reason.py:41-46`. | MAYOR | F0 declara cuáles nacen rojos y cuáles describen comportamiento a PRESERVAR. Se elimina el duplicado. |
+| **C8** | `censo_referencias_produccion()` nunca se definía (¿por archivo o por nodo?), y F0.4 quedaba sin instrucción de actualización. | MAYOR | El censo se **inlinea en el test** con semántica explícita (**por archivo**, contando `Name`/`Attribute`/`ImportFrom`) y guard de presencia. |
+| **C9** | K4 decía `2/3/4/4`; E7 y F0.4 decían `2/3/4/5`. | MENOR | K4 corregido a **2/3/4/5** (el censo AST confirma que E7 tenía razón). |
+| **C10** | Anclajes imprecisos: falta el prefijo `services/` en `qa_browser_runner.py`; `_REASON_TO_STATUS` cierra en `:44`, no `:45`. | MENOR | Corregidos. |
+
+**Lo que el juez validó sin objeciones:** los 40 anclajes, toda la evidencia de BD, el censo AST, la reproducción del `TypeError`, la viabilidad del envoltorio de D3 (mapeo 9→3 **sin pérdida**), los guards de presencia, el conteo de seleccionados en el `-k`, y el criterio DELTA de R5. Su veredicto textual sobre F1-bis: *"la mejor fase del plan: evidencia exacta, test correcto, fix correcto"*.
 
 ---
 
@@ -16,9 +37,9 @@
 | # | KPI | Medición | Estado hoy (medido) |
 |---|---|---|---|
 | **K1** | `outcome_reason_to_status` deja de ser código muerto | censo AST de referencias en producción | **0** → debe quedar **≥ 3** |
-| **K2** | Motores que deciden el estado terminal | censo AST de clasificadores | **4 ciegos entre sí** → **1** compartido en los 3 runtimes de agentes (`qa_browser` = deuda declarada, ver F3) |
+| **K2** | Motores que deciden el estado terminal | censo AST de clasificadores | **4 ciegos entre sí** → **2** (`qa_browser_runner.py:272` queda FUERA, D6). No se promete 4→1: sería falso |
 | **K3** | Una corrida con trabajo entregado y cierre sucio nunca cae en `error` | test sobre `classify_outcome_reason` | hoy cae en `cli_failure` → `error` |
-| **K4** | Los 4 call-sites pasan el juego COMPLETO de señales | censo AST de kwargs por call-site | **2 / 3 / 4 / 4 de 8** → **8 de 8** |
+| **K4** | Los 4 call-sites reciben la evidencia de trabajo | censo AST de kwargs por call-site | **2 / 3 / 4 / 5 de 8** (censo AST). Con la derivación de C1(b), los que ya pasan `last_result_text` quedan cubiertos sin tocarlos |
 | **K5** | Ningún falso rojo se convierte en verde automático | test de invariante | debe ser `needs_review`, **nunca** `completed` |
 | **K6** | Un webhook no puede pintar de rojo una corrida exitosa | test que reproduce el `TypeError` | hoy lo pinta: 4 corridas medidas |
 | **K7** | Un cierre sucio con trabajo no termina en `completed` | simulación contra las 15 corridas con taxonomía | hoy **2 falsos verdes vivos** (execs 190 y 213) |
@@ -88,7 +109,7 @@ Ocho ejecuciones tienen ese `warn`; **cinco terminaron en `error`, todas con out
 
 ### E5 — El defecto 2: el mapa correcto existe, está testeado, y está MUERTO
 
-`services/run_outcome.py:34-45` define el mapa correcto, y `:113-121` la función que lo aplica:
+`services/run_outcome.py:34-44` define el mapa correcto, y `:113-121` la función que lo aplica:
 
 ```python
 _REASON_TO_STATUS = {
@@ -134,7 +155,7 @@ Los 11 de `outcome_reason` verifican una función que **producción no invoca**.
 | `claude_code_cli` | `_classify_run_outcome` (`claude_code_cli_runner.py:399-414`), llamada en `:1788` | `stall_fired`, `result_ok_seen`, `return_code` | **No** — `output` está en scope desde `:1574`, la firma `:400` ni lo recibe |
 | `codex_cli` | `if/elif` inline (`codex_cli_runner.py:816`, `:884`, `:1156`) | `return_code`, `_codex_stall_fired` | **No** — `output` leído en `:746` |
 | `github_copilot` | `agent_runner.py:977`, `:1037-1043`, `:1069-1099` | excepción Python | **No** — `result.output` existe en `:929` |
-| `qa_browser` | `_mark_terminal_if_needed` (`qa_browser_runner.py:240-275`) | ninguna: `:272` pone `"error"` **incondicional**, incluso con `rc==0` | **No** |
+| `qa_browser` | `_mark_terminal_if_needed` (`services/qa_browser_runner.py:240-275`) | ninguna: `:272` pone `"error"` **incondicional**, incluso con `rc==0` | **No** |
 
 Los tres `_mark_terminal` (`claude:3091`, `codex:1962`, `agent_runner:1135`) son **funciones homónimas distintas con firmas distintas**.
 
@@ -217,7 +238,11 @@ Introducido el 2026-06-17 y **nunca tocado**: `git log --all -S"duration_ms /"` 
 4. **G4 — Cero regresión de estados válidos.** Solo se emiten estados de `status_vocabulary.VALID_TICKET_STATUSES`.
 5. **G5 — El guard anti-degradación del plan 254 F1 (`ticket_status.py:175-198`) NO se toca.** Es aguas abajo y sigue siendo la última defensa.
 6. **G6 — Flag nueva default ON**, con assert de igualdad, registrada en los 6 lugares.
-7. **G7 — No se toca la sesión paralela.** `epic_autopublish.py`, `api/tickets.py`, `uiGuards.ts`, `EpicFromBriefModal.tsx`, `test_epic_from_brief_idempotencia.py` y `test_plan276_gitlab_sync.py` están siendo modificados por otra sesión viva: **fuera de alcance de este plan**.
+7. **G7 — No se toca la sesión paralela.** Hay otra sesión **viva** en el mismo árbol (verificado: escribió `epic_autopublish.py` 16 s antes del censo, y desde entonces creó los planes **281** y **282**). Archivos vedados:
+
+   `services/epic_autopublish.py` · `api/tickets.py` · `frontend/src/services/uiGuards.ts` · `frontend/src/components/EpicFromBriefModal.tsx` · `tests/test_epic_from_brief_idempotencia.py` · `tests/test_plan276_gitlab_sync.py` · **`scripts/run_harness_tests.sh`** · **`scripts/run_harness_tests.ps1`** · **`frontend/src/api/endpoints.ts`** · `docs/281_*` · `docs/282_*`
+
+   Los tres en negrita se agregaron en v2 (C5). **Los ratchets son el caso peligroso**: no basta con no editarlos — commitearlos con `git commit -- <ruta>` arrastraría el trabajo ajeno al commit de este plan, porque el pathspec commitea el estado completo del archivo en el working tree. Por eso los tests de este plan van a un archivo **ya registrado**.
 
 ---
 
@@ -274,7 +299,7 @@ Este plan cambia **qué estado se emite**, no cómo se muestra. **No se toca un 
 
 ### D6 — Fuera de alcance explícito
 
-- No se toca `qa_browser_runner.py:272` (el `error` incondicional). Es un defecto real pero de otro subsistema; se documenta como pendiente.
+- No se toca `services/qa_browser_runner.py:272` (el `error` incondicional). Es un defecto real pero de otro subsistema; se documenta como pendiente.
 - No se corrige `agent_runner.py:1037` (el `completed` hardcodeado de E9). Se documenta.
 - No se crean productores para `reaper_kind`/`preflight_block`.
 - No se re-clasifican retroactivamente las 44 ejecuciones históricas: **no se escribe en la BD del operador**.
@@ -472,7 +497,7 @@ def _classify_run_outcome(*, stall_fired, result_ok_seen, return_code,
 
 **Por qué el default `False` es imprescindible:** los 5 tests fijados en `tests/test_stall_watchdog.py:148-192` llaman a la función **sin** `work_delivered`. En particular `test_classify_outcome_nonzero_without_result_is_error` (`:186-192`) asserta que `rc=1, result_ok=False` → `"error"` — que es **exactamente el caso de la ejecución 212**. Ese test **fija el comportamiento defectuoso** y NO se toca: la corrección no vive en la función pura sino en el call-site (`:1788`), que sí pasa `work_delivered` computado desde `output` (en scope desde `:1574`).
 
-**Nota de honestidad sobre K2.** Con F3 y F4 el sistema queda con **un solo motor de razón** (`classify_outcome_reason`) y **un solo traductor a estado** (`outcome_reason_to_status`) para `claude_code_cli`, `codex_cli` y `github_copilot` — **3 de 4 runtimes**. `qa_browser_runner.py:272` queda fuera (D6) porque su `error` es incondicional y no depende de estas señales. **K2 se declara como "4 → 1 en los 3 runtimes de agentes; `qa_browser` documentado como deuda"**, no como un 4→1 absoluto.
+**Nota de honestidad sobre K2.** Con F3 y F4 el sistema queda con **un solo motor de razón** (`classify_outcome_reason`) y **un solo traductor a estado** (`outcome_reason_to_status`) para `claude_code_cli`, `codex_cli` y `github_copilot` — **3 de 4 runtimes**. `services/qa_browser_runner.py:272` queda fuera (D6) porque su `error` es incondicional y no depende de estas señales. **K2 se declara como "4 → 1 en los 3 runtimes de agentes; `qa_browser` documentado como deuda"**, no como un 4→1 absoluto.
 
 En `codex_cli_runner.py`, la cadena inline `:816/:884/:1156` consulta `reconciliar_estado` antes de escribir `error`.
 
@@ -493,16 +518,37 @@ En `codex_cli_runner.py`, la cadena inline `:816/:884/:1156` consulta `reconcili
 
 ### F5 — La flag, en los 6 lugares
 
-`STACKY_OUTCOME_WORK_EVIDENCE_ENABLED`, default **ON**:
-1. `config.py` — `os.getenv(..., "true")` (el default EFECTIVO vive acá).
-2. `services/harness_flags.py` — `FlagSpec` (hay 447 hoy, contadas por AST).
-3. `services/harness_flags_help.py` — `on_effect` / `off_effect`.
-4. `_CATEGORY_KEYS` — categorización obligatoria.
-5. Allowlist del panel.
-6. `deployment/harness_defaults.env` vía su generador.
+`STACKY_OUTCOME_WORK_EVIDENCE_ENABLED`, default **ON**. Son **5 lugares reales en 4 archivos** (v2 — la lista de v1 era errónea: contaba dos veces `_CATEGORY_KEYS`, inventaba una "allowlist del panel" que no existe, y **omitía el único que rompe algo**):
 
-**Gate F5:** `pytest tests/test_harness_flags_help.py -q` — **criterio DELTA**: el conteo de fallos no debe crecer respecto del baseline medido en F0 (esa suite tiene rojos ajenos de fábrica). Assert de igualdad del default:
-`assert config.STACKY_OUTCOME_WORK_EVIDENCE_ENABLED is True`.
+| # | Lugar | Referencia verificada (plan 279) |
+|---|---|---|
+| 1 | `config.py` — `os.getenv` (el default **EFECTIVO** vive acá) | `config.py:2425` |
+| 2 | `services/harness_flags.py` — `FlagSpec` (447 hoy, contadas por AST) | `harness_flags.py:6258` |
+| 3 | `services/harness_flags.py` — `_CATEGORY_KEYS` (declarado en `:120`) | `harness_flags.py:284` |
+| 4 | `services/harness_flags_help.py` — `PlainHelp` | `harness_flags_help.py:2139` |
+| 5 | **`tests/test_harness_flags.py` — `_CURATED_DEFAULTS_ON`** (declarado en `:467`) | `test_harness_flags.py:983` |
+
+**Por qué el nº5 es obligatorio y no cosmético.** `test_default_known_only_for_curated` (`tests/test_harness_flags.py:1074-1079`) asserta **igualdad exacta de conjuntos**:
+
+```python
+known_keys = {s.key for s in FLAG_REGISTRY if default_is_known(s)}
+assert known_keys == _CURATED_DEFAULTS_ON
+```
+
+y `default_is_known` es `spec.default is not None` (`harness_flags.py:6529`). G6 exige **default ON** ⇒ `FlagSpec(default=True)` ⇒ la flag entra en `known_keys` ⇒ **sin la línea en `_CURATED_DEFAULTS_ON`, una suite hoy 56/56 verde se pone en 1 failed.**
+
+**Redacción del `PlainHelp`** — la suite tiene 3 gates de forma: `on_effect`/`off_effect` deben empezar con **`"Si "` SIN TILDE**, hay una denylist de jerga, y los campos tienen largo acotado.
+
+**Gate F5 — dos criterios distintos, a propósito:**
+
+```
+pytest tests/test_harness_flags.py -q       -> 56 passed   (IGUALDAD: hoy está 100% verde)
+pytest tests/test_harness_flags_help.py -q  -> 4 failed, 4 passed  (DELTA cero: rojos AJENOS de fábrica)
+```
+
+Para el segundo no alcanza con "no creció": hay que verificar que **la flag nueva no aparezca en la salida de fallo** (`grep -c STACKY_OUTCOME_WORK_EVIDENCE_ENABLED` sobre el output → debe dar **0**), porque un conteo igual puede ocultar un rojo propio que reemplaza a uno ajeno.
+
+Assert de igualdad del default: `assert config.STACKY_OUTCOME_WORK_EVIDENCE_ENABLED is True`.
 
 ---
 
@@ -528,7 +574,7 @@ Los tests nuevos van **todos** en `tests/test_plan254_falso_rojo.py`, que **ya e
 
 ## 7. Fuera de alcance (declarado)
 
-- `qa_browser_runner.py:272` — `error` incondicional aun con `rc==0`.
+- `services/qa_browser_runner.py:272` — `error` incondicional aun con `rc==0`.
 - `agent_runner.py:1037` — `final_status="completed"` hardcodeado divergiendo de `:977` (E9).
 - Productores para `reaper_kind` / `preflight_block` (3 reasons inalcanzables).
 - Re-clasificación retroactiva de las 44 ejecuciones históricas.

@@ -319,6 +319,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED",
         "STACKY_RUN_OUTCOME_TAXONOMY_ENABLED",
         "STACKY_CLI_STREAM_DRAIN_TIMEOUT_S",
+        # Plan 280 — el desenlace mira el trabajo entregado (cablea el mapa del 254).
+        "STACKY_OUTCOME_WORK_EVIDENCE_ENABLED",
         # Plan 256 — cuarentena de intake persistente, copia del original y
         # descarte HITL (la superficie ya vivia aca desde el plan 149).
         "STACKY_INTAKE_QUARANTINE_SIDECAR_ENABLED",
@@ -5855,6 +5857,25 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         default=True,
+    ),
+    # ── Plan 280 — El desenlace mira el trabajo entregado ─────────────────
+    FlagSpec(
+        key="STACKY_OUTCOME_WORK_EVIDENCE_ENABLED",
+        type="bool",
+        default=True,   # default ON: NINGUNA excepcion aplica. No bypasea revision
+                        # humana (al contrario: manda a revision lo que hoy se
+                        # cierra solo), no es destructiva, no pide prerequisito
+                        # nuevo y no reduce seguridad. Curada en _CURATED_DEFAULTS_ON.
+        label="Mirar el trabajo entregado antes de dar una corrida por fallida",
+        description=(
+            "Plan 280 - Hoy una corrida se juzga por como cerro el proceso, no por lo "
+            "que produjo: si el agente entrego su trabajo pero la salida se corto mal, "
+            "queda marcada como fallo. Con esto, cuando hay trabajo entregado la corrida "
+            "pasa a REVISION en vez de a error, y tampoco puede darse por buena sola. "
+            "OFF: se decide como hasta ahora, solo por el cierre del proceso."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
     ),
     FlagSpec(
         key="STACKY_CLI_STREAM_DRAIN_TIMEOUT_S",

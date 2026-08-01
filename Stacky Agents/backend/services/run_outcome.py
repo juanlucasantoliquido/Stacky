@@ -44,6 +44,71 @@ _REASON_TO_STATUS = {
 }
 
 
+# Plan 280 F1 — umbral de evidencia de trabajo. Es el MISMO que usa la consulta
+# que midio el defecto sobre la BD viva (44 corridas en 'error' con
+# length(output) > 200), y separa un output real de un eco de error.
+WORK_EVIDENCE_MIN_CHARS = 200
+
+
+def has_delivered_work(
+    *,
+    output: str = "",
+    artifact_count: int = 0,
+    result_ok_seen: bool = False,
+    ticket_already_terminal: bool = False,
+) -> bool:
+    """¿Hay evidencia OBJETIVA de que el agente entregó trabajo?
+
+    Riel G2: se prueba con el ARTEFACTO, no con el auto-reporte del agente. Un
+    agente que dice "terminé" sin escribir nada no entregó nada.
+
+    Las señales clásicas (`result_ok_seen`, `ticket_already_terminal`) se
+    siguen respetando: son evidencia válida, solo que no son la ÚNICA. El
+    aporte de este plan es que un output real también cuenta — que es lo que
+    faltaba cuando el drenaje del stream vence antes de leer el `result`
+    (claude_code_cli_runner.py:1559-1562) y `result_ok_seen` queda en False
+    pese a haber trabajo en disco.
+    """
+    if result_ok_seen or ticket_already_terminal:
+        return True
+    if artifact_count > 0:
+        return True
+    return len((output or "").strip()) >= WORK_EVIDENCE_MIN_CHARS
+
+
+# Estados desde los que la taxonomía PUEDE rescatar. Incluye 'failed' a
+# propósito: no está en `status_vocabulary.VALID_TICKET_STATUSES` (que es el
+# vocabulario del TICKET), pero sí es lo que los runners escriben en la FILA de
+# ejecución vía `_mark_terminal(status="failed")`
+# (claude_code_cli_runner.py:1829). La cohorte medida del defecto es
+# `status IN ('error','failed')` — 38 de esas 109 filas son 'failed', y dejarlas
+# afuera excluiría un tercio del rescate por construcción.
+_RESCATABLES = frozenset({"error", "failed", "completed"})
+
+
+def reconciliar_estado(actual: str, taxonomia: str) -> str:
+    """Aplica la taxonomía como TECHO sobre el estado ya decidido por el runner.
+
+    La taxonomía solo puede BAJAR a 'needs_review'. Jamás asciende nada.
+
+      - error       + needs_review -> needs_review  (rescata el falso ROJO)
+      - completed   + needs_review -> needs_review  (tapa el falso VERDE)
+      - needs_review + completed   -> needs_review  (NO asciende)
+
+    El último caso es el que obliga a que esto sea un techo y no una
+    sustitución: la ejecución 210 tiene `reason=clean_exit` (la taxonomía diría
+    'completed') pero su estado real es 'needs_review' porque
+    `_evaluate_output_quality` la degradó por contrato. Sustituir la
+    ascendería de vuelta y destruiría el gate de calidad.
+
+    Riel G1: esta función NUNCA devuelve 'completed' si `actual` no lo era ya.
+    Stacky no declara éxito por su cuenta.
+    """
+    if taxonomia == "needs_review" and actual in _RESCATABLES:
+        return "needs_review"
+    return actual
+
+
 def _has_quota_marker(*texts: str) -> bool:
     for text in texts:
         low = (text or "").lower()
@@ -62,6 +127,7 @@ def classify_outcome_reason(
     ticket_already_terminal: bool = False,
     reaper_kind: str | None = None,
     preflight_block: str | None = None,
+    work_delivered: bool = False,
 ) -> str:
     """Devuelve exactamente uno de OUTCOME_REASONS. Puro y determinístico.
 
@@ -76,11 +142,22 @@ def classify_outcome_reason(
       2. reaper_kind == "timeout_guardian"              → reaper_timeout
       3. reaper_kind no vacío (cualquier otro)          → reaper_heartbeat
       4. marcador de cuota en stderr o último result    → quota_exhausted
-      5. stall_fired y (result_ok o ticket terminal)    → stall_after_work
+      5. stall_fired y (result_ok o ticket terminal o work_delivered)
+                                                        → stall_after_work
       6. stall_fired                                    → stall_no_work
       7. return_code == 0                               → clean_exit
-      8. result_ok_seen o ticket_already_terminal       → dirty_exit_after_work
+      8. result_ok_seen o ticket_already_terminal o work_delivered
+                                                        → dirty_exit_after_work
       9. resto                                          → cli_failure
+
+    Plan 280 F1 — `work_delivered` entra en las reglas 5 y 8. Antes, esta
+    función RECIBÍA el output (`last_result_text`) y solo lo miraba para buscar
+    marcadores de cuota: la regla 8 decidía "hubo trabajo" mirando únicamente
+    proxies del proceso. Cuando el drenaje del stream vence, `result_ok_seen`
+    queda en False aunque el archivo ya esté escrito, y una corrida entregada
+    caía en `cli_failure` (ejecución 212: 19.593 chars → 'error').
+
+    El default `False` preserva a cualquier call-site no migrado (C9 del 254).
     """
     if preflight_block:
         return "preflight_blocked"
@@ -90,13 +167,22 @@ def classify_outcome_reason(
         return "reaper_heartbeat"
     if _has_quota_marker(stderr_excerpt, last_result_text):
         return "quota_exhausted"
-    if stall_fired and (result_ok_seen or ticket_already_terminal):
+    # Plan 280 F1 — el trabajo entregado, explícito o DERIVADO del texto que esta
+    # función ya recibía. La derivación es la que le da la corrección GRATIS a los
+    # call-sites que hoy pasan `last_result_text` pero no `work_delivered`
+    # (codex_cli_runner.py:804), sin tocar su código.
+    _trabajo = work_delivered or has_delivered_work(
+        output=last_result_text,
+        result_ok_seen=result_ok_seen,
+        ticket_already_terminal=ticket_already_terminal,
+    )
+    if stall_fired and _trabajo:
         return "stall_after_work"
     if stall_fired:
         return "stall_no_work"
     if return_code == 0:
         return "clean_exit"
-    if result_ok_seen or ticket_already_terminal:
+    if _trabajo:
         return "dirty_exit_after_work"
     return "cli_failure"
 

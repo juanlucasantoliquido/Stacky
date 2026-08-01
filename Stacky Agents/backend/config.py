@@ -2303,6 +2303,14 @@ class Config:
         "STACKY_TICKET_STATUS_NO_DOWNGRADE_ENABLED", "true").lower() in ("1", "true", "yes")
     STACKY_RUN_OUTCOME_TAXONOMY_ENABLED: bool = os.getenv(
         "STACKY_RUN_OUTCOME_TAXONOMY_ENABLED", "true").lower() in ("1", "true", "yes")
+    # ── Plan 280 — el desenlace mira el trabajo entregado ───────────────────
+    # El 254 dejo la taxonomia como ETIQUETA de metadata: `outcome_reason_to_status`
+    # tenia CERO consumidores de produccion. Esta flag cablea ese mapa como TECHO
+    # (solo baja a needs_review, nunca asciende) y hace que el clasificador mire
+    # el artefacto real y no solo proxies del proceso. Nace ON: es kill-switch.
+    # OFF = comportamiento byte-identico al previo.
+    STACKY_OUTCOME_WORK_EVIDENCE_ENABLED: bool = os.getenv(
+        "STACKY_OUTCOME_WORK_EVIDENCE_ENABLED", "true").lower() in ("1", "true", "yes")
     STACKY_CLI_STREAM_DRAIN_TIMEOUT_S: float = float(
         os.getenv("STACKY_CLI_STREAM_DRAIN_TIMEOUT_S", "15")
     )

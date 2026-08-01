@@ -396,8 +396,30 @@ def _spawn_claude_with_fallback(
     raise RuntimeError("_spawn_claude_with_fallback: no se pudo lanzar claude con ningún modelo")
 
 
+# Plan 280 F3 — mapa de los 9 reasons del motor compartido a las 3 familias que
+# este runner sabe rutear. Explícito y exhaustivo: sin esto, un modelo menor lo
+# resuelve de dos maneras. `dirty_exit_after_work` va a `success` para que el
+# output ENTRE al gate de calidad (_evaluate_output_quality) en vez de
+# descartarse; el techo de F2 después lo capa en `needs_review`.
+_REASON_TO_RUN_KIND: dict[str, str] = {
+    "clean_exit": "success",
+    "dirty_exit_after_work": "success",
+    "stall_after_work": "success",
+    "stall_no_work": "failed_stall",
+    "cli_failure": "error",
+    "quota_exhausted": "error",
+    "preflight_blocked": "error",
+    "reaper_timeout": "error",
+    "reaper_heartbeat": "error",
+}
+
+
 def _classify_run_outcome(
-    *, stall_fired: bool, result_ok_seen: bool, return_code: int | None
+    *,
+    stall_fired: bool,
+    result_ok_seen: bool,
+    return_code: int | None,
+    work_delivered: bool = False,
 ) -> str:
     """R1.2 — Clasifica el desenlace de un run claude_code_cli.
 
@@ -406,12 +428,25 @@ def _classify_run_outcome(
       trabajo: la sesión solo quedó ociosa, el trabajo ya estaba hecho).
     - ``failed_stall``: el watchdog disparó SIN un result ok → cuelgue real.
     - ``error``: exit code != 0 sin result ok → fallo del propio CLI.
+
+    Plan 280 F3 — UN SOLO MOTOR. Esta función ya no decide con reglas propias:
+    delega en `run_outcome.classify_outcome_reason` (el mismo que usan codex,
+    copilot y el completion gateway) y traduce con `_REASON_TO_RUN_KIND`.
+
+    `work_delivered` es OPCIONAL con default False a propósito: los 5 tests
+    fijados en `tests/test_stall_watchdog.py:148-192` llaman sin él y su
+    contrato (3 kwargs, 3 valores) se preserva byte a byte. La corrección del
+    falso rojo NO vive acá sino en el call-site, que sí computa la evidencia.
     """
-    if stall_fired and not result_ok_seen:
-        return "failed_stall"
-    if return_code == 0 or result_ok_seen:
-        return "success"
-    return "error"
+    from services.run_outcome import classify_outcome_reason
+
+    reason = classify_outcome_reason(
+        return_code=return_code,
+        result_ok_seen=result_ok_seen,
+        stall_fired=stall_fired,
+        work_delivered=work_delivered,
+    )
+    return _REASON_TO_RUN_KIND.get(reason, "error")
 
 
 def _user_message_line(text: str) -> str:
@@ -1785,10 +1820,26 @@ def _run_in_background(
         # R1.1/R1.2 — desenlace del run. Un stall SIN result terminal exitoso es
         # un cuelgue real → failed. Si hubo result(ok), el agente terminó su
         # trabajo y la sesión solo quedó ociosa → se trata como éxito.
+        # Plan 280 F4 — la evidencia OBJETIVA de trabajo entregado. `output` está
+        # en scope desde :1574 (unas 250 líneas más arriba) y hasta ahora nadie
+        # que decidiera el desenlace lo consultaba: solo se persistía.
+        _work_delivered = False
+        if config.STACKY_OUTCOME_WORK_EVIDENCE_ENABLED:
+            try:
+                from services.run_outcome import has_delivered_work
+
+                _work_delivered = has_delivered_work(
+                    output=output or "",
+                    result_ok_seen=bool(_result_ok_seen[0]),
+                )
+            except Exception:  # noqa: BLE001 — medir jamás rompe el cierre
+                logger.debug("[exec=%s] has_delivered_work falló", execution_id, exc_info=True)
+
         _outcome_kind = _classify_run_outcome(
             stall_fired=_stall_fired[0],
             result_ok_seen=_result_ok_seen[0],
             return_code=return_code,
+            work_delivered=_work_delivered,
         )
         # Plan 254 F2-bis — POR QUÉ terminó así, no solo que terminó mal.
         # Viaja en metadata_override de on_execution_end → metadata_json del
@@ -1804,7 +1855,10 @@ def _run_in_background(
                     stall_fired=bool(_stall_fired[0]),
                     stderr_excerpt=_stderr_excerpt(stderr_tail),
                     last_result_text=(output or "")[-4000:],
+                    work_delivered=_work_delivered,  # Plan 280 F4 — paridad de señales
                 )
+                # Plan 280 — trazabilidad: por qué el desenlace fue ese.
+                _outcome_meta["work_delivered"] = bool(_work_delivered)
                 # Plan 254 F3 — el drenaje del stream, medido (H-a de E1).
                 _outcome_meta["drain_timed_out"] = bool(_drain_timed_out)
                 metadata.update(_outcome_meta)
@@ -1874,6 +1928,29 @@ def _run_in_background(
                              log=log) == "needs_review" and final_status == "completed":
                 final_status = "needs_review"
                 log("warn", "assumption_overload → needs_review")
+            # Plan 280 F2 — el TECHO de la taxonomía. `outcome_reason_to_status`
+            # existía desde el plan 254 con el mapa correcto
+            # (dirty_exit_after_work / stall_after_work -> needs_review) y tenía
+            # CERO consumidores de producción: el estado lo decidía otro motor.
+            # Acá se cablea, y SOLO puede bajar a needs_review — nunca asciende,
+            # para no pisar la degradación por contrato de
+            # `_evaluate_output_quality` (caso de la ejecución 210).
+            if config.STACKY_OUTCOME_WORK_EVIDENCE_ENABLED and _outcome_meta.get("outcome_reason"):
+                try:
+                    from services.run_outcome import (
+                        outcome_reason_to_status,
+                        reconciliar_estado,
+                    )
+
+                    _techo = outcome_reason_to_status(_outcome_meta["outcome_reason"])
+                    _reconciliado = reconciliar_estado(final_status, _techo)
+                    if _reconciliado != final_status:
+                        log("warn",
+                            f"cierre sucio con trabajo entregado "
+                            f"({_outcome_meta['outcome_reason']}) → {_reconciliado}")
+                        final_status = _reconciliado
+                except Exception:  # noqa: BLE001 — el techo jamás rompe el cierre
+                    logger.debug("[exec=%s] techo 280 falló", execution_id, exc_info=True)
             # Plan 278 F3 — la autopublicación de la épica ya NO vive acá. Se
             # mudó al post-hook runtime-agnóstico services/epic_autopublish.py,
             # que corre en ticket_status.on_execution_end (:2016 más abajo) y

@@ -2136,6 +2136,13 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         example="Le pedis «hace el despliegue en produccion»: apagada, te muestra que haria y te lleva a la pantalla; activada, lo hace despues de tu confirmacion.",
     ),
     # ── Plan 279 — Copiloto de pipelines: un solo hilo conversacional ─────
+    # ── Plan 280 — El desenlace mira el trabajo entregado ─────────────────
+    "STACKY_OUTCOME_WORK_EVIDENCE_ENABLED": PlainHelp(
+        what="Mira si el agente dejo trabajo hecho antes de dar una corrida por fallida, en vez de fijarse solo en como cerro el programa.",
+        on_effect="Si la activas: una corrida que entrego su trabajo queda para revisar en lugar de aparecer como error, y tampoco se da por buena sola.",
+        off_effect="Si la apagas: se decide como hasta ahora, mirando unicamente como termino el programa.",
+        example="El agente escribio el analisis entero y la salida se corto al final: antes figuraba como error y el trabajo quedaba escondido; ahora te queda para revisar.",
+    ),
     "STACKY_PIPELINE_COPILOT_ENABLED": PlainHelp(
         what="Te deja crear una pipeline describiendola en castellano en un solo lugar: el copiloto arma el borrador, lo revisa, explica que va a correr y te dice que variables faltan.",
         on_effect="Si la activas: aparece la seccion 'Copiloto de pipelines' y hacés todo el recorrido sin ir saltando entre cuatro pestanias.",

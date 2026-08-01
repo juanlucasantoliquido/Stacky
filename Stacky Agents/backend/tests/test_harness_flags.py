@@ -981,6 +981,10 @@ _CURATED_DEFAULTS_ON = {
     # REAL del operador) y por eso su FlagSpec no declara `default=`. Este assert
     # es de igualdad de conjuntos: agregarla acá dejaría el test en rojo.
     "STACKY_PIPELINE_COPILOT_ENABLED",             # Plan 279 — lee, planea, simula y explica
+    # Plan 280 — el desenlace mira el trabajo entregado. Entra acá porque declara
+    # `default=True` y este assert es de IGUALDAD de conjuntos: sin esta línea, el
+    # test `test_default_known_only_for_curated` se pone rojo.
+    "STACKY_OUTCOME_WORK_EVIDENCE_ENABLED",        # Plan 280 — manda a revisión, no cierra solo
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED",          # Plan 268 — explorador read-only del grafo
     "STACKY_RUN_VERDICT_ENABLED",                  # Plan 269 — veredicto; no cambia estados
     "STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED",      # Plan 269 — solo lee evidencia ya producida

@@ -85,6 +85,26 @@ export function debeRefrescarQueriesDeTickets(
   return Boolean((data.created ?? 0) || (data.updated ?? 0) || (data.removed ?? 0));
 }
 
+/**
+ * Plan 281 F2 (capa 1) — las cabeceras del POST a `/api/tickets/sync-v2`.
+ *
+ * Sin `Content-Type: application/json` el navegador rellena
+ * `text/plain;charset=UTF-8` para un body string, y Flask
+ * `request.get_json(silent=True)` devuelve `None`: el body se descarta ENTERO.
+ * `_request_project_name()` (`api/tickets.py`) da `None` y el ruteo del backend
+ * cae al proyecto ACTIVO global en vez del que el operador está mirando. De ahí
+ * el cartel intermitente "El proyecto 'X' no usa Azure DevOps" cada 45 s.
+ *
+ * Vive a nivel de MÓDULO y exportada, no como closure del `mutationFn`: en este
+ * repo no hay RTL ni jsdom, así que una closure sería intesteable. Mismo patrón
+ * que `debeRefrescarQueriesDeTickets` (Plan 276 F6/C3).
+ */
+export function cabecerasDeSync(
+  trigger: "manual" | "auto_poll" | "startup",
+): Record<string, string> {
+  return { "X-Stacky-Trigger": trigger, "Content-Type": "application/json" };
+}
+
 export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSyncResult {
   const {
     intervalMs = DEFAULT_INTERVAL_MS,
@@ -119,9 +139,9 @@ export function useTicketSync(options: UseTicketSyncOptions = {}): UseTicketSync
   // Mutacion de sync
   const syncMutation = useMutation({
     mutationFn: (trigger: "manual" | "auto_poll" | "startup" = "auto_poll") => {
-      const headers: Record<string, string> = {
-        "X-Stacky-Trigger": trigger,
-      };
+      // Plan 281 F2 — se consume la función de módulo para que el test pruebe
+      // ESTAS cabeceras y no una copia muerta.
+      const headers: Record<string, string> = cabecerasDeSync(trigger);
       return fetch(
         `${apiBase}/api/tickets/sync-v2`,
         {

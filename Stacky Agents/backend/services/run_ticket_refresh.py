@@ -40,11 +40,22 @@ def refresh_ticket_snapshot(ticket_id: int | None) -> dict:
         ado_id = ticket.ado_id
         if not ado_id or ado_id <= 0:
             return {"refreshed": False, "reason": "no_ado_id"}
-        tracker_type = ticket.tracker_type or "azure_devops"
-        if tracker_type != "azure_devops":
-            return {"refreshed": False, "reason": "non_ado_tracker"}
         stacky_project_name = ticket.stacky_project_name
         tracker_project = ticket.project
+
+    # Plan 281 F6 — el guard sale del `with` y pasa a preguntar por el CONFIG DEL
+    # PROYECTO, no por la columna. `Ticket.tracker_type` tiene default
+    # 'azure_devops' y las filas creadas antes del fix del publicador de épica
+    # nacieron con ese default AUN SIENDO de GitLab: el guard viejo las dejaba
+    # pasar y terminaban en `build_ado_client` con AdoConfigError. El resolvedor
+    # canónico ya documenta por qué no se mira la columna (project_context.py).
+    # Contrato preservado: el `reason` sigue siendo exactamente "non_ado_tracker",
+    # y `tracker_is_azure_devops` es fail-closed a True sin nombre de proyecto, así
+    # que un ticket sin `stacky_project_name` se comporta igual que hoy.
+    from services.project_context import tracker_is_azure_devops
+
+    if not tracker_is_azure_devops(stacky_project_name):
+        return {"refreshed": False, "reason": "non_ado_tracker"}
 
     try:
         from services.project_context import build_ado_client

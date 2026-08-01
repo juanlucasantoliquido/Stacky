@@ -290,7 +290,13 @@ def _request_project_name() -> str | None:
     if project:
         return project
     if request.method in {"POST", "PUT", "PATCH"}:
-        body = request.get_json(silent=True) or {}
+        # Plan 281 F2 (capa 2) — `force=True` parsea el cuerpo aunque el cliente no
+        # haya declarado Content-Type. `silent=True` mantiene el contrato: cuerpo
+        # vacío o no-JSON devuelve None y la función cae a `return None`, como antes.
+        # Verificado en Flask 3.0.3 (el del venv): body basura + force=True => None.
+        # Se arregla acá ADEMÁS del header del frontend a propósito: el próximo
+        # `fetch` que alguien copie y pegue se va a volver a olvidar el header.
+        body = request.get_json(silent=True, force=True) or {}
         body_project = (body.get("project") or "").strip()
         return body_project or None
     return None
@@ -1152,6 +1158,21 @@ def _sync_via_provider_or_ado(project_name: str | None) -> dict:
     # proyecto GitLab al branch ADO en vez de levantar CapabilityUnavailable.
     if provider is None:
         ctx_sync = resolve_project_context(project_name)          # ya importado a nivel de módulo
+        if ctx_sync is None and bool(
+            getattr(config.config, "STACKY_TRACKER_ROUTING_STRICT_ENABLED", True)
+        ):
+            # Plan 281 F3 — ANTES, un contexto irresoluble caía por el `or` a
+            # "azure_devops" (el `getattr` se evalúa ANTES del chequeo de None) y
+            # terminaba en el branch ADO del final de la función, que levanta
+            # AdoConfigError("...no usa Azure DevOps") aunque el proyecto sea
+            # GitLab. "No pude resolver" NO es "es Azure DevOps": es un error
+            # propio, con su mensaje accionable.
+            # [C1] `config` en tickets.py es el MODULO -> `config.config`.
+            raise TrackerConfigError(
+                f"No se pudo resolver el contexto del proyecto "
+                f"'{project_name or '<activo>'}'. Revisá que el proyecto exista y "
+                f"tenga 'issue_tracker' configurado en Configuración del proyecto."
+            )
         tipo = (getattr(ctx_sync, "tracker_type", None) or "azure_devops").strip().lower()
         if ctx_sync is not None and tipo != "azure_devops":
             try:
@@ -7097,24 +7118,52 @@ class _PublishedEpic(NamedTuple):
     rev: int | None = None   # Plan 153 F4 — rev que ya trae la respuesta del POST de creación
 
 
-def _persist_epic_ticket(ado_id: int, title: str, description_html: str, url: str, project_name: str | None) -> None:
-    """Persiste (idempotentemente) el ticket local de la Épica creada en ADO."""
+def _persist_epic_ticket(
+    ado_id: int,
+    title: str,
+    description_html: str,
+    url: str,
+    project_name: str | None,
+    *,
+    external_id: int | None = None,
+    tracker_type: str = "azure_devops",
+) -> None:
+    """Persiste (idempotentemente) el ticket local de la Épica creada en el tracker.
+
+    LA CLAVE ES LA TERNA `(stacky_project_name, tracker_type, external_id)` — la
+    misma del UNIQUE `ux_tickets_stacky_tracker_external` (models.py:77-83) y la
+    misma que usa el sync (`gitlab_sync.py:162-170`, `ado_sync.py:150-151`) —, NO
+    `ado_id` pelado.
+
+    Con `ado_id` pelado y sin escribir `tracker_type`, la fila nacía con el default
+    de la columna (`azure_devops`, models.py:49) aun en un proyecto GitLab. El sync
+    de GitLab busca por `(proyecto, 'gitlab', external_id)` y por lo tanto NUNCA la
+    encontraba: daba de alta una SEGUNDA fila del MISMO issue y la épica salía
+    duplicada en el grafo. Además `ado_id` sin proyecto en el WHERE cruzaba
+    proyectos distintos (los iid de GitLab se repiten entre proyectos).
+    """
+    ext = int(external_id) if external_id is not None else int(ado_id)
     try:
         with session_scope() as session:
             existing = (
                 session.query(Ticket)
-                .filter(Ticket.ado_id == ado_id)
+                .filter(
+                    Ticket.stacky_project_name == project_name,
+                    Ticket.tracker_type == tracker_type,
+                    Ticket.external_id == ext,
+                )
                 .first()
             )
             if existing is None:
                 ticket = Ticket(
                     ado_id=ado_id,
-                    external_id=ado_id,
+                    external_id=ext,
                     title=title,
                     description=description_html,
                     work_item_type="Epic",
                     project=project_name or "",
                     stacky_project_name=project_name,
+                    tracker_type=tracker_type,
                     ado_url=url,
                 )
                 session.add(ticket)
@@ -7150,10 +7199,29 @@ def _publish_epic_to_ado(
         wi = _provider.create_item(
             _tracker_item_from_kwargs(work_item_type="Epic", title=title, description=clean_html)
         )
-        ado_id: int = wi["id"]
+        # LOS PROVIDERS NO-ADO NORMALIZAN LOS IDS A `str` (gitlab_provider.py:131-132)
+        # y GitLab expone DOS números distintos:
+        #   - `iid`: el del proyecto, el que ve el operador y el que el sync guarda
+        #     en `Ticket.ado_id` (gitlab_sync.py:145);
+        #   - `id`: el global, que va en `Ticket.external_id` (gitlab_sync.py:144).
+        # Devolver el `id` global en crudo rompía DOS cosas a la vez:
+        #   1. el sello `metadata["epic_ado_id"]` quedaba string, y el guard del modal
+        #      (`typeof md.epic_ado_id === "number"`, EpicFromBriefModal.tsx:223) NO lo
+        #      reconocía ⇒ el frontend republicaba y salía una SEGUNDA épica REAL en
+        #      GitLab;
+        #   2. la fila local quedaba con el id global en `ado_id`, que no es el número
+        #      con el que el sync la va a volver a encontrar.
+        # ADO no trae `iid` y su `id` ya es int, así que el camino ADO no cambia.
+        ado_id: int = int(wi.get("iid") or wi["id"])
+        external_id: int = int(wi.get("id") or ado_id)
+        tracker_type: str = str(getattr(_provider, "name", None) or "azure_devops")
         wi_title: str = wi.get("fields", {}).get("System.Title", title)
         wi_url: str = (
             wi.get("_links", {}).get("html", {}).get("href")
+            # `web_url` es el permalink que ya devolvió el tracker. Va ANTES de
+            # `item_url`, que además puede devolver None si los deep links están
+            # apagados (gitlab_provider.py:292).
+            or wi.get("web_url")
             or _provider.item_url(str(ado_id))
         )
     else:
@@ -7163,14 +7231,19 @@ def _publish_epic_to_ado(
             title=title,
             description=clean_html,
         )
-        ado_id = wi["id"]
+        ado_id = int(wi["id"])
+        external_id = ado_id
+        tracker_type = "azure_devops"
         wi_title = wi.get("fields", {}).get("System.Title", title)
         wi_url = (
             wi.get("_links", {}).get("html", {}).get("href")
             or client.work_item_url(ado_id)
         )
 
-    _persist_epic_ticket(ado_id, wi_title, clean_html, wi_url, project_name)
+    _persist_epic_ticket(
+        ado_id, wi_title, clean_html, wi_url, project_name,
+        external_id=external_id, tracker_type=tracker_type,
+    )
     _epic_brief_save(ado_id, brief, project_name)
     logger.info("epic publish: Epic creada ado_id=%s title=%r project=%s", ado_id, wi_title, project_name)
     _rev = wi.get("rev")  # Plan 153 F4 — la respuesta del POST ya trae el rev
@@ -7903,15 +7976,68 @@ def publish_issue_phase_from_run(
                 "posted": False, "reason": f"error:{exc}"}
 
 
+def _epic_ya_publicada_payload(ado_id: int, project_name: str | None, title_fallback: str) -> dict:
+    """Reconstruye la respuesta del endpoint para una épica que YA existe.
+
+    El título y la URL salen del ticket local que dejó la publicación anterior
+    (`_persist_epic_ticket`). Si esa fila no está —el operador la borró, o la
+    épica se publicó desde otra máquina— se devuelven los datos del pedido en vez
+    de fallar: el contrato con el frontend (endpoints.ts:474) exige las 5 claves.
+    """
+    titulo, url = title_fallback, None
+    try:
+        with session_scope() as session:
+            q = session.query(Ticket).filter(Ticket.ado_id == int(ado_id))
+            pf = _ticket_project_filter(project_name)
+            if pf is not None:
+                q = q.filter(pf)
+            fila = q.first()
+            if fila is not None:
+                titulo = fila.title or title_fallback
+                url = fila.ado_url
+    except Exception:  # noqa: BLE001 — nunca convertir un 200 en un 500
+        logger.warning("create_epic_from_brief: no se pudo leer el ticket local de %s",
+                       ado_id, exc_info=True)
+    return {
+        "ok": True,
+        "ado_id": int(ado_id),
+        "work_item_type": "Epic",
+        "title": titulo,
+        "url": url,
+        "already_published": True,
+    }
+
+
 @bp.post("/epics/from-brief")
 def create_epic_from_brief():
-    """Plan 38 B0 — Crea una Épica en ADO a partir de un brief de negocio.
+    """Plan 38 B0 — Crea una Épica en el tracker a partir de un brief de negocio.
 
-    Body: { title, description_html, brief, project_name, confirm: true }
+    Body: { title, description_html, brief, project_name, confirm: true, execution_id? }
     Response 201: { ado_id, work_item_type, title, url }
+    Response 200: idem + already_published:true — la épica de ESA run ya existía.
 
     Human-in-the-loop duro: confirm debe ser exactamente true.
     Feature gate: STACKY_EPIC_FROM_BRIEF_ENABLED (default true).
+
+    IDEMPOTENCIA (obligatoria: este endpoint y el post-hook
+    `services/epic_autopublish.py` son DOS escritores del MISMO hecho).
+
+    La clave es `execution_id`, materializada en el SELLO que ya existe
+    (`AgentExecution.metadata["epic_ado_id"]`). NO es el hash del brief:
+    regenerar con el mismo brief es un caso LEGÍTIMO —el operador reintenta
+    cuando la primera épica salió narrada— y un hash lo deduplicaría mal,
+    devolviéndole la épica basura.
+
+    Orden: (1) ¿hay sello? → 200 con la épica existente, sin tocar el tracker;
+    (2) claim ATÓMICO compartido con el post-hook; el que pierde no publica;
+    (3) publico y sello en la MISMA clave que el hook lee, o el hook publicaría
+    una segunda.
+
+    TOCTOU RESIDUAL, declarado: si el que gana el claim todavía no selló, el que
+    pierde no tiene qué devolver y responde 409 `publish_in_progress`. No se
+    resuelve sin bloquear el request; el cliente reintenta y cae en (1). Sin
+    `execution_id` (cliente viejo, script) NO hay idempotencia: se publica como
+    antes.
     """
     from config import config as _cfg
 
@@ -7936,6 +8062,36 @@ def create_epic_from_brief():
         return jsonify({"ok": False, "error": "missing_description", "message": "El campo 'description_html' es obligatorio."}), 400
 
     try:
+        execution_id = int(body.get("execution_id"))
+    except (TypeError, ValueError):
+        execution_id = None
+
+    from services import epic_autopublish as _autopub
+
+    claimed = False
+    if execution_id is not None:
+        sellado = _autopub.sealed_work_item_id(execution_id)
+        if sellado is not None:
+            logger.info("create_epic_from_brief: run %s ya publicó la épica %s — idempotente",
+                        execution_id, sellado)
+            return jsonify(_epic_ya_publicada_payload(sellado, project_name, title)), 200
+
+        if not _autopub.claim_publication(execution_id):
+            # Otro escritor (el post-hook, u otro POST simultáneo) va a publicar.
+            sellado = _autopub.sealed_work_item_id(execution_id)
+            if sellado is not None:
+                return jsonify(_epic_ya_publicada_payload(sellado, project_name, title)), 200
+            logger.warning("create_epic_from_brief: publicación en curso para la run %s",
+                           execution_id)
+            return jsonify({
+                "ok": False,
+                "error": "publish_in_progress",
+                "message": ("Otra publicación de esta misma épica está en curso. "
+                            "Reintentá en unos segundos."),
+            }), 409
+        claimed = True
+
+    try:
         published = _publish_epic_to_ado(
             description_html=description_html,
             brief=brief,
@@ -7943,10 +8099,22 @@ def create_epic_from_brief():
             title=title,
         )
     except (_AdoApiError, _AdoConfigError, ProjectContextError) as exc:
+        # El claim se DEVUELVE: no hay épica, así que el reintento (del operador o
+        # del post-hook) tiene que poder volver a tomarlo.
+        if claimed:
+            _autopub.release_claim(execution_id)
         status = getattr(exc, "status_code", None)
         http_status = 502 if (status is None or status >= 500) else 400
         logger.error("create_epic_from_brief: ADO error: %s", exc)
         return jsonify({"ok": False, "error": "ado_error", "message": str(exc)}), http_status
+    except Exception:
+        if claimed:
+            _autopub.release_claim(execution_id)
+        raise
+
+    if execution_id is not None:
+        # En la MISMA clave que lee el post-hook (epic_autopublish.py:326-328).
+        _autopub.seal_published(execution_id, published.ado_id)
 
     return jsonify({
         "ok": True,

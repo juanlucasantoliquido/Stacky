@@ -166,6 +166,40 @@ def _startup_sync(logger) -> None:
 
     else:
         # Azure DevOps
+        # Plan 281 F4 — ANTES, `build_ado_client(project_name=active)` levantaba
+        # AdoConfigError para TODO proyecto no-ADO y el `except AdoConfigError` de
+        # más abajo lo tragaba como warning: los proyectos GitLab NUNCA se
+        # sincronizaban al arrancar. `_startup_sync` discrimina jira/mantis/resto y
+        # GitLab caía en este `else` — es el patrón "ciego a GitLab".
+        # `config` acá es la INSTANCIA (from config import config, :34) — nota [C1].
+        from services.project_context import tracker_is_azure_devops
+        if (
+            active
+            and getattr(config, "STACKY_TRACKER_ROUTING_STRICT_ENABLED", True)
+            and not tracker_is_azure_devops(active)
+        ):
+            try:
+                from services.tracker_provider import get_tracker_provider
+                from services.gitlab_sync import sync_gitlab_tickets
+                _prov = get_tracker_provider(active)
+                if getattr(_prov, "name", "") == "gitlab":
+                    _r = sync_gitlab_tickets(active, provider=_prov)
+                    logger.info("sync GitLab ok al arranque: project=%s %s", active, _r)
+                else:
+                    logger.info(
+                        "sync de arranque omitido: el tracker '%s' de '%s' todavía no "
+                        "tiene sync propio", getattr(_prov, "name", "?"), active,
+                    )
+            except Exception:
+                # El `except` amplio se mantiene A PROPÓSITO: el arranque del backend
+                # nunca puede caerse por un sync. Pero `logger.exception` (traza
+                # completa), no `logger.warning` (mensaje pelado): la diferencia
+                # entre tragar y registrar.
+                logger.exception("sync de arranque no-ADO falló (continuando)")
+            # Con este return un proyecto GitLab deja de tocar el breaker "ado_sync"
+            # en el arranque: la key ado_breaker_project(active) mezclaba el estado
+            # de degradación de dos proveedores distintos.
+            return
         active_ctx = None
         if active:
             try:

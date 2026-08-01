@@ -4,6 +4,7 @@ import {
   canGenerateEpic,
   nextConfirmState,
   restoreConsoleDecision,
+  sealedWorkItemId,
   shouldCloseOnBackdrop,
   toggleNavTab,
 } from "./uiGuards";
@@ -108,5 +109,53 @@ describe("toggleNavTab (plan 136 F0)", () => {
 describe("ACTIVE_RUN_STATUSES (plan 136 F0 A2 — sentinela de contrato con plan 134)", () => {
   it("congela el set de estados vivos", () => {
     expect([...ACTIVE_RUN_STATUSES].sort()).toEqual(["preparing", "queued", "running"]);
+  });
+});
+
+describe("sealedWorkItemId — el guard anti-doble-publicación de la épica", () => {
+  it("sello numérico (ADO) → lo devuelve", () => {
+    expect(sealedWorkItemId({ epic_ado_id: 1115 })).toBe(1115);
+  });
+  it("sello STRING (GitLab estringa los ids) → lo devuelve igual, no null", () => {
+    // Éste es el caso que producía la épica duplicada: con `typeof === "number"`
+    // el guard daba null, el modal creía que nadie había publicado y publicaba
+    // una SEGUNDA épica real en GitLab.
+    expect(sealedWorkItemId({ epic_ado_id: "1115" })).toBe(1115);
+  });
+  it("sello de Issue (issue_ado_id) → también cuenta como publicado", () => {
+    expect(sealedWorkItemId({ issue_ado_id: 42 })).toBe(42);
+  });
+  it("sin sello → null", () => {
+    expect(sealedWorkItemId({ runtime: "claude_code_cli" })).toBeNull();
+  });
+  it("metadata ausente → null", () => {
+    expect(sealedWorkItemId(undefined)).toBeNull();
+    expect(sealedWorkItemId(null)).toBeNull();
+  });
+  it("basura no numérica → null (no se inventa un id)", () => {
+    expect(sealedWorkItemId({ epic_ado_id: "" })).toBeNull();
+    expect(sealedWorkItemId({ epic_ado_id: "  " })).toBeNull();
+    expect(sealedWorkItemId({ epic_ado_id: "no-es-un-id" })).toBeNull();
+    expect(sealedWorkItemId({ epic_ado_id: null })).toBeNull();
+    expect(sealedWorkItemId({ epic_ado_id: 0 })).toBeNull();
+    expect(sealedWorkItemId({ epic_ado_id: Number.NaN })).toBeNull();
+  });
+});
+
+// ── Plan 281 F2 (capa 1) — el header que hacía desaparecer el body ───────────
+//
+// `cabecerasDeSync` vive en el hook `useTicketSync` pero se prueba acá porque en
+// este repo NO hay RTL ni jsdom: la lógica testeable de UI va en `.ts` puro.
+describe("cabecerasDeSync (plan 281 F2)", () => {
+  it("declara Content-Type application/json", async () => {
+    const { cabecerasDeSync } = await import("../hooks/useTicketSync");
+    // Sin esto el navegador manda text/plain y Flask descarta el body ENTERO:
+    // el backend nunca recibe {"project": "..."} y rutea por el proyecto activo
+    // global en vez del que el operador mira.
+    expect(cabecerasDeSync("auto_poll")["Content-Type"]).toBe("application/json");
+  });
+  it("conserva el trigger", async () => {
+    const { cabecerasDeSync } = await import("../hooks/useTicketSync");
+    expect(cabecerasDeSync("startup")["X-Stacky-Trigger"]).toBe("startup");
   });
 });

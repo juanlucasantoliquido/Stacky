@@ -105,11 +105,31 @@ def _do_project_sync(project: str, tracker_type: str, ado_id=None) -> None:
                     logger.debug("upsert_single best-effort falló", exc_info=True)
             result = ado_sync.sync_tickets(client=client, project_name=project) or {}
         else:
-            # Jira y Mantis NO aceptan project_name: su entrada es tracker_config.
-            from importlib import import_module
+            # Plan 281 F5 — el dispatch dinámico asume la firma
+            # `sync_tickets(tracker_config=...)`, que GitLab NO tiene: su entrada es
+            # `sync_gitlab_tickets(project_name, provider=...)` (services/gitlab_sync.py,
+            # única entrada de su `__all__`). Antes esto era un AttributeError que se
+            # tragaba el `except Exception` de más abajo: el sync post-completación
+            # NUNCA corría en GitLab, en silencio.
+            # Se elige la rama EXPLÍCITA sobre un alias silencioso en gitlab_sync:
+            # un alias haría que el próximo tracker repita el mismo problema.
+            if tracker_type == "gitlab":
+                from services.gitlab_sync import sync_gitlab_tickets
 
-            mod = import_module(f"services.{tracker_type}_sync")
-            result = mod.sync_tickets(tracker_config=_tracker_config_for(project)) or {}
+                result = sync_gitlab_tickets(project) or {}
+            else:
+                # Jira y Mantis NO aceptan project_name: su entrada es tracker_config.
+                from importlib import import_module
+
+                mod = import_module(f"services.{tracker_type}_sync")
+                if not hasattr(mod, "sync_tickets"):
+                    # Ruidoso a propósito: un tracker nuevo sin la firma esperada tiene
+                    # que APARECER en el log, no desaparecer.
+                    raise AttributeError(
+                        f"services.{tracker_type}_sync no expone sync_tickets(); "
+                        f"agregá su rama explícita en _do_project_sync"
+                    )
+                result = mod.sync_tickets(tracker_config=_tracker_config_for(project)) or {}
         brk.record_success(integ, bkey)
         _last_sync_ts[project] = time.time()
         _log_sync(project, tracker_type, result, breaker_open=False)

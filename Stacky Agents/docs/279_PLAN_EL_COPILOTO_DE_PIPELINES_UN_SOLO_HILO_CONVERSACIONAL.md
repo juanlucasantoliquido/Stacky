@@ -1,9 +1,62 @@
 # Plan 279 — El copiloto de pipelines: un solo hilo conversacional
 
-**Estado:** v1 (PROPUESTO — sin criticar)
+**Estado:** v2 (MEJORADO — criticado). Veredicto v1: **RECHAZADO** (4 bloqueantes). v2 los resuelve.
 **Rama:** `docs/plan-279`
 **Origen:** pedido del operador (2026-08-01): rediseñar la creación y gestión de pipelines como experiencia *agentic-first*.
 **Tipo:** orquestación de capacidades existentes. **NO** reimplementa generación, lint, diff, auditoría, preflight ni matriz de entornos.
+**Juez v2: subagente independiente, misma corrida, contexto limpio**
+
+## CHANGELOG v1 -> v2
+
+Todo lo de abajo se verificó **abriendo los archivos reales** y, donde se podía, **ejecutando el gate**.
+
+| C# | Sev | Qué estaba mal en v1 | Cómo se resolvió en v2 |
+|----|-----|----------------------|------------------------|
+| **C1** | BLOQ | Criterios mutuamente insatisfacibles: F0 caso 4 exige `writes == 8`, y `tests/test_devops_action_catalog.py:177` exige `len(escrituras) == 7` (**igualdad**, medido). Los criterios "22 passed" (F3) y "115 passed, 0 failed" (F9) eran aritméticamente imposibles. Un modelo menor lo "resuelve" borrando el assert ⇒ falso verde. | F3 **edita** ese assert a `== 8` como parte del ratchet, con caso propio. Conteos recalculados en F3, F9, §9 y §12. |
+| **C2** | BLOQ | El gate de K1 era un **substring**: F0 caso 3 y F6 caso 1 sólo pedían que el fuente "referencie `pipeline_copilot_prompt`" — un comentario lo satisface. Y K1 se abría con `grep -c "devops_action_catalog"` y se cerraba con `grep -c "pipeline_copilot_prompt"`: dos métricas distintas. | Gate por **`ast` + comportamiento**: F6 caso 8 exige un `ast.ImportFrom` real y un `ast.Call` a `build_copilot_prompt`; F6 caso 3 es el gate de comportamiento. K1 pasa a tener **una sola** definición. |
+| **C3** | BLOQ | Paridad de 3 runtimes **inalcanzable**: `DevOpsAgentSection.tsx:28` declara `type CliRuntime = 'claude_code_cli' \| 'codex_cli'` y el `<select>` (`:147-149`) tiene sólo 2 opciones ⇒ el operador **no puede elegir GitHub Copilot**. Y el gate K6 pegaba a `/api/devops/actions/propose`, que **ignora** el runtime (`devops_actions.py:95`) ⇒ verde sin probar nada. | F8 agrega `github_copilot` al tipo y al `<select>` del copiloto. K6 pasa a pegarle a `/api/devops/agent/start` con `runtime="github_copilot"` y exigir `200 + mode=="deterministic"`, más el `400` con la flag OFF. |
+| **C4** | BLOQ | F3 decía que las 6 usan `callEndpoint()` "porque las 6 sí tienen endpoint real", pero la tabla nombraba **funciones de servicio Python** (`lint_yaml()`, `explain_plan()`, `check_placeholders`) que un binding **TypeScript no puede llamar**. Verificado: `frontend/src/api/endpoints.ts` **no** expone cliente para `pipeline-lint/validate` ni `pipeline-lint/explain`. | La tabla de F3 pasa a nombrar **ruta HTTP + función de `endpoints.ts`**, y se declara explícito que agregar 2 wrappers tipados para rutas backend que **ya existen** NO viola §7.4 (que prohíbe **endpoints backend** nuevos). |
+| **C5** | IMP | Las 6 acciones no traían `label` ni `summary`, y **el gate de colisión los evalúa**: `test_frases_no_colisionan_entre_read_y_write:114` arma `universo(a) = (*a.phrases, a.label)`. `test_label_y_summary_no_vacios` (`:166`) además exige `summary` no vacío en las 6. | F3 congela los **6 `label` y los 6 `summary`** literales. (Las 18 frases de v1 se verificaron corriendo el gate real: **0 choques**.) |
+| **C6** | IMP | Dependencia de flag no declarada: las acciones 1 y 6 envuelven `/api/pipeline-generator/{preview,commit}`, que hacen `abort(404)` si `STACKY_PIPELINE_GENERATOR_ENABLED` está OFF (`api/pipeline_generator.py:37` y `:56`). Con esa flag apagada el copiloto muere con un 404 mudo en su camino principal. | Declarada en F3 y F5, con degradación honesta (`blocked_reason` que nombra la flag) y caso 9 en F5. |
+| **C7** | IMP | El piso `>= 23` de `devopsActionCatalogRatchet.test.ts:62` quedaba **sin apretar** (v1 sólo subía `:56` y `:67`). Un ratchet que no se aprieta es inerte. | F3 sube también `:62` a `29`. |
+| **C8** | IMP | F3 declaraba "`50 passed` salvo uno rojo": un criterio binario no puede decir eso. | F3 declara literal **`49 passed, 1 failed`** y nombra el nodeid del único fallo esperado. |
+| **C9** | IMP | `stacky_logger` no expone `.info()` a nivel módulo: es un singleton `logger = _StackyLogger()` (`services/stacky_logger.py:511`). El snippet de F9 (`stacky_logger.info(...)`) sólo funciona con el `import ... as` del precedente. | F9 fija el import literal `from services.stacky_logger import logger as stacky_logger`. |
+| **C10** | IMP | 9 anclajes desfasados (ninguno inexistente). Ver tabla de anclajes abajo. | Corregidos con la línea real. Ninguno sostenía una decisión de alcance. |
+| **C11** | MEN | Ninguna huella en `docs/sistema/error_fingerprints.json` (0 menciones de "279"), pese a que el plan mata dos clases de error. | F9 registra 1 huella. |
+| **C12** | MEN | `pipeline_stack_detector.py:13-15` citado para los 3 stacks; los literales viven en `_MANIFEST_SIGNALS` (`:12-16`). | Anclaje corregido. |
+| **[ADICIÓN ARQUITECTO]** | — | v1 admite en §9.7 que "si el commit falla, el operador revierte con git" — pero **nunca le dice qué revertir**. El human-in-the-loop pide confirmar una escritura sin mostrar el deshacer. | **Deshacer-primero**: la sesión calcula y muestra el `undo_hint` (ruta exacta del archivo + comando de reversión) **antes** de que el operador confirme. Ver §6.F2 / §6.F4 / §6.F5 / §6.F9, todo marcado `[ADICIÓN ARQUITECTO]`. Sin flag nueva, sin trabajo extra, sin endpoint nuevo. |
+
+### Anclajes verificados (v2 los corrige; ninguno se borra)
+
+| Anclaje de v1 | Estado | Línea real |
+|---|---|---|
+| **TESIS (i)** `devops_agent.py` no importa el catálogo | **OK — CONFIRMADA** | `grep -c "action_catalog\|assistant_actions\|DevOpsAction" api/devops_agent.py` → **0** |
+| **TESIS (ii)** `assistant_actions()` lo consume sólo `api/devops_actions.py` | **OK — CONFIRMADA** | único consumidor productivo: `:112` y `:118` (el resto son tests) |
+| Baseline "69 casos verdes en 4 suites" | **OK — REPRODUCIDO** | corrido en esta crítica: **`69 passed in 12.83s`** (22+19+15+13) |
+| `DEVOPS_ACTION_CATALOG` = 23 acciones, 16 read / 7 write | **OK** | medido: 23 / 16 / 7 |
+| `class ActionParam` `:54` | DESFASADO | `:55` (`:54` es el `@dataclass`) |
+| `class DevOpsAction` `:64` | DESFASADO | `:65` (`:64` es el `@dataclass`) |
+| `ActionProposal` `:47` | DESFASADO | `:48` (`:47` es el `@dataclass`) |
+| los 6 `BLOCKED_*` `:22-30` | DESFASADO | `:22-27` (`:30` es `BLOCKED_REASONS`) |
+| `remote_console_prompt.py:27-28` (regla de credenciales) | DESFASADO | `:28-29` |
+| `devops_actions.py:63-65` (CERO PII) | DESFASADO | `:64-66` |
+| `harness_flags.py:6194` (`STACKY_DEVOPS_ACTION_CATALOG_ENABLED`) | DESFASADO | `FlagSpec(` en `:6194`, `key=` en `:6195` — **la afirmación de fondo (sin `requires=`) es CORRECTA** |
+| `harness_flags.py:6234-6240` (la OFF sin `default=`) | DESFASADO | `:6232-6240` — **el comentario del repo confirma la TRAMPA nº1 palabra por palabra** |
+| `harness_flags.py:3605-3609` (`..._NL_EDIT_COMMIT_...`) | DESFASADO | `key=` en `:3603` |
+| `pipeline_stack_detector.py:13-15` | DESFASADO | `_MANIFEST_SIGNALS` en `:12-16`; `detect_stack` en `:19` (OK) |
+| `_health_payload` "tras `:116`" | **OK** | el `}` de cierre está en `:117`; la def está en `api/devops.py:28` |
+| `catalog:411` (antes del bloque de escrituras) y `:412` (1ª escritura) | **OK — EXACTOS** | `:411` comentario `# 7 de ESCRITURA`, `:412` `DevOpsAction(` |
+| `PRJ` `:123` | **OK — EXACTO** | `PRJ = ActionParam(...)` en `:123` |
+| `DevOpsPage.tsx` `:145` / `:159` / `:184` / `:296` | **OK — EXACTOS** | 17 secciones medidas |
+| `test_devops_action_ratchet.py` `:26 :31 :48 :53 :59 :68 :77 :90 :96 :111 :133` | **OK — LOS 11 EXACTOS** | — |
+| `devopsActionCatalogRatchet.test.ts` `:21` / `:47` / caso 5 / caso 6 | **OK** | `:21` regex exacta; `:48` el assert del caso 3; pisos en `:56`, `:62`, `:67` |
+| `pipeline_spec/lint/preflight/patcher/diff` (12 anclajes) | **OK — LOS 12 EXACTOS** | `:134 :140 :33 :43 :791 :841 :1031 :37 :79 :102 :537 :803 :81 :197` |
+| `pipeline_editor.py` `:60 :141 :171 :199 :428` | **OK — LOS 5 EXACTOS** | — |
+| `ci_variables.py:31/:50`, `secrets_store.py:204/:258`, `secret_masking.py:20` | **OK — EXACTOS** | — |
+| `run_harness_tests.sh:978-981` / `.ps1:872-875` | **OK** | bloque del plan 267 en `:977-981` / `:871-875` |
+| `devops_action_matcher.py` `:14 :15 :16 :28 :49 :59 :80 :100` + docstring `:1-5` | **OK — LOS 9 EXACTOS** | — |
+| `devops_agent.py` `:13 :15 :24-28 :31-40 :61 :70 :157 :308 :322 :328` | **OK — EXACTOS** | inserción de F6: bloque `server_alias` en `:129-136` y `:212-222` (OK) |
+| Las 18 frases nuevas no colisionan read↔write | **OK — GATE EJECUTADO** | corrí `_content_tokens`+`normalize_text` contra las 23 acciones reales: **0 choques** |
 
 ---
 
@@ -21,14 +74,16 @@ catálogo tipado del plan 267 y los servicios de pipeline que ya están construi
 
 | # | KPI | Hoy (medido en esta corrida) | Meta | Cómo se mide |
 |---|-----|------------------------------|------|--------------|
-| **K1** | Acciones del catálogo alcanzables desde el **turno del agente** | **0** | **≥ 6** | `grep -c "devops_action_catalog" backend/api/devops_agent.py` hoy da **0** (verificado). Gate: F6 test 1 |
+| **K1** | Acciones del catálogo alcanzables desde el **turno del agente** | **0** | **6** | **[C2]** Gate único, por `ast` **y** por comportamiento: F6 caso 8 (hay `ImportFrom` de `services.pipeline_copilot_prompt` **y** una `Call` a `build_copilot_prompt` en `api/devops_agent.py`) **+** F6 caso 3 (el mensaje que llega a `run_agent` está envuelto). **Prohibido medir K1 con `grep`**: un comentario satisface un substring. |
 | **K2** | Pestañas que el operador debe visitar para crear una pipeline de cero y dejarla verificada | **≥ 4** (`pipelines`, `editar-pipeline`, `pipeline-audit`, `matriz-entornos`) | **1** (`copiloto-pipelines`) | F8 test 3: la sección nueva declara las 6 acciones sin `nav_path` a otra sección |
-| **K3** | Valor de secreto que llega al prompt del modelo | sin gate | **0, con test** | F7 test 4: gate por sustring sobre el prompt construido |
+| **K3** | Valor de secreto que llega al prompt del modelo | sin gate | **0, con test** | F7 caso 5, **con el guard positivo primero** (§F7): el test afirma que el valor SÍ está en el fixture antes de afirmar que NO está en el prompt |
 | **K4** | Acciones del catálogo / deriva catálogo↔bindings | 23 / 0 | 29 / **0** | `devopsActionCatalogRatchet.test.ts` caso 3 (igualdad exacta de conjuntos) |
 | **K5** | Estados de creación explícitos y cerrados | **0** (no existe máquina de estados) | **8**, con transiciones cerradas | F2 test 1: `len(PIPELINE_SESSION_STATES) == 8` |
-| **K6** | Paridad de los 3 runtimes en el piso determinista | ya cierta, sin gate propio | gate propio | F9 test 2: el mismo texto produce la misma propuesta con los 3 valores de `runtime` |
+| **K6** | Paridad real de los 3 runtimes en el chat DevOps | **2 de 3** (`DevOpsAgentSection.tsx:28` sólo tipa `claude_code_cli \| codex_cli`) | **3 de 3** | **[C3]** F9 caso 2: `POST /api/devops/agent/start` con `runtime="github_copilot"` → **200 + `mode=="deterministic"`** con la flag ON, y **400** con la flag OFF. **Prohibido medir K6 contra `/api/devops/actions/propose`**: ese endpoint **ignora** el runtime (`api/devops_actions.py:95`) y daría verde sin probar nada. |
+| **K7** | `[ADICIÓN ARQUITECTO]` Escrituras que el operador confirma **viendo su deshacer** | **0** | **1/1** (la única write del plan) | F9 caso 6: la sesión en `confirm` expone `undo_hint` no vacío con la ruta exacta del archivo |
 
-**Baseline de tests medido hoy (todos VERDES, con `backend/venv`, py3.11.9):**
+**Baseline de tests medido hoy (todos VERDES, con `backend/venv`, py3.11.9).
+REPRODUCIDO por el juez en esta misma corrida: `69 passed in 12.83s`.**
 
 | Suite | Casos verdes hoy |
 |---|---|
@@ -51,7 +106,7 @@ Es puro (sin flask, sin IO, sin red) y ya modela exactamente lo que un agente ne
 
 - `CATALOG_VERSION` (`:12`), `EFFECTS = ("read","write")` (`:14`), `IMPACTS = ("none","low","high")` (`:15`),
   `PARAM_TYPES` (`:16`), `REACHES` (`:21`), `REACH_READ` (`:27`), `REACH_WRITE` (`:28`), `canonical_reach()` (`:31`).
-- `@dataclass(frozen=True) class ActionParam` (`:54`) y `class DevOpsAction` (`:64`), con `phrases` (`:78`) —
+- `@dataclass(frozen=True) class ActionParam` (`:55`) y `class DevOpsAction` (`:65`), con `phrases` (`:78`) —
   **frases de intención para matcheo determinista**.
 - `DEVOPS_ACTION_CATALOG` (`:146`): **23 acciones**, 16 de lectura (desde `:148`) y 7 de escritura (desde `:412`).
 - Lookups: `get_action()` (`:589`), `visible_actions()` (`:594`), `palette_actions()` (`:618`),
@@ -63,9 +118,10 @@ Es puro (sin flask, sin IO, sin red) y ya modela exactamente lo que un agente ne
   `match_intent()` (`:80`), `is_ambiguous()` (`:100`), con `MIN_SCORE = 0.6` (`:14`), `AMBIGUITY_DELTA = 0.10` (`:15`),
   `MAX_MATCHES = 3` (`:16`) y `_STOPWORDS` (`:28`). Su docstring (`:1-5`) lo declara literalmente:
   *"Es el piso de paridad: con GitHub Copilot (o sin runtime disponible) este matcher es TODO el motor de intención"*.
-- `backend/services/devops_action_proposal.py`: `ActionProposal` (`:47`) con `what_will_happen`, `open_questions`,
-  `alternatives`, `confidence`, **`needs_confirmation`** y `blocked_reason`; `build_proposal()` (`:78`),
-  `describe()` (`:68`), `proposal_to_dict()` (`:129`), y los 6 estados `BLOCKED_*` (`:22-30`).
+- `backend/services/devops_action_proposal.py`: `ActionProposal` (`:48`) con `what_will_happen` (`:59`),
+  `open_questions` (`:60`), `confidence`, **`needs_confirmation`** (`:63`) y `blocked_reason` (`:64`);
+  `build_proposal()` (`:78`), `describe()` (`:68`), `proposal_to_dict()` (`:129`), y los 6 estados `BLOCKED_*`
+  (`:22-27`; la tupla `BLOCKED_REASONS` está en `:30`).
 
 **Conclusión dura:** el contrato "explicá qué vas a hacer antes de hacerlo, preguntá solo lo faltante, pedí
 confirmación si escribís" **ya está construido y verde**. Reimplementarlo sería el error más caro de este plan.
@@ -111,11 +167,27 @@ Y el backend ya construido que se va a **envolver**, con su API pública verific
 | `services/pipeline_preflight.py` | `check_placeholders` / `check_undefined_variables` | `:37` / `:102` | dict `{"id","status","title","detail","fix_hint"}` (contrato en `:4-5`) |
 | `services/pipeline_patcher.py` | `plan_edit(yaml, intent, profile)` / `validate_intent_dict` | `:537` / `:803` | `(ops, errores)` |
 | `services/pipeline_diff.py` | `review_patch(before, after, hunks, ...)` | `:197` | `EditReview` (`:81`) |
-| `services/pipeline_stack_detector.py` | `detect_stack(project_root)` | `:19` | `'python'\|'node'\|'dotnet'\|None` (`:13-15`) |
-| `api/pipeline_generator.py` | `POST /preview` / `POST /commit` | `:34` / `:52` | commit ya exige `confirm is True` (`:59`) |
+| `services/pipeline_stack_detector.py` | `detect_stack(project_root)` | `:19` | `'python'\|'node'\|'dotnet'\|None` — literales en `_MANIFEST_SIGNALS` (`:12-16`) **[C12]** |
+| `api/pipeline_generator.py` | `POST /preview` / `POST /commit` | `:34` / `:52` | commit ya exige `confirm is True` (`:59`). **Ambas hacen `abort(404)` si `STACKY_PIPELINE_GENERATOR_ENABLED` está OFF (`:37` y `:56`) [C6]** |
 | `api/pipeline_editor.py` | `/verbs` `/plan` `/commit` `/interpret` | `:141` `:171` `:199` `:428` | commit con doble flag (`_guard_commit` `:60`) |
 
-**Nada de esto se reescribe.**
+**[C4] Las rutas HTTP que el copiloto necesita — MEDIDAS, no supuestas.** Un binding vive en TypeScript: **no puede
+llamar a una función de servicio Python**. Estas son las rutas reales y su estado en `frontend/src/api/endpoints.ts`:
+
+| Capacidad | Ruta HTTP real | Anclaje | ¿Ya hay cliente tipado en `endpoints.ts`? |
+|---|---|---|---|
+| Renderizar borrador | `POST /api/pipeline-generator/preview` | `api/pipeline_generator.py:34` | **SÍ** — `:4873-4874` |
+| Lint del YAML | `POST /api/devops/pipeline-lint/validate` | `api/devops.py:228` | **NO — falta (se agrega en F3)** |
+| Explicar el plan | `POST /api/devops/pipeline-lint/explain` | `api/devops.py:260` | **NO — falta (se agrega en F3)** |
+| Preflight | `POST /api/devops/preflight/check` | `api/devops.py:483` | **SÍ** — `:4374` |
+| Variables (sólo nombres) | `GET /api/devops/variables` | `api/devops_variables.py:45` | **SÍ** — `:4742` |
+| Crear en el repo | `POST /api/pipeline-generator/commit` | `api/pipeline_generator.py:52` | **SÍ** — `:4879` |
+
+> **Agregar un wrapper tipado en `endpoints.ts` para una ruta backend que YA existe NO viola §7.4 del plan 267.**
+> Lo que §7.4 prohíbe (`devopsActionBindings.ts:1-2`) es **endpoints backend nuevos**. Los 2 wrappers que faltan
+> son cliente, no servidor.
+
+**Ningún servicio ni endpoint backend se reescribe.**
 
 ---
 
@@ -160,8 +232,10 @@ Para crear una pipeline de cero y dejarla verificada, el operador hace hoy:
 | **U5** | Las variables/secretos faltantes se descubren **tarde**, cuando la corrida falla. | `check_undefined_variables` (`pipeline_preflight.py:102`) existe pero no está en el camino conversacional. |
 | **U6** | No hay un "qué va a pasar" **antes** de escribir, salvo dentro de la tarjeta de acción suelta. | `describe()` (`devops_action_proposal.py:68`) y `explain_plan()` (`pipeline_lint.py:1031`) existen y están desconectados entre sí. |
 | **U7** | El chat rechaza GitHub Copilot con **400**. | `start_conversation()` valida `runtime not in _CLI_RUNTIMES` (`devops_agent.py:70-79`). El endpoint determinista sí acepta los 3 (`devops_actions.py:93-96`). |
+| **U8** | **[C3] El operador ni siquiera puede *elegir* GitHub Copilot en el chat DevOps.** Arreglar sólo el backend deja el fix inalcanzable. | `DevOpsAgentSection.tsx:28` declara `type CliRuntime = 'claude_code_cli' \| 'codex_cli'` y el `<select>` (`:147-149`) tiene **exactamente 2** `<option>`. El resto del producto sí conoce el runtime (`endpoints.ts:1157`, `AgentLaunchModal.tsx:251`). |
 
-**U7 es el riesgo de paridad más concreto del plan** y se resuelve en F6 con degradación explícita, no borrando el gate.
+**U7+U8 son el riesgo de paridad más concreto del plan.** U7 se resuelve en F6 con degradación explícita (no borrando
+el gate) y **U8 en F8** agregando la opción al selector: sin las dos, K6 sería un gate que pasa sin probar nada.
 
 ---
 
@@ -191,10 +265,33 @@ Para crear una pipeline de cero y dejarla verificada, el operador hace hoy:
 
 ### D3 — El matcher determinista es el piso de paridad, no un fallback de segunda
 
-- **Problema.** Con Copilot no hay turno CLI (U7).
-- **Recomendación.** La sesión avanza igual con `match_intent()` (`devops_action_matcher.py:80`), sin modelo.
-- **Alternativas.** Bloquear Copilot — rechazada: viola la regla de los 3 runtimes.
-- **Riesgo.** Menor riqueza conversacional con Copilot. Declarado como degradación controlada, no como falla.
+- **Problema.** Con Copilot no hay turno CLI (U7) **y hoy el operador ni siquiera puede elegirlo (U8)**.
+- **Recomendación.** Dos mitades, **las dos obligatorias**:
+  **(a) backend (F6):** la sesión avanza igual con `match_intent()` (`devops_action_matcher.py:80`), sin modelo, y
+  `start_conversation()` devuelve `200 + mode:"deterministic"` en vez de `400`.
+  **(b) frontend (F8) [C3]:** `github_copilot` se agrega al tipo `CliRuntime` y al `<select>`, con la etiqueta
+  `"GitHub Copilot (modo determinista)"`. **Un fix backend sin (b) es inalcanzable para el operador.**
+- **Alternativas.** Bloquear Copilot — rechazada: viola la regla de los 3 runtimes. Arreglar sólo el backend —
+  rechazada: es la definición de "gate que pasa sin probar nada".
+- **Riesgo.** Menor riqueza conversacional con Copilot. Declarado como degradación controlada, no como falla, y
+  **dicho en la propia etiqueta del selector** para que el operador sepa qué está eligiendo.
+
+### D10 — `[ADICIÓN ARQUITECTO]` Deshacer-primero: no se confirma una escritura sin ver su reversión
+
+- **Problema.** v1 admite en §9.7 que *"si `devops.pipeline_new.commit` falla, la sesión va a `failed` y el operador
+  revierte con git"* — pero **nunca le dice qué revertir**. Pedirle al humano que confirme una escritura en su
+  repositorio real sin mostrarle el deshacer es human-in-the-loop de forma, no de fondo: el operador aprueba a ciegas.
+- **Recomendación.** La sesión lleva un campo `undo_hint: str` que se **calcula en `review`/`confirm`, antes de
+  escribir**, y que la tarjeta muestra junto al botón de confirmar. Es texto determinista, sin IO ni modelo:
+  la ruta exacta del archivo que se va a crear (`azure-pipelines.yml` o `.gitlab-ci.yml`, según `provider`), la rama,
+  y el comando de reversión. Ejemplo literal:
+  `"Para deshacer: borrá 'azure-pipelines.yml' en la rama 'feature/x' (o 'git revert' el commit que devuelva Stacky)."`
+- **Alternativas.** (a) Rollback automático — **rechazada**: sacaría al humano del lazo y podría pisar trabajo ajeno.
+  (b) Mostrar el undo *después* del commit — rechazada: llega tarde para la decisión, que es el momento que importa.
+- **Costo.** 1 campo en el dataclass, 1 función pura, 3 casos de test. **Cero** flags nuevas, **cero** endpoints
+  nuevos, **cero** trabajo extra al operador (aparece solo), backward-compatible (`undo_hint=""` por defecto).
+- **Riesgo.** Que el hint quede desactualizado respecto de lo que el commit hace. Mitigado: se deriva de los **mismos**
+  `provider` + `branch` que el binding manda a `/api/pipeline-generator/commit`, y F9 caso 6 lo congela.
 
 ### D4 — El estado de sesión vive en el JSON de `Ticket.description`, sin migración
 
@@ -274,10 +371,24 @@ Para crear una pipeline de cero y dejarla verificada, el operador hace hoy:
 |---|---|---|
 | 1 | `test_catalogo_tiene_29_acciones_al_terminar_el_plan` | `len(DEVOPS_ACTION_CATALOG) == 29` |
 | 2 | `test_las_6_acciones_nuevas_existen` | los 6 ids de F3 están en el índice vía `get_action(id) is not None` |
-| 3 | `test_el_turno_del_agente_conoce_el_catalogo` | el fuente de `api/devops_agent.py` referencia `pipeline_copilot_prompt` (gate de K1) |
-| 4 | `test_lectura_y_escritura_siguen_separadas` | `len([a for a in DEVOPS_ACTION_CATALOG if a.effect=="write"]) == 8` |
+| 3 | `test_la_suite_hermana_cuenta_8_escrituras` | **[C1]** leer `tests/test_devops_action_catalog.py` como texto y afirmar que contiene `assert len(escrituras) == 8`. Este caso existe porque el gate hermano se actualiza, **no se borra**. |
+| 4 | `test_lectura_y_escritura_siguen_separadas` | `len([a for a in DEVOPS_ACTION_CATALOG if a.effect=="write"]) == 8` **y** `... if a.effect=="read"]) == 21` |
 
-**Nota de orden.** F0 nace **ROJO a propósito** y se pone verde al terminar F3/F6. Es el ratchet del plan, no un gate de arranque.
+> **[C1] CONTRADICCIÓN RESUELTA — leé esto antes de tocar el catálogo.**
+> `tests/test_devops_action_catalog.py:177` dice hoy, **con igualdad**:
+> ```python
+> assert len(escrituras) == 7, sorted(escrituras)
+> ```
+> El caso 4 de arriba exige **8**. **Los dos no pueden estar verdes a la vez.** La resolución correcta y **única**
+> es la de F3: **editar** ese `== 7` a `== 8` (un ratchet que se aprieta). **PROHIBIDO borrar, comentar o relajar a
+> `>=` ese assert**: es el guard que impide que nazca una escritura fuera del conteo, y borrarlo deja el agujero
+> abierto con los dos tests en verde. El caso 3 de F0 está justamente para que borrarlo **no** pase inadvertido.
+
+> **[C2] Lo que este archivo NO gatea.** K1 (el catálogo llega al turno del agente) **no** se mide acá con un
+> `grep`/substring sobre `api/devops_agent.py`: un comentario satisfaría el criterio. K1 se mide **sólo** en
+> F6 casos 3 y 8 (`ast` + comportamiento).
+
+**Nota de orden.** F0 nace **ROJO a propósito** y se pone verde al terminar F3. Es el ratchet del plan, no un gate de arranque.
 
 **Comando**
 ```bash
@@ -303,13 +414,20 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:m
 | `STACKY_PIPELINE_COPILOT_ENABLED` | **ON** | `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` | `devops` | Solo lee, planea, simula y explica. Ninguna excepción dura aplica. |
 | `STACKY_PIPELINE_COPILOT_COMMIT_ENABLED` | **OFF** | `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` | `devops` | **EXCEPCIÓN DURA (B)**: escribe el archivo de pipeline en el repositorio real del operador. |
 
-> **Depth-1 verificado:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (`harness_flags.py:6194`) **no** declara `requires=`,
-> así que apuntarle cumple la regla de `validate_requires_graph`.
+> **Depth-1 verificado:** `STACKY_DEVOPS_ACTION_CATALOG_ENABLED` (`FlagSpec(` en `harness_flags.py:6194`, `key=` en
+> `:6195`) **no** declara `requires=`, así que apuntarle cumple la regla de `validate_requires_graph`.
+
+> **[C6] Flag PREEXISTENTE de la que este plan depende y que NO se toca:**
+> `STACKY_PIPELINE_GENERATOR_ENABLED` (default **ON**, `config.py:1632-1634`). Las acciones 1 (`draft`) y 6 (`commit`)
+> envuelven `/api/pipeline-generator/{preview,commit}`, que hacen `abort(404)` si está OFF (`api/pipeline_generator.py:37`
+> y `:56`). **NO se crea ninguna flag equivalente** (ya hay 13 `STACKY_PIPELINE_*` registradas). Lo que sí se hace es
+> **degradar honesto**: F5 caso 9. Con esa flag apagada el copiloto debe **decir cuál flag falta**, no morir en un 404 mudo.
 
 **TRAMPA nº1 (un modelo menor la pisa seguro).** La flag que nace OFF **NO declara `default=` en absoluto**. El OFF
-vive **solo** en `config.py`. Precedentes literales: `harness_flags.py:6234-6240`
-(`STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED`) y `:3605-3609` (`STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED`).
-Escribir `default=False` **rompe** `test_harness_flags.py`.
+vive **solo** en `config.py`. Precedentes literales: `harness_flags.py:6232-6240`
+(`STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED`, cuyo comentario en `:6234-6237` explica la regla palabra por palabra) y
+`:3602-3609` (`STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED`, `key=` en `:3603`).
+Escribir `default=False` **rompe** `test_harness_flags.py::test_default_known_only_for_curated`.
 
 **Archivos a editar (los 6 obligatorios)**
 
@@ -384,12 +502,21 @@ TRANSITIONS: dict[str, tuple[str, ...]] = {
 TERMINAL_STATES = ("committed", "failed")
 
 
+#: [ADICION ARQUITECTO] Nombre del archivo que la escritura va a crear, por proveedor.
+#: Es la MISMA convencion que ya usa api/pipeline_generator.py. Cerrado: 2 proveedores.
+PIPELINE_FILENAME: dict[str, str] = {
+    "ado": "azure-pipelines.yml",
+    "gitlab": ".gitlab-ci.yml",
+}
+
+
 @dataclass(frozen=True)
 class PipelineSession:
     state: str = "intake"
     provider: str = ""            # "ado" | "gitlab" | ""
     stack: str = ""               # "python" | "node" | "dotnet" | ""
     project: str = ""
+    branch: str = ""              # rama destino de la escritura
     draft_ref: str = ""           # REFERENCIA al borrador, nunca el YAML entero
     missing_variables: tuple[str, ...] = ()   # NOMBRES, jamas valores
     open_questions: tuple[str, ...] = ()
@@ -420,14 +547,29 @@ def session_from_dict(d: dict | None) -> PipelineSession:
 def next_question(s: PipelineSession) -> str:
     """La UNICA pregunta que falta hacer, o "" si no falta ninguna. Determinista:
     recorre open_questions en orden y devuelve la primera."""
+
+
+def undo_hint(s: PipelineSession) -> str:
+    """[ADICION ARQUITECTO] Como deshacer la escritura que se esta por confirmar.
+
+    Determinista, PURO, sin IO y sin modelo. Devuelve "" si todavia no hay nada
+    que deshacer (provider o branch vacios). NUNCA lanza.
+
+    Formato EXACTO (una sola frase, castellano, sin markdown):
+      "Para deshacer: borra '<archivo>' en la rama '<branch>' del proyecto
+       '<project>' (o revertí con git el commit que devuelva Stacky)."
+
+    donde <archivo> = PIPELINE_FILENAME[s.provider]. Si el provider no esta en
+    PIPELINE_FILENAME, devuelve "" (no inventa un nombre de archivo)."""
 ```
 
 **Casos borde obligatorios**
 - `advance()` a un estado terminal desde otro terminal → rechazada con motivo `"estado_terminal"`.
 - `session_from_dict(None)` / `{}` / `{"state": "inventado"}` → `PipelineSession()` por defecto.
 - `session_to_dict` serializado con `json.dumps` debe pesar `<= MAX_SESSION_BYTES`.
+- `undo_hint()` con `provider="jenkins"` (fuera del vocabulario) → `""`, no un nombre inventado.
 
-**Tests PRIMERO** — `Stacky Agents/backend/tests/test_pipeline_session.py` (10 casos)
+**Tests PRIMERO** — `Stacky Agents/backend/tests/test_pipeline_session.py` (**11 casos**)
 
 | # | Caso |
 |---|---|
@@ -439,15 +581,16 @@ def next_question(s: PipelineSession) -> str:
 | 6 | `test_can_transition_rechaza_las_ilegales` (ej. `intake`→`committed`) |
 | 7 | `test_advance_ilegal_devuelve_la_sesion_original_y_motivo` |
 | 8 | `test_session_from_dict_es_tolerante` (None, {}, basura) |
-| 9 | `test_roundtrip_to_dict_from_dict` |
+| 9 | `test_roundtrip_to_dict_from_dict` (incluye `branch` y que `undo_hint` **no** se serializa: se **deriva**) |
 | 10 | `test_next_question_es_determinista_y_vacia_si_no_faltan` |
+| 11 | **`test_undo_hint_nombra_el_archivo_y_la_rama`** — `[ADICIÓN ARQUITECTO]` con `provider="ado", branch="feature/x"` el texto contiene `"azure-pipelines.yml"` **y** `"feature/x"`; con `provider="gitlab"` contiene `".gitlab-ci.yml"`; con `provider=""` **y** con `provider="jenkins"` devuelve `""` |
 
 **Comando**
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:memory:" ./venv/Scripts/python.exe -m pytest tests/test_pipeline_session.py -q
 ```
 
-**Criterio binario.** `10 passed`.
+**Criterio binario.** `11 passed`.
 **Flag.** Ninguna (módulo puro; lo gatean sus consumidores).
 **Runtimes.** Idéntico en los 3 (sin modelo, sin IO).
 **Trabajo del operador:** ninguno.
@@ -463,10 +606,18 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:m
 > `frontend/src/__tests__/devopsActionCatalogRatchet.test.ts:47` exige **igualdad EXACTA de conjuntos** entre los ids
 > del `.py` y las claves de `DEVOPS_ACTION_BINDINGS`. Agregar acciones sin binding deja el ratchet ROJO.
 
-**Archivos a editar**
-- `Stacky Agents/backend/services/devops_action_catalog.py` (agregar 5 lecturas antes de `:411` y 1 escritura antes del cierre `:584`)
-- `Stacky Agents/frontend/src/services/devopsActionBindings.ts`
-- `Stacky Agents/frontend/src/__tests__/devopsActionCatalogRatchet.test.ts` (subir los pisos, ver abajo)
+**Archivos a editar (los 5)**
+1. `Stacky Agents/backend/services/devops_action_catalog.py` — agregar 5 lecturas **antes de `:411`** (el comentario
+   `# ---- 7 de ESCRITURA ----`; verificado exacto) y 1 escritura **antes del `)` de cierre de la tupla**.
+2. `Stacky Agents/backend/tests/test_devops_action_catalog.py` — **`:177`: `== 7` → `== 8`** **[C1, OBLIGATORIO]**.
+   Cambiar además el comentario del bloque `# ---- 7 de ESCRITURA ----` a `# ---- 8 de ESCRITURA ----` y
+   `# ---- 16 de LECTURA ----` (`:147`) a `# ---- 21 de LECTURA ----`.
+3. `Stacky Agents/frontend/src/api/endpoints.ts` — **[C4]** agregar los **2 wrappers tipados que faltan** para rutas
+   backend que **ya existen** (`POST /api/devops/pipeline-lint/validate` y `POST /api/devops/pipeline-lint/explain`),
+   calcando la forma de `preflightCheck` (`:4374`). **Esto NO es un endpoint nuevo**: §7.4 prohíbe rutas backend
+   nuevas, no clientes tipados.
+4. `Stacky Agents/frontend/src/services/devopsActionBindings.ts` — los 6 bindings.
+5. `Stacky Agents/frontend/src/__tests__/devopsActionCatalogRatchet.test.ts` (subir los **3** pisos, ver abajo).
 
 > **TRAMPA nº3 — escribir las entradas EXPANDIDAS.** El comentario `devops_action_catalog.py:140-144` lo dice literal:
 > los ratchets parsean este archivo **como TEXTO** buscando `id="..."`, `effect="..."` y `reach=canonical_reach("...")`
@@ -476,16 +627,41 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:m
 > exactamente **dos** segmentos después de `devops.`, minúsculas y guión bajo. `devops.pipeline_new.draft` sirve;
 > `devops.pipeline.new.draft` **no matchea**.
 
-**Las 6 entradas**
+**Las 6 entradas — [C4] la columna "Envuelve" es una RUTA HTTP, no una función de servicio Python**
 
-| # | id | effect | impact | health_key | flag_key | Envuelve |
-|---|----|--------|--------|-----------|----------|----------|
-| 1 | `devops.pipeline_new.draft` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `POST /api/pipeline-generator/preview` (`api/pipeline_generator.py:34`) |
-| 2 | `devops.pipeline_new.lint` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `lint_yaml()` (`pipeline_lint.py:791`) |
-| 3 | `devops.pipeline_new.explain` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `explain_plan()` (`pipeline_lint.py:1031`) |
-| 4 | `devops.pipeline_new.preflight` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `check_placeholders` + `check_undefined_variables` (`pipeline_preflight.py:37`, `:102`) |
-| 5 | `devops.pipeline_new.secrets` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `GET /api/devops/variables` (`api/devops_variables.py:46`) — **solo nombres** |
-| 6 | `devops.pipeline_new.commit` | **write** | **high** | `pipeline_copilot_commit_enabled` | `STACKY_PIPELINE_COPILOT_COMMIT_ENABLED` | `POST /api/pipeline-generator/commit` (`api/pipeline_generator.py:52`) |
+Un binding es TypeScript: **no puede llamar a `lint_yaml()`**. Lo que llama es la ruta HTTP que envuelve a esa función.
+
+| # | id | effect | impact | health_key | flag_key | Ruta HTTP que llama el binding | Función de `endpoints.ts` |
+|---|----|--------|--------|-----------|----------|-------------------------------|---------------------------|
+| 1 | `devops.pipeline_new.draft` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `POST /api/pipeline-generator/preview` (`api/pipeline_generator.py:34`) | **existe** (`endpoints.ts:4873`) |
+| 2 | `devops.pipeline_new.lint` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `POST /api/devops/pipeline-lint/validate` (`api/devops.py:228`) | **FALTA — crearla en F3** |
+| 3 | `devops.pipeline_new.explain` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `POST /api/devops/pipeline-lint/explain` (`api/devops.py:260`) | **FALTA — crearla en F3** |
+| 4 | `devops.pipeline_new.preflight` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `POST /api/devops/preflight/check` (`api/devops.py:483`) | **existe** (`endpoints.ts:4374`) |
+| 5 | `devops.pipeline_new.secrets` | read | none | `pipeline_copilot_enabled` | `STACKY_PIPELINE_COPILOT_ENABLED` | `GET /api/devops/variables` (`api/devops_variables.py:45`) — **solo nombres** | **existe** (`endpoints.ts:4742`) |
+| 6 | `devops.pipeline_new.commit` | **write** | **high** | `pipeline_copilot_commit_enabled` | `STACKY_PIPELINE_COPILOT_COMMIT_ENABLED` | `POST /api/pipeline-generator/commit` (`api/pipeline_generator.py:52`) | **existe** (`endpoints.ts:4879`) |
+
+> **[C6]** Las acciones **1 y 6** dependen además de `STACKY_PIPELINE_GENERATOR_ENABLED` (default ON), que hace
+> `abort(404)` si está OFF. No se crea flag nueva; se degrada honesto en F5 caso 9.
+
+**[C5] Los 6 `label` y los 6 `summary` — CONGELADOS, no improvisar.**
+`test_label_y_summary_no_vacios` (`test_devops_action_catalog.py:166`) exige ambos no vacíos en las 6, **y el `label`
+entra al gate de colisión** (`test_devops_action_ratchet.py:114`: `universo(a) = (*a.phrases, a.label)`). Un label
+corto tipo `"Pipeline"` volvería el conjunto un subconjunto y pondría rojo el gate.
+
+```
+1 draft      label="Armar borrador de pipeline"
+             summary="Genera un borrador de pipeline a partir de lo que necesitas. No escribe nada."
+2 lint       label="Revisar borrador de pipeline"
+             summary="Corre el lint sobre el borrador y devuelve los hallazgos con su linea."
+3 explain    label="Explicar borrador de pipeline"
+             summary="Describe en castellano que etapas y pasos va a correr el borrador."
+4 preflight  label="Chequeos previos del borrador"
+             summary="Semaforo estatico del borrador: placeholders y variables sin definir."
+5 secrets    label="Variables que faltan para el borrador"
+             summary="Lista por NOMBRE las variables y secretos que el borrador necesita y el proyecto no define."
+6 commit     label="Crear la pipeline en el repositorio"
+             summary="Escribe el archivo de pipeline en la rama elegida del repositorio real. Pide confirmacion."
+```
 
 **Reglas del ratchet que estas 6 deben cumplir** (`backend/tests/test_devops_action_ratchet.py`):
 - las 5 lecturas: `impact="none"` **exacto** (`:48`), `reach=canonical_reach("read")`;
@@ -498,8 +674,12 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:m
 
 **TRAMPA nº5 — las frases NO pueden colisionar entre lectura y escritura.**
 `test_frases_no_colisionan_entre_read_y_write` (`:111`) falla si el conjunto de tokens de contenido de **cualquier**
-frase de lectura es subconjunto o superconjunto del de **cualquier** frase de escritura (stopwords excluidas,
-`devops_action_matcher.py:28`). Las frases de abajo están diseñadas para no colisionar; **no improvisar otras**.
+frase **o `label`** de lectura es subconjunto o superconjunto del de **cualquier** frase **o `label`** de escritura
+(stopwords excluidas, `devops_action_matcher.py:28`). El universo evaluado es `(*a.phrases, a.label)` (`:114`).
+
+> **VERIFICADO POR EL JUEZ (no es una promesa):** se ejecutó ese mismo algoritmo (`_content_tokens` + `normalize_text`
+> reales) sobre las 23 acciones del catálogo actual cruzadas con las **18 frases + los 6 `label`** de abajo:
+> **0 choques**. **No improvisar ni frases ni labels**: cualquier reemplazo invalida esta verificación.
 
 ```
 1 devops.pipeline_new.draft     phrases=("borrador de pipeline nueva",
@@ -528,13 +708,16 @@ frase de lectura es subconjunto o superconjunto del de **cualquier** frase de es
 - `lint` / `explain` / `preflight` / `secrets` / `commit`: `ActionParam(name="draft_ref", type="string", label="Borrador", required=True)`
 - `commit` suma `ActionParam(name="branch", type="string", label="Rama", required=True)`
 
-**Bindings** en `frontend/src/services/devopsActionBindings.ts`, reusando los helpers ya presentes:
-`callEndpoint()` (`:72`) para 1–5 y para 6; ninguno usa `goToPanel()` (`:47`) porque las 6 sí tienen endpoint real.
-**PROHIBIDO agregar endpoints nuevos** (`:1-2`).
+**Bindings** en `frontend/src/services/devopsActionBindings.ts`: las **6** usan `callEndpoint()` (`:72`); **ninguna**
+usa `goToPanel()` (`:47`), porque las 6 tienen ruta HTTP real (tabla de arriba).
+**PROHIBIDO agregar endpoints BACKEND nuevos** (`:1-2`). **[C4] Agregar en `endpoints.ts` los 2 wrappers tipados que
+faltan (lint y explain) para rutas backend que YA existen NO es un endpoint nuevo y está permitido.**
 
-**Subir los pisos del ratchet frontend** (un ratchet que nunca se aprieta es inerte):
-- caso 5 (`:55`): `toBeGreaterThanOrEqual(23)` → **`29`**
-- caso 6 (`:59-67`): `toBeGreaterThanOrEqual(12)` → **`21`** (16 lecturas actuales + 5 nuevas)
+**Subir los pisos del ratchet frontend — son TRES, no dos** (un ratchet que nunca se aprieta es inerte):
+- caso 5, línea `:56`: `toBeGreaterThanOrEqual(23)` → **`29`**
+- caso 6, línea `:62`: `expect(entradas.length).toBeGreaterThanOrEqual(23)` → **`29`** **[C7 — v1 lo olvidaba]**
+- caso 6, línea `:67`: `toBeGreaterThanOrEqual(12)` → **`21`**
+  (medido por el juez con la regex real del ratchet: hoy hay **exactamente 16** `read`/`read`; 16 + 5 = 21)
 
 **Tests**
 ```bash
@@ -542,8 +725,12 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:m
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/frontend" && npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts
 ```
 
-**Criterio binario.** Backend: `13 + 22 + 15 = 50 passed` (salvo `test_health_key_existe_en_health_payload`, que
-queda rojo hasta F8 — **es la única excepción permitida y debe cerrarse en F8**). Frontend: `7 passed`.
+**Criterio binario [C8] — literal, sin "salvo".**
+Backend: **`49 passed, 1 failed`**, y el ÚNICO fallo permitido es exactamente este nodeid:
+`tests/test_devops_action_ratchet.py::test_health_key_existe_en_health_payload`
+(porque `pipeline_copilot_enabled` recién nace en `_health_payload()` en F8). **Cualquier otro rojo es del
+implementador.** F8 debe llevarlo a `50 passed, 0 failed`.
+Frontend: **`7 passed`** y `npx tsc --noEmit` con **0 errores** (los 2 wrappers nuevos de `endpoints.ts` tipan).
 **Flag.** `STACKY_PIPELINE_COPILOT_ENABLED` (ON) para 1–5; `STACKY_PIPELINE_COPILOT_COMMIT_ENABLED` (OFF) para 6.
 **Runtimes.** Idéntico en los 3: el catálogo es un dato, no depende del modelo.
 **Trabajo del operador:** ninguno (1–5). La 6 es opt-in por UI.
@@ -591,8 +778,12 @@ def build_copilot_prompt(
 4. Que si `commit_enabled` es `False`, **no** puede proponer `devops.pipeline_new.commit`, y debe explicarle al
    operador que active la flag por UI.
 5. Que una sola pregunta por turno (la de `next_question()`).
+6. **`[ADICIÓN ARQUITECTO]`** Que si la sesión está en `review`/`secrets`/`confirm` y `undo_hint(session)` no es `""`,
+   el prompt **incluye ese texto literal** y le ordena al agente mostrárselo al operador **antes** de pedir la
+   confirmación. Texto obligatorio que precede al hint:
+   `"Antes de pedir confirmacion, decile al operador como deshacer esto:"`.
 
-**Tests PRIMERO** — `Stacky Agents/backend/tests/test_pipeline_copilot_prompt.py` (6 casos)
+**Tests PRIMERO** — `Stacky Agents/backend/tests/test_pipeline_copilot_prompt.py` (**7 casos**)
 
 | # | Caso |
 |---|---|
@@ -602,13 +793,14 @@ def build_copilot_prompt(
 | 4 | `test_con_commit_off_el_prompt_prohibe_la_accion_de_commit` |
 | 5 | `test_el_prompt_incluye_la_regla_de_no_pedir_valores` |
 | 6 | `test_los_nombres_de_variables_aparecen_pero_ningun_valor` — construir la sesión con `missing_variables=("DB_PASSWORD","API_TOKEN")`, y afirmar que el prompt **contiene** esos nombres |
+| 7 | **`test_en_confirm_el_prompt_trae_el_deshacer`** — `[ADICIÓN ARQUITECTO]` con `state="confirm", provider="ado", branch="feature/x"` el prompt contiene `"azure-pipelines.yml"`, `"feature/x"` y la frase obligatoria; con `state="intake"` **no** la contiene |
 
 **Comando**
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:memory:" ./venv/Scripts/python.exe -m pytest tests/test_pipeline_copilot_prompt.py -q
 ```
 
-**Criterio binario.** `6 passed`.
+**Criterio binario.** `7 passed`.
 **Flag.** `STACKY_PIPELINE_COPILOT_ENABLED`; el punto 4 lee `STACKY_PIPELINE_COPILOT_COMMIT_ENABLED`.
 **Runtimes.** El prompt es texto: idéntico en los 3. Es **el** mecanismo de paridad.
 **Trabajo del operador:** ninguno.
@@ -636,6 +828,7 @@ bp = Blueprint("pipeline_copilot", __name__, url_prefix="/pipeline-copilot")
 | `GET` | `/session/<int:conversation_id>` | `get_session()` | `_flag_off()` → 404 | `{"ok":True,"session":{...}}` |
 | `POST` | `/session/<int:conversation_id>/advance` | `advance_session()` | `_flag_off()` → 404 | sesión nueva o `{"ok":False,"error":"transicion_ilegal","detail":motivo}` (409) |
 | `GET` | `/session/<int:conversation_id>/question` | `next_question_route()` | `_flag_off()` → 404 | `{"ok":True,"question":str}` |
+| `GET` | `/session/<int:conversation_id>/undo-hint` | `undo_hint_route()` | `_flag_off()` → 404 | `[ADICIÓN ARQUITECTO]` `{"ok":True,"undo_hint":str}` (`""` si todavía no aplica) |
 
 **Reglas de implementación**
 - `_flag_off()` lee `config.config.STACKY_PIPELINE_COPILOT_ENABLED` — **nunca** `os.getenv` con default local
@@ -647,18 +840,26 @@ bp = Blueprint("pipeline_copilot", __name__, url_prefix="/pipeline-copilot")
 - `advance_session()` **no** ejecuta acciones: solo mueve el estado. Toda escritura sigue pasando por la tarjeta de
   confirmación del frontend (D1).
 
-**Tests PRIMERO** — `Stacky Agents/backend/tests/test_pipeline_copilot_api.py` (8 casos)
+**[C6] Degradación honesta de `STACKY_PIPELINE_GENERATOR_ENABLED`.** `advance_session()` no llama al generador, pero
+el copiloto no puede prometer un camino que va a morir en un 404 mudo. Regla cerrada: si esa flag está OFF,
+`GET /session/<id>` devuelve además `"unavailable_actions": ["devops.pipeline_new.draft","devops.pipeline_new.commit"]`
+y `"unavailable_reason": "STACKY_PIPELINE_GENERATOR_ENABLED"`. Con la flag ON, ambas claves salen vacías (`[]` y `""`).
+**No se crea flag nueva.**
+
+**Tests PRIMERO** — `Stacky Agents/backend/tests/test_pipeline_copilot_api.py` (**10 casos**)
 
 | # | Caso |
 |---|---|
-| 1 | `test_flag_off_da_404` en las 3 rutas |
+| 1 | `test_flag_off_da_404` en las **4** rutas |
 | 2 | `test_get_session_de_conversacion_inexistente_da_404` |
 | 3 | `test_get_session_nueva_devuelve_intake` |
 | 4 | `test_advance_legal_persiste_el_estado` (releer con un `GET` posterior) |
 | 5 | `test_advance_ilegal_da_409_y_no_muta` |
 | 6 | `test_advance_preserva_server_alias_del_plan_108` — **guard anti-regresión de D4** |
 | 7 | `test_question_devuelve_la_primera_pregunta_abierta` |
-| 8 | `test_el_endpoint_no_ejecuta_ninguna_accion` — afirmar que el módulo no importa `devopsActionBindings` ni llama a `pipeline_generator.commit_route` |
+| 8 | `test_el_endpoint_no_ejecuta_ninguna_accion` — parsear el módulo con `ast` y afirmar que no hay `Import`/`ImportFrom` de `pipeline_generator` ni `Call` a `commit_route` |
+| 9 | **`test_con_generator_off_la_sesion_declara_que_falta`** — **[C6]** con `STACKY_PIPELINE_GENERATOR_ENABLED=False`, `unavailable_actions` trae los 2 ids **y** `unavailable_reason == "STACKY_PIPELINE_GENERATOR_ENABLED"`; con la flag ON, `[]` y `""`. **El test guarda PRIMERO el caso ON** para que el assert de lista vacía no pase por accidente. |
+| 10 | **`test_undo_hint_route_devuelve_el_texto_en_confirm_y_vacio_en_intake`** — `[ADICIÓN ARQUITECTO]` |
 
 **Cabecera obligatoria en el archivo de test:** fijar `DATABASE_URL="sqlite:///:memory:"` antes de importar la app.
 
@@ -667,7 +868,7 @@ bp = Blueprint("pipeline_copilot", __name__, url_prefix="/pipeline-copilot")
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:memory:" ./venv/Scripts/python.exe -m pytest tests/test_pipeline_copilot_api.py -q
 ```
 
-**Criterio binario.** `8 passed`.
+**Criterio binario.** `10 passed`.
 **Flag.** `STACKY_PIPELINE_COPILOT_ENABLED` (ON).
 **Runtimes.** HTTP puro: idéntico en los 3.
 **Trabajo del operador:** ninguno.
@@ -728,30 +929,41 @@ if runtime not in _CLI_RUNTIMES:
 > **Por qué no se borra el 400.** Borrarlo dejaría a un `run` con Copilot terminando `completed` **sin conversación y
 > sin error** — exactamente el falso verde que el gate existe para evitar.
 
+> **[C3] ESTE CAMBIO SOLO NO ALCANZA.** Medido: `DevOpsAgentSection.tsx:28` declara
+> `type CliRuntime = 'claude_code_cli' | 'codex_cli'` y su `<select>` (`:147-149`) tiene **exactamente 2** `<option>`.
+> Con F6 solo, el operador **nunca puede mandar `runtime="github_copilot"`** y esta rama queda inalcanzable desde el
+> producto. **La mitad frontend es F8 y es obligatoria.**
+
 **Cambio 3 — helper local.**
 ```python
 def _copilot_on() -> bool:
     return bool(getattr(_config.config, "STACKY_PIPELINE_COPILOT_ENABLED", False))
 ```
 
-**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan279_agent_turn.py` (7 casos)
+**[C2] EL GATE DE K1 ES POR `ast`, NO POR SUBSTRING.** Un `grep` / `"pipeline_copilot_prompt" in src` lo satisface un
+**comentario**. El precedente del repo es explícito: un conteo por texto sobre un símbolo premia el bug. El caso 8 mira
+el árbol sintáctico **y** el caso 3 mira el comportamiento. **Los dos son obligatorios**: el AST solo probaría que el
+código existe, no que corre; el comportamiento solo probaría el efecto, y podría lograrse por un camino paralelo.
+
+**Tests PRIMERO** — `Stacky Agents/backend/tests/test_plan279_agent_turn.py` (**8 casos**)
 
 | # | Caso |
 |---|---|
-| 1 | `test_el_modulo_referencia_el_contrato_del_copiloto` — gate de **K1** |
-| 2 | `test_sin_sesion_el_mensaje_no_se_toca` — byte-compat: mockear `run_agent` y afirmar que `context_blocks[0]["content"]` es el mensaje crudo |
-| 3 | `test_con_sesion_el_mensaje_se_envuelve` — el contenido contiene el estado de la sesión |
+| 1 | `test_sin_flag_ni_sesion_el_modulo_importa_igual` — smoke de que F6 no rompe el import de `api.devops_agent` |
+| 2 | `test_sin_sesion_el_mensaje_no_se_toca` — byte-compat: mockear `run_agent` y afirmar que `context_blocks[0]["content"]` es el mensaje crudo, **carácter por carácter** |
+| 3 | `test_con_sesion_el_mensaje_se_envuelve` — **gate de comportamiento de K1**: mockear `run_agent`, mandar un `send_message` en una conversación con `pipeline_session`, y afirmar que `context_blocks[0]["content"]` **contiene el estado de la sesión y difiere del mensaje crudo** |
 | 4 | `test_con_flag_off_el_mensaje_no_se_envuelve` |
-| 5 | `test_copilot_con_flag_on_da_200_determinista` |
-| 6 | `test_copilot_con_flag_off_sigue_dando_400` — **anti-regresión del gate** |
-| 7 | `test_conversacion_anclada_conserva_el_contrato_de_consola` — los dos envoltorios conviven en orden |
+| 5 | `test_copilot_con_flag_on_da_200_determinista` — `mode == "deterministic"` y `propose_url` presente |
+| 6 | `test_copilot_con_flag_off_sigue_dando_400` — **anti-regresión del gate**, con el mensaje del 400 asertado (no sólo el status) |
+| 7 | `test_conversacion_anclada_conserva_el_contrato_de_consola` — los dos envoltorios conviven **en orden** (consola primero, copiloto después) |
+| 8 | **`test_ast_el_turno_llama_al_constructor_del_contrato`** — **gate estructural de K1**. Literal: parsear `api/devops_agent.py` con `ast.parse` y afirmar las **dos** cosas: (a) existe un `ast.ImportFrom` con `node.module == "services.pipeline_copilot_prompt"` y `"build_copilot_prompt"` entre sus `names`; (b) existe un `ast.Call` cuyo `func` es un `ast.Name(id="build_copilot_prompt")`. **Guard anti-falso-verde obligatorio en el mismo test:** antes de las 2 aserciones, correr el mismo censo sobre una constante de fuente que contiene sólo `# build_copilot_prompt` en un comentario y afirmar que da **0 imports y 0 calls** — si el censo no distingue el comentario del código, el gate no vale. |
 
 **Comando**
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:memory:" ./venv/Scripts/python.exe -m pytest tests/test_plan279_agent_turn.py -q
 ```
 
-**Criterio binario.** `7 passed`.
+**Criterio binario.** `8 passed`.
 **Flag.** `STACKY_PIPELINE_COPILOT_ENABLED` (ON). Con la flag OFF, `devops_agent.py` se comporta **exactamente** como hoy.
 **Runtimes.**
 - *Claude Code CLI*: turno completo con contrato en el prompt.
@@ -835,7 +1047,25 @@ el operador la carga ahí, donde ya se cargan hoy.
 **Archivos a editar**
 - `Stacky Agents/frontend/src/pages/DevOpsPage.tsx` (agregar la sección 18)
 - `Stacky Agents/backend/services/devops_action_catalog.py` (`DEVOPS_SECTION_IDS`, `:46-51`)
-- `Stacky Agents/backend/api/devops.py` (`_health_payload`, agregar 2 keys tras `:116`)
+- `Stacky Agents/backend/api/devops.py` (`_health_payload` — la def está en `:28`; las 2 keys nuevas van **tras `:116`**, justo antes del `}` de `:117`)
+- **`Stacky Agents/frontend/src/components/devops/DevOpsAgentSection.tsx` — [C3], OBLIGATORIO**
+
+**[C3] La mitad frontend de la paridad — sin esto, F6 es código muerto.**
+
+En `DevOpsAgentSection.tsx`, **dos** ediciones literales:
+
+1. `:28` — `type CliRuntime = 'claude_code_cli' | 'codex_cli';`
+   → `type CliRuntime = 'claude_code_cli' | 'codex_cli' | 'github_copilot';`
+2. tras `:149` (`<option value="codex_cli">Codex</option>`), agregar:
+   ```tsx
+   {/* Plan 279 F8 [C3] — GitHub Copilot no tiene turno CLI: el backend responde
+       200 con mode:"deterministic" y el operador conserva la capacidad completa
+       via matcher determinista + tarjeta de accion. Degradacion DECLARADA. */}
+   <option value="github_copilot">GitHub Copilot (modo determinista)</option>
+   ```
+
+El default (`:49`, `useState<CliRuntime>('claude_code_cli')`) **no se toca**: el operador que no elige nada sigue
+exactamente como hoy. **Cero trabajo extra**; es una opción más, no un paso más.
 
 > **TRAMPA nº6 — la sección nueva va en TRES lugares o el ratchet se pone rojo.**
 > `test_section_ids_espejan_el_tsx` (`test_devops_action_ratchet.py:77-87`) exige **igualdad exacta** entre los
@@ -896,18 +1126,27 @@ export function availableActionIds(s: SessionState): string[];
 
 /** true si el estado exige confirmación explícita antes de seguir. */
 export function needsOperatorConfirmation(s: SessionState): boolean;
+
+/** [ADICIÓN ARQUITECTO] true si la tarjeta DEBE mostrar el undo_hint antes del
+ *  botón de confirmar. Determinista: 'review' | 'secrets' | 'confirm'. */
+export function mustShowUndoHint(s: SessionState): boolean;
+
+/** Los 3 runtimes que el copiloto soporta, con su modo. Espejo de F6. */
+export const COPILOT_RUNTIMES: { id: string; label: string; mode: 'cli' | 'deterministic' }[];
 ```
 
-**Tests** — `__tests__/pipelineCopilotModel.test.ts` (6 casos)
+**Tests** — `__tests__/pipelineCopilotModel.test.ts` (**8 casos**)
 
 | # | Caso |
 |---|---|
 | 1 | `SESSION_STATES` tiene 8 entradas |
 | 2 | `stateLabel` no devuelve vacío para ninguno de los 8 |
 | 3 | `availableActionIds('confirm')` incluye `devops.pipeline_new.commit` |
-| 4 | `availableActionIds('intake')` **no** incluye ninguna acción de escritura |
+| 4 | `availableActionIds('intake')` **no** incluye ninguna acción de escritura. **Guard:** el test afirma primero que `availableActionIds('confirm')` **sí** trae una escritura, para que el assert de ausencia no pase con una lista vacía |
 | 5 | `needsOperatorConfirmation('confirm') === true` y `('review') === false` |
 | 6 | los ids devueltos son subconjunto de los 6 del plan |
+| 7 | **`COPILOT_RUNTIMES` tiene los 3 ids y `github_copilot` tiene `mode === 'deterministic'`** — **[C3]**, espejo del `<select>` |
+| 8 | **`mustShowUndoHint`** es `true` en `review`/`secrets`/`confirm` y `false` en los otros 5 — `[ADICIÓN ARQUITECTO]` |
 
 **Comandos**
 ```bash
@@ -915,11 +1154,13 @@ cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:m
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/frontend" && npx vitest run src/components/devops/__tests__/pipelineCopilotModel.test.ts && npx tsc --noEmit
 ```
 
-**Criterio binario.** Backend `13 passed` (**ahora sí completo**, incluido `test_health_key_existe_en_health_payload`).
-Frontend `6 passed` y `tsc --noEmit` con **0 errores**.
+**Criterio binario.** Backend **`13 passed, 0 failed`** en `test_devops_action_ratchet.py` (**ahora sí completo**:
+`test_health_key_existe_en_health_payload`, el único rojo permitido en F3, queda **cerrado acá**).
+Frontend **`8 passed`** y `npx tsc --noEmit` con **0 errores**.
 **Flag.** `STACKY_PIPELINE_COPILOT_ENABLED`. Con la flag OFF la pestaña se atenúa y el panel queda como hoy.
-**Runtimes.** UI: idéntica en los 3. El selector de runtime existente (`DevOpsAgentSection.tsx:147-150`) se reusa.
-**Trabajo del operador:** ninguno (nace ON).
+**Runtimes.** UI **con los 3**: el selector de `DevOpsAgentSection.tsx` se **extiende** a `github_copilot` (arriba),
+que es lo que vuelve alcanzable la salida determinista de F6. Claude Code CLI y Codex CLI, sin cambios.
+**Trabajo del operador:** ninguno (nace ON; el default del selector no se toca).
 
 ---
 
@@ -934,7 +1175,7 @@ Frontend `6 passed` y `tsc --noEmit` con **0 errores**.
 - `Stacky Agents/backend/api/pipeline_copilot.py` (log de transición)
 
 **Registro en los DOS ratchets — sintaxis DISTINTA.**
-En `.sh`, junto a `:978-981`, líneas desnudas:
+Son **7 archivos, no 6** (el E2E va en la misma tanda). En `.sh`, junto al bloque del plan 267 (`:977-981`), líneas desnudas:
 ```
   tests/test_plan279_baseline.py
   tests/test_pipeline_session.py
@@ -942,8 +1183,9 @@ En `.sh`, junto a `:978-981`, líneas desnudas:
   tests/test_pipeline_copilot_api.py
   tests/test_pipeline_copilot_secrets.py
   tests/test_plan279_agent_turn.py
+  tests/test_plan279_e2e.py
 ```
-En `.ps1`, junto a `:872-875`, entre comillas y con coma:
+En `.ps1`, junto al mismo bloque (`:871-875`), entre comillas y con coma:
 ```
   "tests/test_plan279_baseline.py",
   "tests/test_pipeline_session.py",
@@ -951,12 +1193,20 @@ En `.ps1`, junto a `:872-875`, entre comillas y con coma:
   "tests/test_pipeline_copilot_api.py",
   "tests/test_pipeline_copilot_secrets.py",
   "tests/test_plan279_agent_turn.py",
+  "tests/test_plan279_e2e.py",
 ```
 
-**Auditoría de decisiones.** En `advance_session()`, dejar **una** línea por transición con
-`services/stacky_logger.py`, calcando `_log_si_quedo_bloqueada()` (`api/devops_actions.py:55-79`):
+**Auditoría de decisiones.** En `advance_session()`, dejar **una** línea por transición, calcando
+`_log_si_quedo_bloqueada()` (`api/devops_actions.py:55-80`).
+
+> **[C9] TRAMPA nº7 — el import.** `services/stacky_logger.py` **no** expone `info()` a nivel de módulo: define
+> `class _StackyLogger` (`:153`) y **una instancia** `logger = _StackyLogger()` (`:511`). Un
+> `import services.stacky_logger as stacky_logger` seguido de `.info(...)` revienta con `AttributeError`.
+> El import es **exactamente** el del precedente (`devops_actions.py:71`):
 
 ```python
+from services.stacky_logger import logger as stacky_logger
+
 stacky_logger.info(
     "pipeline_copilot",
     "session_advance",
@@ -967,19 +1217,28 @@ stacky_logger.info(
 )
 ```
 
-**CERO PII, igual que el precedente (`devops_actions.py:63-65`):** se registran `conversation_id`, estados y
-`action_id` (constantes del catálogo). **NO** se registra el texto del operador, ni el proyecto, ni la rama, ni
-ningún nombre de variable.
+Todo el bloque va dentro de un `try/except Exception: pass`, igual que el precedente: **el log nunca puede romper la
+request**.
 
-**Tests E2E** — `Stacky Agents/backend/tests/test_plan279_e2e.py` (5 casos)
+**CERO PII, igual que el precedente (`devops_actions.py:64-66`):** se registran `conversation_id`, estados y
+`action_id` (constantes del catálogo). **NO** se registra el texto del operador, ni el proyecto, ni la rama, ni
+ningún nombre de variable, **ni el `undo_hint`** (que contiene la rama).
+
+**[C11] Huella de regresión.** Agregar **una** entrada a `Stacky Agents/docs/sistema/error_fingerprints.json`
+(hoy tiene **0** menciones de "279"), con el mismo esquema que las vecinas del plan 267:
+`id: "plan279-sesion-de-copiloto-atascada"`, cuyo `log_pattern` matchee la línea `session_advance` con
+`destino == "failed"`. Sin esto, "la sesión se murió" no deja rastro buscable.
+
+**Tests E2E** — `Stacky Agents/backend/tests/test_plan279_e2e.py` (**6 casos**)
 
 | # | Caso |
 |---|---|
 | 1 | `test_recorrido_feliz_intake_a_confirm` — 5 transiciones encadenadas por HTTP, terminando en `confirm` |
-| 2 | `test_los_3_runtimes_producen_la_misma_propuesta` — **gate de K6**: `POST /api/devops/actions/propose` con el mismo texto y `runtime` en `("claude_code_cli","codex_cli","github_copilot")` → el `action_id` y el `confidence` deben ser **idénticos** |
+| 2 | **`test_los_3_runtimes_llegan_al_copiloto`** — **gate de K6, corregido [C3]**. v1 pegaba a `/api/devops/actions/propose`, que **ignora el runtime** (`api/devops_actions.py:95`) y habría dado verde sin probar nada. El gate real son **dos** aserciones sobre `POST /api/devops/agent/start`: (a) con `runtime` en `("claude_code_cli","codex_cli")` y la flag ON → arranca el turno CLI; (b) con `runtime="github_copilot"` y la flag ON → **`200`** con `mode == "deterministic"` y `propose_url == "/api/devops/actions/propose"`. **Más** el guard de que ese mismo request con la flag **OFF** sigue dando **`400`** (anti-regresión, espejo de F6 caso 6). |
 | 3 | `test_commit_con_flag_off_queda_bloqueado` — la propuesta sale con `blocked_reason == "agent_write_disabled"` (`devops_action_proposal.py:27`) |
 | 4 | `test_la_sesion_nunca_salta_a_committed_sin_pasar_por_confirm` |
-| 5 | `test_la_transicion_deja_una_linea_de_log_sin_pii` — capturar el log y afirmar que **no** contiene el texto del operador |
+| 5 | `test_la_transicion_deja_una_linea_de_log_sin_pii` — **guard anti-falso-verde obligatorio**: afirmar **primero** que el log capturado **contiene** `"session_advance"` (si el capturador no engancha, el assert de ausencia pasaría vacío), y **después** que **no** contiene el texto del operador, ni el nombre del proyecto, ni la rama |
+| 6 | **`test_en_confirm_el_operador_ve_el_deshacer`** — `[ADICIÓN ARQUITECTO]`, **gate de K7**: recorrido HTTP hasta `confirm` con `provider="ado", branch="feature/x"`; `GET /api/pipeline-copilot/session/<id>/undo-hint` devuelve un texto que contiene `"azure-pipelines.yml"` **y** `"feature/x"`. Guard: en `intake` la misma ruta devuelve `""`. |
 
 > **Registrar `test_plan279_e2e.py` también en los dos ratchets.**
 
@@ -988,10 +1247,26 @@ ningún nombre de variable.
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend" && DATABASE_URL="sqlite:///:memory:" ./venv/Scripts/python.exe -m pytest tests/test_plan279_baseline.py tests/test_pipeline_session.py tests/test_pipeline_copilot_prompt.py tests/test_pipeline_copilot_api.py tests/test_pipeline_copilot_secrets.py tests/test_plan279_agent_turn.py tests/test_plan279_e2e.py tests/test_devops_action_ratchet.py tests/test_devops_action_catalog.py tests/test_devops_actions_api.py tests/test_devops_action_matcher.py -q
 ```
 
-**Criterio binario.** `4+10+6+8+6+7+5 = 46` casos nuevos verdes **más** los 69 de baseline = **115 passed, 0 failed**.
-Y `python -m pytest tests/test_harness_ratchet_meta.py tests/test_plan259_ratchet_script_parity.py -q` en verde.
+**Criterio binario [C1, C8] — la aritmética, explícita.**
+
+| Archivo | Casos |
+|---|---|
+| `test_plan279_baseline.py` | 4 |
+| `test_pipeline_session.py` | 11 |
+| `test_pipeline_copilot_prompt.py` | 7 |
+| `test_pipeline_copilot_api.py` | 10 |
+| `test_pipeline_copilot_secrets.py` | 6 |
+| `test_plan279_agent_turn.py` | 8 |
+| `test_plan279_e2e.py` | 6 |
+| **nuevos** | **52** |
+| baseline (22+19+15+13, **medido: `69 passed`**; `test_devops_action_catalog.py` sigue en 22 porque su `:177` se **edita**, no se borra) | 69 |
+| **TOTAL** | **121 passed, 0 failed** |
+
+**Sin `-k` en ningún comando** (un `pytest -k` sin match da exit 0 = falso verde). **Sin `pytest tests` entero**
+(hay contaminación cruzada conocida): el veredicto es **por archivo**, y el gate del arnés es `run_harness_tests`.
+Además, `python -m pytest tests/test_harness_ratchet_meta.py tests/test_plan259_ratchet_script_parity.py -q` en verde.
 **Flag.** Ninguna nueva.
-**Runtimes.** El caso 2 **es** el gate de paridad.
+**Runtimes.** El caso 2 **es** el gate de paridad, y sólo vale con la mitad frontend de F8 aplicada.
 **Trabajo del operador:** ninguno.
 
 ---
@@ -1032,11 +1307,14 @@ explícita**, que es exactamente lo que el plan usa.
 
 **Alcance cerrado, en números:**
 - **Proveedores: exactamente 2** — `ado` y `gitlab` (`pipeline_lint.py:59`). Nada de Jenkins, GitHub Actions o CircleCI.
-- **Stacks: exactamente 3** — `python`, `node`, `dotnet` (`pipeline_stack_detector.py:13-15`).
-- **Acciones nuevas: exactamente 6** (5 read + 1 write). El catálogo pasa de 23 a **29**.
-- **Flags nuevas: exactamente 2.**
+- **Stacks: exactamente 3** — `python`, `node`, `dotnet` (`_MANIFEST_SIGNALS`, `pipeline_stack_detector.py:12-16`). **[C12]**
+- **Acciones nuevas: exactamente 6** (5 read + 1 write). El catálogo pasa de 23 a **29** (21 read + 8 write).
+- **Flags nuevas: exactamente 2.** **Cero** flags equivalentes a las 13 `STACKY_PIPELINE_*` que ya existen.
+- **Endpoints backend nuevos: 0.** Wrappers tipados nuevos en `endpoints.ts` para rutas existentes: **exactamente 2**. **[C4]**
 - **Estados: exactamente 8.**
-- **Tests nuevos: exactamente 46 casos** en 7 archivos.
+- **Tests nuevos: exactamente 52 casos backend** en 7 archivos, **+ 8 casos frontend** en 1 archivo.
+- **Archivos de test AJENOS que se editan: exactamente 2** — `test_devops_action_catalog.py:177` (`7`→`8`, **[C1]**) y
+  `devopsActionCatalogRatchet.test.ts` (3 pisos, **[C7]**). Ambos son ratchets que **se aprietan**; **ningún assert se borra**.
 
 **NO se hace en este plan:**
 1. No se elimina ni fusiona ninguna de las 17 secciones actuales.
@@ -1046,8 +1324,10 @@ explícita**, que es exactamente lo que el plan usa.
 5. No hay ejecución real de la pipeline creada dentro del hilo: disparar sigue siendo `devops.pipeline.trigger`.
 6. No hay sandbox de ejecución de pipeline: la "prueba automática" del copiloto es **lint + explain + preflight**
    (estático), no una corrida real. Una corrida en sandbox es otro plan.
-7. No hay rollback automático de un commit: si `devops.pipeline_new.commit` falla, la sesión va a `failed` y el
-   operador revierte con git (D9).
+7. No hay rollback **automático** de un commit: si `devops.pipeline_new.commit` falla, la sesión va a `failed` y el
+   operador revierte con git (D9). **[ADICIÓN ARQUITECTO]** Lo que **sí** hay ahora es el `undo_hint`: el operador ve
+   **antes de confirmar** exactamente qué archivo y qué rama tendría que revertir (D10). Deshacer **informado**, no
+   deshacer automático — el humano sigue siendo quien decide.
 
 ---
 
@@ -1080,20 +1360,30 @@ F0 (censo, nace rojo)
 ```
 
 **Ninguna fase puede saltearse.** F3 deja `test_health_key_existe_en_health_payload` rojo a propósito hasta F8: es la
-**única** excepción declarada, y F8 debe cerrarla.
+**única** excepción declarada (nodeid exacto en §6.F3), y F8 debe cerrarla.
+
+**[C3] F6 y F8 son inseparables para la paridad.** F6 sin F8 deja la rama `github_copilot` inalcanzable desde el
+producto; F8 sin F6 ofrece una opción que devuelve 400. Si por alguna razón se implementa una sola, **K6 no se marca**.
 
 ---
 
 ## 12. Definition of Done
 
-- [ ] `115 passed, 0 failed` en el comando final de F9.
+- [ ] **`121 passed, 0 failed`** en el comando final de F9 (desglose en §6.F9).
 - [ ] `npx tsc --noEmit` en `frontend/`: **0 errores**.
-- [ ] `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts`: **7 passed** con los pisos en 29 y 21.
+- [ ] `npx vitest run src/__tests__/devopsActionCatalogRatchet.test.ts`: **7 passed** con los **3** pisos en **29 / 29 / 21** (`:56`, `:62`, `:67`). **[C7]**
+- [ ] `npx vitest run src/components/devops/__tests__/pipelineCopilotModel.test.ts`: **8 passed**.
 - [ ] `test_harness_ratchet_meta.py` y `test_plan259_ratchet_script_parity.py` en verde (los 7 tests nuevos en `.sh` **y** `.ps1`).
-- [ ] **K1**: `grep -c "pipeline_copilot_prompt" backend/api/devops_agent.py` ≥ 1 (hoy el catálogo da 0).
-- [ ] **K3**: F7 caso 4 verde — `0` imports de `secrets_store` en `pipeline_copilot_secrets.py`.
-- [ ] **K4**: `len(DEVOPS_ACTION_CATALOG) == 29` y deriva catálogo↔bindings = 0.
-- [ ] **K6**: F9 caso 2 verde — los 3 runtimes producen la misma propuesta.
+- [ ] **K1 [C2]**: F6 casos 3 **y** 8 verdes (`ast` + comportamiento). **NO se acepta un `grep`/substring como evidencia de K1.**
+- [ ] **K3**: F7 casos 4 y 5 verdes — `0` imports de `secrets_store` en `pipeline_copilot_secrets.py`, y el valor de prueba **primero** confirmado en el fixture y **después** ausente del prompt.
+- [ ] **K4**: `len(DEVOPS_ACTION_CATALOG) == 29` (21 read + 8 write) y deriva catálogo↔bindings = 0.
+- [ ] **K6 [C3]**: F9 caso 2 verde **y** el `<select>` de `DevOpsAgentSection.tsx` ofrece las 3 opciones. Con una sola de las dos mitades, K6 **no se marca**.
+- [ ] **K7 [ADICIÓN ARQUITECTO]**: F9 caso 6 verde — en `confirm` el operador ve la ruta y la rama exactas a revertir.
+- [ ] **[C1]** `tests/test_devops_action_catalog.py:177` dice `== 8` y **sigue siendo una igualdad** (no `>=`, no borrado, no comentado). F0 caso 3 lo vigila.
+- [ ] **[C11]** `docs/sistema/error_fingerprints.json` tiene la huella `plan279-sesion-de-copiloto-atascada` y el JSON parsea.
 - [ ] Con **ambas flags OFF**, el panel DevOps es funcionalmente idéntico a hoy (F6 casos 2, 4 y 6).
 - [ ] Smoke manual (requiere backend + token, no automatizable): crear una pipeline de cero por el hilo, en un
-      proyecto ADO y en uno GitLab, hasta `confirm` **sin** activar la flag de commit.
+      proyecto ADO y en uno GitLab, hasta `confirm` **sin** activar la flag de commit, **verificando que el
+      `undo_hint` nombra el archivo correcto en cada proveedor**.
+- [ ] Smoke manual de paridad **[C3]**: elegir "GitHub Copilot (modo determinista)" en el selector y confirmar que la
+      sección responde con el camino determinista en vez del 400.

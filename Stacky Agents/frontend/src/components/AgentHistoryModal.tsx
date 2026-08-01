@@ -5,6 +5,8 @@ import PixelAvatar from "./PixelAvatar";
 import ExecutionDetailDrawer from "./ExecutionDetailDrawer";
 import { Dialog } from "./ui";
 import styles from "./AgentHistoryModal.module.css";
+import { useWorkbench } from "../store/workbench";
+import { accionAbrirEn, nombreDeTracker, refDeTicket } from "../lib/trackerLabels";
 
 interface AgentHistoryModalProps {
   filename: string;
@@ -124,6 +126,8 @@ function TicketRow({
   entry: AgentHistoryEntry;
   onViewDetails: (executionId: number) => void;
 }) {
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const verdict = entry.last_execution_verdict
     ? VERDICT_LABEL[entry.last_execution_verdict] ?? entry.last_execution_verdict
     : null;
@@ -139,7 +143,7 @@ function TicketRow({
     <div className={styles.row}>
       <div className={styles.rowMain}>
         <div className={styles.ticketMeta}>
-          <span className={styles.ticketId}>ADO-{entry.ado_id}</span>
+          <span className={styles.ticketId}>{refDeTicket(trackerType, entry.ado_id)}</span>
           {entry.ado_state && <span className={styles.state}>{entry.ado_state}</span>}
         </div>
         <div className={styles.title} title={entry.title}>
@@ -163,9 +167,9 @@ function TicketRow({
             href={entry.ado_url}
             target="_blank"
             rel="noreferrer"
-            title="Abrir en Azure DevOps"
+            title={accionAbrirEn(trackerType).replace(" ↗", "")}
           >
-            ADO ↗
+            {nombreDeTracker(trackerType)} ↗
           </a>
         )}
         <button

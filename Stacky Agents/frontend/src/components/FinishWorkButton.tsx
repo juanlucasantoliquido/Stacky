@@ -13,13 +13,18 @@
  *   - Cada acción del backend se muestra con su ok/reason individual.
  */
 import { useState, useCallback, useEffect } from "react";
+import { useWorkbench } from "../store/workbench";
 import { useMutation } from "@tanstack/react-query";
 import { Tickets, type FinishWorkResponse } from "../api/endpoints";
 import type { Ticket } from "../types";
-import { useWorkbench } from "../store/workbench";
 import { shouldCloseOnBackdrop } from "../services/uiGuards";
 import { describeCloseDestination } from "../incidents/incidentDivergence";
 import styles from "./FinishWorkButton.module.css";
+// Plan 282 F4 — el dialogo de cierre habla el idioma del tracker del TICKET.
+import {
+  accionPublicarComentario, etiquetaEstadoDestino, refDeTicket,
+  sugerenciasDeEstadoFinal, trackerEfectivo,
+} from "../lib/trackerLabels";
 
 interface Props {
   ticket: Ticket;
@@ -30,6 +35,9 @@ interface Props {
 }
 
 export default function FinishWorkButton({ ticket, disabled, onCompleted }: Props) {
+  // Plan 282 F4 — el tracker sale del TICKET: es el destino real de la escritura.
+  const trackerDelProyecto = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
+  const trackerDelTicket = trackerEfectivo(ticket.tracker_type, trackerDelProyecto);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [publishToAdo, setPublishToAdo] = useState(true);
@@ -136,7 +144,7 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
             </header>
 
             <div className={styles.sub}>
-              <span className={styles.adoTag}>ADO-{ticket.ado_id}</span>
+              <span className={styles.adoTag}>{refDeTicket(trackerDelTicket, ticket.ado_id)}</span>
               <span className={styles.ticketTitle}>{ticket.title}</span>
             </div>
 
@@ -222,11 +230,11 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
                   onChange={(e) => setPublishToAdo(e.target.checked)}
                   disabled={isBusy}
                 />{" "}
-                Publicar comentario en ADO
+                {accionPublicarComentario(trackerDelTicket)}
               </label>
 
               <label className={styles.label}>
-                Estado destino en ADO <span className={styles.opt}>(opcional)</span>
+                {etiquetaEstadoDestino(trackerDelTicket)} <span className={styles.opt}>(opcional)</span>
               </label>
               <input
                 type="text"
@@ -238,10 +246,9 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
                 list="ado-state-suggestions"
               />
               <datalist id="ado-state-suggestions">
-                <option value="Done" />
-                <option value="Closed" />
-                <option value="Resolved" />
-                <option value="Active" />
+                {sugerenciasDeEstadoFinal(trackerDelTicket).map((e) => (
+                  <option key={e} value={e} />
+                ))}
               </datalist>
 
               <label className={styles.inlineLabel}>

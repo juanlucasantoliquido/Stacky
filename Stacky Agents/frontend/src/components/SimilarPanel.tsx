@@ -5,11 +5,12 @@
  * Se abre desde el editor con un botón. No bloquea la UI.
  */
 import { useQuery } from "@tanstack/react-query";
+import { useWorkbench } from "../store/workbench";
 import { useState } from "react";
 
 import { Similarity, type SimilarHit } from "../api/endpoints";
-import { useWorkbench } from "../store/workbench";
 import styles from "./SimilarPanel.module.css";
+import { refDeTicket } from "../lib/trackerLabels";
 
 type Tab = "approved" | "graveyard";
 
@@ -104,6 +105,8 @@ function ResultList({
   onClick: (id: number) => void;
   empty: string;
 }) {
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   if (loading) return <div className="muted" style={{ padding: 8 }}>buscando…</div>;
   if (hits.length === 0) return <div className="muted" style={{ padding: 8 }}>{empty}</div>;
   return (
@@ -115,7 +118,7 @@ function ResultList({
               <span className={styles.score}>{Math.round(h.score * 100)}%</span>
               <span className={styles.execId}>#{h.execution_id}</span>
               <span className={styles.agent}>{h.agent_type}</span>
-              <span className={styles.ticket}>ADO-{h.ticket_ado_id}</span>
+              <span className={styles.ticket}>{refDeTicket(trackerType, h.ticket_ado_id)}</span>
               <span className={styles.verdict} data-v={h.verdict ?? ""}>
                 {h.verdict ?? ""}
               </span>

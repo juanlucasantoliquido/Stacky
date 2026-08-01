@@ -15,6 +15,8 @@ import { useWorkbench } from "../store/workbench";
 import { useConfirm } from "../components/ui";
 import { scheduleUndoable } from "../services/undoManager";
 import styles from "./FlowConfigPage.module.css";
+// Plan 282 F4 — la pantalla de estados nombra el tracker real del proyecto.
+import { etiquetaEstadoDeTicket, nombreDeTracker } from "../lib/trackerLabels";
 
 const VALID_AGENT_TYPES = ["business", "functional", "technical", "developer", "qa"] as const;
 type ValidAgentType = (typeof VALID_AGENT_TYPES)[number];
@@ -55,6 +57,8 @@ interface CreateFormProps {
 }
 
 function CreateForm({ onCreated, trackerStates, loadingStates, usedStates, activeProjectName }: CreateFormProps) {
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const availableStates = trackerStates.filter((s) => !usedStates.has(s));
   const [adoState, setAdoState] = useState<string>(availableStates[0] ?? "");
   const [agentType, setAgentType] = useState<ValidAgentType>("business");
@@ -98,7 +102,7 @@ function CreateForm({ onCreated, trackerStates, loadingStates, usedStates, activ
       <p className={styles.formTitle}>Nueva regla</p>
       <div className={styles.formRow}>
         <div className={styles.fieldGroup}>
-          <label className={styles.label} htmlFor="fc-ado-state">Estado ADO</label>
+          <label className={styles.label} htmlFor="fc-ado-state">{etiquetaEstadoDeTicket(trackerType)}</label>
           <select
             id="fc-ado-state"
             className={styles.select}
@@ -333,6 +337,8 @@ function RuleRow({ rule, trackerStates, otherUsedStates, activeProjectName }: Ru
 export default function FlowConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const activeProject = useWorkbench((s) => s.activeProject);
   const activeProjectName = activeProject?.name ?? null;
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = activeProject?.tracker_type ?? null;
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["flow-config", activeProjectName],
@@ -358,14 +364,14 @@ export default function FlowConfigPage({ embedded = false }: { embedded?: boolea
             propio encabezado; standalone conserva el suyo. */}
         {!embedded && <h2 className={styles.title}>Reglas de flujo</h2>}
         <p className={styles.subtitle}>
-          Mapeo determinístico: estado ADO → tipo de agente sugerido.
+          {`Mapeo determinístico: estado ${nombreDeTracker(trackerType)} → tipo de agente sugerido.`}
           Clave usada: <code>agent_type</code>.
         </p>
       </div>
 
       {!activeProject && (
         <div className={styles.empty} style={{ marginBottom: 16 }}>
-          Sin proyecto activo. Seleccioná un proyecto en el TopBar para ver los estados ADO disponibles.
+          Sin proyecto activo. Seleccioná un proyecto en el TopBar para ver los estados del tracker disponibles.
         </div>
       )}
 
@@ -401,7 +407,7 @@ export default function FlowConfigPage({ embedded = false }: { embedded?: boolea
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th}>Estado ADO</th>
+                <th className={styles.th}>{etiquetaEstadoDeTicket(trackerType)}</th>
                 <th className={styles.th}>Tipo de agente</th>
                 <th className={styles.th}>Actualizado</th>
                 <th className={styles.th} style={{ textAlign: "right" }}>Acciones</th>

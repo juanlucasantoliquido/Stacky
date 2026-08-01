@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useWorkbench } from "../store/workbench";
 import type { VsCodeAgent } from "../types";
 import {
   getAgentAvatar,
@@ -31,12 +32,12 @@ function inferTypeFromFilename(filename: string): AgentTypeOption {
   return "";
 }
 import { Projects } from "../api/endpoints";
-import { useWorkbench } from "../store/workbench";
 import AgentWorkflowForm from "./AgentWorkflowForm";
 import type { AgentWorkflowFormValue } from "./AgentWorkflowForm";
 import AvatarPicker from "./AvatarPicker";
 import PixelAvatar from "./PixelAvatar";
 import styles from "./EmployeeEditDrawer.module.css";
+import { nombreDeTracker } from "../lib/trackerLabels";
 
 interface EmployeeEditDrawerProps {
   filename: string;
@@ -48,6 +49,8 @@ interface EmployeeEditDrawerProps {
 export default function EmployeeEditDrawer({ filename, agent, onClose, onRemoved }: EmployeeEditDrawerProps) {
   const defaultName = agent?.name ?? filename.replace(/\.agent\.md$/i, "");
   const defaultRole = agent?.description?.split(".")[0] ?? "Agente VS Code";
+  // Plan 282 F4 — la ayuda nombra el tracker real del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
 
   const [nickname, setNickname] = useState(getAgentNickname(filename) ?? "");
   const [role, setRole] = useState(getAgentRole(filename) ?? "");
@@ -188,7 +191,7 @@ export default function EmployeeEditDrawer({ filename, agent, onClose, onRemoved
               ))}
             </select>
             <span style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4, display: "block" }}>
-              Usado por Configuración → Estados para resolver el agente sugerido por estado ADO.
+              {`Usado por Configuración → Estados para resolver el agente sugerido por estado ${nombreDeTracker(trackerType)}.`}
             </span>
           </div>
 

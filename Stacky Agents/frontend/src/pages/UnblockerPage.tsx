@@ -12,6 +12,7 @@
  * Datos: GET /api/tickets/unblocker-board (Tickets.unblockerBoard).
  */
 import { useCallback, useState, type DragEvent, type ChangeEvent } from "react";
+import { useWorkbench } from "../store/workbench";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Tickets,
@@ -19,14 +20,15 @@ import {
   type UnblockerReadiness,
 } from "../api/endpoints";
 import type { Ticket } from "../types";
-import { useWorkbench } from "../store/workbench";
 import FinishWorkButton from "../components/FinishWorkButton";
 import styles from "./UnblockerPage.module.css";
 import { formatWorkItemTypeLabel, getWorkItemTypeColor } from "../utils/workItemTypeColor";
+// Plan 282 F4 — el desatascador nombra el tracker real del proyecto.
+import { etiquetaEstadoDeTicket, nombreDeTracker, refDeTicket } from "../lib/trackerLabels";
 
 const READINESS_LABEL: Record<UnblockerReadiness, string> = {
   task_ready: "Task lista para crear",
-  stale_consumed: "⚠️ Task borrada en ADO — recrear",
+  stale_consumed: "⚠️ Task borrada en el tracker — recrear",
   comment_ready: "Comentario listo para publicar",
   waiting_files: "Esperando archivos del agente",
   artifacts_idle: "Artifacts en disco",
@@ -55,6 +57,9 @@ function UnblockerCard({
   artifactRoot: string | null;
   activeProjectName: string | null;
 }) {
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
+  const TRACKER = nombreDeTracker(trackerType);
   const [busy, setBusy] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -109,20 +114,20 @@ function UnblockerCard({
   const recreateStaleTasks = useCallback(async () => {
     if (!item.ado_id || staleConsumed.length === 0) return;
     setBusy(true);
-    setActionMessage("Recreando Task(s) borrada(s) en ADO...");
+    setActionMessage(`Recreando Task(s) borrada(s) en ${TRACKER}...`);
     try {
       for (const st of staleConsumed) {
         const result = await Tickets.createChildTask(item.ado_id, {
           pending_task_path: st.pending_task_path,
           operator_reason:
-            `Desatascador: recreación — la Task ADO-${st.task_ado_id} fue borrada en ADO`,
+            `Desatascador: recreación — la Task ${refDeTicket(trackerType, st.task_ado_id)} fue borrada en ${TRACKER}`,
           project: activeProjectName,
           repo_root: artifactRoot,
         });
         if (!result.ok) {
           throw new Error(result.message || result.error || "create-child-task falló");
         }
-        setActionMessage(`Task recreada: ADO-${result.task_ado_id}`);
+        setActionMessage(`Task recreada: ${refDeTicket(trackerType, result.task_ado_id)}`);
       }
       onChanged();
     } catch (err) {
@@ -167,7 +172,7 @@ function UnblockerCard({
         if (!created.ok) {
           throw new Error(created.message || created.error || "create-child-task falló");
         }
-        setActionMessage(`Task creada: ADO-${created.task_ado_id}`);
+        setActionMessage(`Task creada: ${refDeTicket(trackerType, created.task_ado_id)}`);
       } else if (rescue.artifact_type === "comment" && rescue.html_output_path) {
         setActionMessage("Comentario preparado. Publicando...");
         const published = await Tickets.finishWork(item.ticket_id, {
@@ -238,7 +243,7 @@ function UnblockerCard({
         throw new Error(cct.message || cct.error || "create-child-task no pudo completar la Task.");
       }
       setActionMessage(
-        cct?.task_ado_id ? `Task creada: ADO-${cct.task_ado_id}` : "Re-procesado correctamente."
+        cct?.task_ado_id ? `Task creada: ${refDeTicket(trackerType, cct.task_ado_id)}` : "Re-procesado correctamente."
       );
       onChanged();
     } catch (err) {
@@ -268,7 +273,7 @@ function UnblockerCard({
               rel="noopener noreferrer"
               className={styles.adoTag}
             >
-              ADO-{item.ado_id}
+              {refDeTicket(trackerType, item.ado_id)}
             </a>
           ) : (
             <span className={styles.adoTag}>#{item.ticket_id}</span>
@@ -291,7 +296,7 @@ function UnblockerCard({
       <h3 className={styles.cardTitle} title={item.title}>{item.title}</h3>
 
       <div className={styles.meta}>
-        <span>Estado ADO: <strong>{item.ado_state ?? "—"}</strong></span>
+        <span>{etiquetaEstadoDeTicket(trackerType)}: <strong>{item.ado_state ?? "—"}</strong></span>
         <span>Stacky: <strong>{item.stacky_status}</strong></span>
         {item.last_execution && (
           <span>
@@ -343,7 +348,7 @@ function UnblockerCard({
             <li key={`stale-${st.rf_id}-${st.pending_task_path}`}>
               <strong>{st.rf_id}</strong> — {st.title}{" "}
               <span className={styles.planMissing}>
-                Task ADO-{st.task_ado_id ?? "?"} borrada en ADO
+                {`Task ${refDeTicket(trackerType, st.task_ado_id ?? "?")} borrada en ${TRACKER}`}
               </span>
               <code className={styles.pathCode}>{st.pending_task_path}</code>
             </li>
@@ -391,7 +396,7 @@ function UnblockerCard({
         )}
         {hasStaleConsumed && (
           <button className={styles.actionBtn} onClick={recreateStaleTasks} disabled={busy}>
-            {busy ? "Procesando..." : "Recrear Task borrada en ADO"}
+            {busy ? "Procesando..." : `Recrear Task borrada en ${TRACKER}`}
           </button>
         )}
         {canPublishComment && (
@@ -404,7 +409,7 @@ function UnblockerCard({
         )}
       </div>
       <div className={styles.dropZone}>
-        Arrastrá pending-task.json, plan-de-pruebas.md o comment.html para rescatar este ADO.
+        {`Arrastrá pending-task.json, plan-de-pruebas.md o comment.html para rescatar este ticket de ${TRACKER}.`}
         {/* Plan 66 F2 — alternativa sin drag: selector de archivos */}
         <label className={styles.filePicker}>
           <span>o seleccionar archivo</span>
@@ -529,7 +534,7 @@ export default function UnblockerPage() {
           <span className={styles.countComment}>{counts.comment_ready} comentario(s) listos</span>
           {(counts.stale_consumed ?? 0) > 0 && (
             <span className={styles.countError}>
-              {counts.stale_consumed} task(s) borrada(s) en ADO
+              {`${counts.stale_consumed} task(s) borrada(s) en el tracker`}
             </span>
           )}
           {counts.files_error > 0 && (

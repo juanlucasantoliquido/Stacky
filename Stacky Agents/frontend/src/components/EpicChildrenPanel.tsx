@@ -12,6 +12,8 @@
 import { useEffect, useState } from "react";
 import { Tickets } from "../api/endpoints";
 import { useConfirm } from "./ui";
+import { useWorkbench } from "../store/workbench";
+import { nombreDeTracker } from "../lib/trackerLabels";
 
 interface ChildNode {
   work_item_type: string;
@@ -39,6 +41,8 @@ interface Props {
 
 export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Props) {
   const askConfirm = useConfirm();
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const [preview, setPreview] = useState<PreviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,8 +86,8 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
 
   const handleCreate = async () => {
     if (!(await askConfirm({
-      title: "Crear hijos en ADO",
-      message: `¿Crear ${preview.total_children} hijos en ADO (${preview.features.length} Feature(s) + Tasks)?\nEsta acción es idempotente: reintentar no duplica.`,
+      title: `Crear hijos en ${nombreDeTracker(trackerType)}`,
+      message: `¿Crear ${preview.total_children} hijos en ${nombreDeTracker(trackerType)} (${preview.features.length} Feature(s) + Tasks)?\nEsta acción es idempotente: reintentar no duplica.`,
       confirmLabel: "Crear",
     }))) return;
 
@@ -171,7 +175,7 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
             opacity: creating ? 0.7 : 1,
           }}
         >
-          {creating ? "Creando…" : `Crear ${preview.total_children} hijos en ADO`}
+          {creating ? "Creando…" : `Crear ${preview.total_children} hijos en ${nombreDeTracker(trackerType)}`}
         </button>
       )}
     </div>

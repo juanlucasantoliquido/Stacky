@@ -10,6 +10,8 @@ import type { Ticket } from "../types";
 import type { ConfirmFn } from "./confirmGateway";
 import { executionDeepLink, ticketExternalLink } from "./peekLinks";
 import { serializeRoute } from "./routes";
+// Plan 282 F4/F5 — los rotulos y los links siguen al tracker, no a "ADO" siempre.
+import { nombreDeTracker, refDeTicket, trackerEfectivo } from "../lib/trackerLabels";
 
 /** Reusa el vocabulario de la paleta (129) en vez de inventar otro enum. */
 export type EntityKind = Extract<CommandKind, "execution" | "ticket">;
@@ -45,7 +47,14 @@ export function quickActions(actions: EntityAction[]): EntityAction[] {
   return (actions ?? []).filter((a) => a.quick && a.effect === "safe");
 }
 
-export function actionsForExecution(item: ExecutionHistoryItem, origin: string): EntityAction[] {
+export function actionsForExecution(
+  item: ExecutionHistoryItem,
+  origin: string,
+  /** Plan 282 F4 — tracker del proyecto. OPCIONAL: sin el, el rotulo cae al
+   *  neutro "Tracker" en vez de mentir con "ADO". */
+  tracker?: string | null,
+): EntityAction[] {
+  const TRACKER = nombreDeTracker(tracker);
   const out: EntityAction[] = [
     {
       id: "exec-open",
@@ -111,14 +120,14 @@ export function actionsForExecution(item: ExecutionHistoryItem, origin: string):
   if (item.status === "completed") {
     out.push({
       id: "exec-publish",
-      label: "Publicar a ADO…",
+      label: `Publicar a ${TRACKER}…`,
       icon: "📤",
       effect: "confirm",
       quick: false,
       run: async (ctx) => {
         const ok = await ctx.askConfirm({
-          title: "Publicar a ADO",
-          message: `Publicar el resultado de la ejecución #${item.id} como comentario en ADO.`,
+          title: `Publicar a ${TRACKER}`,
+          message: `Publicar el resultado de la ejecución #${item.id} como comentario en ${TRACKER}.`,
           confirmLabel: "Publicar",
           tone: "default",
         });
@@ -151,14 +160,16 @@ export function actionsForExecution(item: ExecutionHistoryItem, origin: string):
   return out;
 }
 
-export function actionsForTicket(t: Ticket): EntityAction[] {
+export function actionsForTicket(t: Ticket, trackerDelProyecto?: string | null): EntityAction[] {
+  const tt = trackerEfectivo(t.tracker_type, trackerDelProyecto);
+  const TRACKER = nombreDeTracker(tt);
   const out: EntityAction[] = [];
-  const ext = ticketExternalLink(t);
+  const ext = ticketExternalLink({ ...t, tracker_type: tt ?? undefined });
 
   if (ext) {
     out.push({
       id: "ticket-open-ado",
-      label: "Abrir en ADO",
+      label: `Abrir en ${TRACKER}`,
       icon: "↗",
       effect: "safe",
       quick: true,
@@ -166,7 +177,7 @@ export function actionsForTicket(t: Ticket): EntityAction[] {
     });
     out.push({
       id: "ticket-copy-ado-link",
-      label: "Copiar link ADO",
+      label: `Copiar link ${TRACKER}`,
       icon: "🔗",
       effect: "safe",
       quick: true,
@@ -179,12 +190,12 @@ export function actionsForTicket(t: Ticket): EntityAction[] {
 
   out.push({
     id: "ticket-copy-ref",
-    label: `Copiar ref ADO-${t.ado_id}`,
+    label: `Copiar ref ${refDeTicket(tt, t.ado_id)}`,
     icon: "🆔",
     effect: "safe",
     quick: false,
     run: async (ctx) => {
-      const ok = await ctx.copyText(`ADO-${t.ado_id} — ${t.title}`);
+      const ok = await ctx.copyText(`${refDeTicket(tt, t.ado_id)} — ${t.title}`);
       ctx.onDone?.("ticket-copy-ref", ok);
     },
   });

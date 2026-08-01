@@ -135,8 +135,13 @@ describe("buildTicketPeek", () => {
     project: "p",
   } as unknown as Ticket;
 
-  it("el título lleva la referencia ADO", () => {
-    expect(buildTicketPeek(base).title).toBe("ADO-4242 — Un ticket");
+  it("el título lleva la referencia del TRACKER (Plan 282 F4)", () => {
+    expect(buildTicketPeek(base, "azure_devops").title).toBe("ADO-4242 — Un ticket");
+    // El mismo ticket en GitLab usa la notacion que el propio GitLab muestra.
+    expect(buildTicketPeek(base, "gitlab").title).toBe("#4242 — Un ticket");
+    // Y el tracker del PROPIO ticket gana sobre el del proyecto.
+    expect(buildTicketPeek({ ...base, tracker_type: "gitlab" } as Ticket, "azure_devops").title)
+      .toBe("#4242 — Un ticket");
   });
 
   it("un título larguísimo se trunca", () => {
@@ -146,11 +151,20 @@ describe("buildTicketPeek", () => {
   });
 
   it("los campos ausentes salen como raya", () => {
-    const valores = Object.fromEntries(buildTicketPeek(base).fields.map((f) => [f.label, f.value]));
+    const valores = Object.fromEntries(
+      buildTicketPeek(base, "azure_devops").fields.map((f) => [f.label, f.value]),
+    );
 
     expect(valores["Tipo"]).toBe("—");
     expect(valores["Estado ADO"]).toBe("—");
     expect(valores["Asignado"]).toBe("—");
+
+    // Plan 282 F4 — en GitLab el rotulo del campo cambia con el tracker.
+    const enGitLab = Object.fromEntries(
+      buildTicketPeek(base, "gitlab").fields.map((f) => [f.label, f.value]),
+    );
+    expect(enGitLab["Estado GitLab"]).toBe("—");
+    expect(enGitLab["Estado ADO"]).toBeUndefined();
   });
 
   it("sin pipeline NO aparece el campo Pipeline", () => {

@@ -9,7 +9,10 @@
 import type { Ticket, AgentExecution } from "../types";
 import type { IncidentDTO } from "../incidents/incidentModel";
 import type { ExecutionHistoryItem } from "../api/endpoints";
-import { adoUrl } from "../utils/trackerUrls";
+// Plan 282 F5 — el enlace sale del backend o NO sale: adoUrl construia una URL
+// a la organizacion de OTRO cliente.
+import { urlDeTicket } from "../utils/trackerUrls";
+import { etiquetaEstadoDeTicket, trackerEfectivo } from "../lib/trackerLabels";
 import { formatDuration, formatCostUsd } from "./format";
 
 export type CellValue = string | number | boolean | null | undefined;
@@ -68,15 +71,19 @@ export function copiedRowsLabel(total: number): string {
 }
 
 // ── Entidades → Markdown / Texto (§4.10 fechas ISO crudo) ────────────────────
-export function ticketToMarkdown(t: Ticket): string {
+export function ticketToMarkdown(t: Ticket, trackerDelProyecto?: string | null): string {
+  const tt = trackerEfectivo(t.tracker_type, trackerDelProyecto);
+  const enlace = urlDeTicket({ type: tt, ado_url: t.ado_url }, t.ado_id);
   const lines = [
     `## [${t.work_item_type ?? "Ticket"} ${t.ado_id}] ${t.title}`,
     "",
-    `- Estado ADO: ${t.ado_state ?? "n/d"}`,
+    `- ${etiquetaEstadoDeTicket(tt)}: ${t.ado_state ?? "n/d"}`,
     `- Estado Stacky: ${t.stacky_status ?? "n/d"}`,
     `- Prioridad: ${t.priority ?? "n/d"}`,
     `- Asignado: ${t.assigned_to_ado ?? "n/d"}`,
-    `- Enlace: ${t.ado_url ?? adoUrl(String(t.ado_id))}`,
+    // Plan 282 F5 — sin enlace resoluble la linea NO se emite: un link muerto
+    // (o peor, al tracker de otro cliente) es peor que ninguno.
+    ...(enlace ? [`- Enlace: ${enlace}`] : []),
     "",
     t.description ?? "",
   ];

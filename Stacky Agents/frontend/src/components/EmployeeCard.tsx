@@ -14,6 +14,8 @@ import PixelAvatar from "./PixelAvatar";
 import AgentLaunchModal from "./AgentLaunchModal";
 import AgentHistoryModal from "./AgentHistoryModal";
 import styles from "./EmployeeCard.module.css";
+import { useWorkbench } from "../store/workbench";
+import { refDeTicket } from "../lib/trackerLabels";
 
 interface EmployeeCardProps {
   filename: string;
@@ -48,6 +50,8 @@ function inferType(filename: string): string {
 }
 
 export default function EmployeeCard({ filename, agent, onEdit, onRemoved, runningExecution, runningTicketAdoId }: EmployeeCardProps) {
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -73,7 +77,7 @@ export default function EmployeeCard({ filename, agent, onEdit, onRemoved, runni
           <div className={styles.runningBanner}>
             <span className={styles.runningPulse} />
             <span className={styles.runningText}>
-              EN EJECUCIÓN{runningTicketAdoId != null ? ` · ADO-${runningTicketAdoId}` : ""}
+              EN EJECUCIÓN{runningTicketAdoId != null ? ` · ${refDeTicket(trackerType, runningTicketAdoId)}` : ""}
             </span>
           </div>
         )}

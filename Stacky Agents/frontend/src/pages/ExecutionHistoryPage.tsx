@@ -65,6 +65,8 @@ import { combinarProps } from "../utils/combinarProps";
 import { useUiPerfFlags } from "../hooks/useUiPerfFlags";
 import { QUERY_TUNING } from "../services/queryTuning";
 import { isUiShortcutsEnabled, withShortcutHint } from "../services/shortcuts";
+// Plan 282 F4 — el formato de copia nombra el tracker real del proyecto.
+import { nombreDeTracker } from "../lib/trackerLabels";
 
 // ---------------------------------------------------------------------------
 // Filtros
@@ -128,6 +130,8 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
   // Plan 165 F3 — el drawer arranca abierto si la ruta trae exec (deep-link / Slack).
   const [detailId, setDetailId] = useState<number | null>(exec ?? null);
   const activeProject = useWorkbench((s) => s.activeProject);
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = activeProject?.tracker_type ?? null;
 
   // Plan 165 F3 (C1) — sincronización con la prop VIVA exec (patrón lastApplied):
   // reacciona SOLO a cambios de exec (popstate / nav in-app / link de Slack).
@@ -524,7 +528,7 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
               successBody: () => `Tabla copiada como Markdown (${copiedRowsLabel(items.length)}).`,
             },
             {
-              label: "Tabla (ADO)",
+              label: `Tabla (${nombreDeTracker(trackerType)})`,
               build: () => {
                 const r = executionHistoryToRows(items);
                 return rowsToMarkdownTable(r.headers, r.mdRows);
@@ -535,7 +539,7 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
               },
               successBody: (m) =>
                 m === "richClipboard"
-                  ? `Tabla copiada para ADO (${copiedRowsLabel(items.length)}).`
+                  ? `Tabla copiada para ${nombreDeTracker(trackerType)} (${copiedRowsLabel(items.length)}).`
                   : `Tabla copiada como Markdown (${copiedRowsLabel(items.length)}; sin copia enriquecida en este contexto).`,
             },
           ]}
@@ -644,7 +648,7 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                   {...combinarProps(
                     combinarProps(roving.rowProps(idx), getPrefetchProps(item.id)),
                     combinarProps(
-                      ctxMenu.rowProps(actionsForExecution(item, window.location.origin)),
+                      ctxMenu.rowProps(actionsForExecution(item, window.location.origin, trackerType)),
                       peekEnabled
                         ? {
                             onMouseEnter: (ev: React.MouseEvent) =>
@@ -747,7 +751,7 @@ export default function ExecutionHistoryPage({ exec }: { exec?: number | null })
                     <td className={styles.actionsCell}>
                       {/* stopPropagation: clickear un icono no puede abrir el drawer. */}
                       <span className={styles.rowActions} onClick={(e) => e.stopPropagation()}>
-                        {quickActions(actionsForExecution(item, window.location.origin)).map((a) => (
+                        {quickActions(actionsForExecution(item, window.location.origin, trackerType)).map((a) => (
                           <IconButton
                             key={a.id}
                             size="sm"

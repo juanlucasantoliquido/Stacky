@@ -449,7 +449,7 @@ export default function IncidentInboxPage() {
         <EmptyState
           variant="generic"
           title="No se puede separar las incidencias en este proyecto"
-          message={`Este proyecto tiene ${dto?.untyped_count ?? 0} ticket(s) sin tipo de item sincronizado, asi que la bandeja no puede separarlos. Suele pasar cuando el tracker no es Azure DevOps. Las incidencias siguen visibles en el tablero general.`}
+          message={`Este proyecto tiene ${dto?.untyped_count ?? 0} ticket(s) sin tipo de item sincronizado, asi que la bandeja no puede separarlos. Suele pasar cuando el tracker no expone el tipo de item. Las incidencias siguen visibles en el tablero general.`}
         />
       </div>
     );

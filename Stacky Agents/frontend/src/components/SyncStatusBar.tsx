@@ -15,6 +15,8 @@
 import React from "react";
 import styles from "./SyncStatusBar.module.css";
 import { secondsSince, isStaleAt } from "./syncStatus";
+import { useWorkbench } from "../store/workbench";
+import { nombreDeTracker } from "../lib/trackerLabels";
 
 interface SyncStatusBarProps {
   lastSyncedAt: string | null;
@@ -38,6 +40,8 @@ function SyncStatusBarBase({
   onSyncClick,
   intervalMs = 45_000,
 }: SyncStatusBarProps): React.ReactElement {
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const agingThresholdSec = 60;
 
   // Plan 156 F4 — el reloj de 1s vive ACÁ (en la hoja), no en useTicketSync.
@@ -55,7 +59,7 @@ function SyncStatusBarBase({
       <div className={styles.wrap}>
         <div className={`${styles.bar} ${styles.toneNeutral}`}>
           <span className={styles.spinner} />
-          <span className={styles.label}>Sincronizando con ADO…</span>
+          <span className={styles.label}>{`Sincronizando con ${nombreDeTracker(trackerType)}…`}</span>
         </div>
       </div>
     );

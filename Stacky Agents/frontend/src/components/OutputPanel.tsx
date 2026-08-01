@@ -23,9 +23,12 @@ import {
   paneColor,
 } from "./portFindingsModel";
 import styles from "./OutputPanel.module.css";
+import { nombreDeTracker } from "../lib/trackerLabels";
 
 export default function OutputPanel() {
-  const { activeExecutionId, runningExecutionId, setRunningExecution } = useWorkbench();
+  const { activeExecutionId, runningExecutionId, setRunningExecution, activeProject } = useWorkbench();
+  // Plan 282 F4 — el boton nombra el tracker real del proyecto.
+  const trackerType = activeProject?.tracker_type ?? null;
   const qc = useQueryClient();
   const [note, setNote] = useState("");
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -277,7 +280,7 @@ export default function OutputPanel() {
                 onClick={() => publish.mutate(execution.id)}
                 disabled={publish.isPending}
               >
-                Send to ADO
+                {`Publicar en ${nombreDeTracker(trackerType)}`}
               </button>
             </footer>
           )}

@@ -97,13 +97,22 @@ function linkifyCitations(text: string): ReactNode[] {
     const lineNum = match[3];
     const adoId = match[4];
     if (adoId) {
+      // Plan 282 F5 — `adoUrl` ahora devuelve null si no hay organización y
+      // proyecto REALES configurados. Sin URL resoluble el texto queda SIN
+      // linkificar: un `<a href="null">` (o peor, un link a la organización de
+      // otro cliente) es peor que texto plano.
+      const url = adoUrl(adoId);
       nodes.push(
-        <TrackerDeepLink
-          key={`${match.index}-ado`}
-          url={adoUrl(adoId)}
-          label={fullMatch}
-          className={styles.citation}
-        />
+        url ? (
+          <TrackerDeepLink
+            key={`${match.index}-ado`}
+            url={url}
+            label={fullMatch}
+            className={styles.citation}
+          />
+        ) : (
+          <span key={`${match.index}-ado`} className={styles.citation}>{fullMatch}</span>
+        )
       );
     } else if (filePart && lineNum) {
       nodes.push(

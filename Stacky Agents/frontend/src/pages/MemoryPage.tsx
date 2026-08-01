@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useWorkbench } from "../store/workbench";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Memory,
@@ -7,11 +8,11 @@ import {
   type StackyMemoryObservation,
   type StackyMemoryStatus,
 } from "../api/endpoints";
-import { useWorkbench } from "../store/workbench";
 import { MEMORY_ADVANCED_ENABLED } from "../config/featureFlags";
 import styles from "./MemoryPage.module.css";
 import MemoryEditor from "./memory/MemoryEditor";
 import MemoryConfigPanel from "./memory/MemoryConfigPanel";
+import { refDeTicket } from "../lib/trackerLabels";
 
 type Tab = "memories" | "drafts" | "triage" | "graph" | "config";
 
@@ -53,6 +54,7 @@ function MemoryRow({
   onStatus: (id: string, status: StackyMemoryStatus) => void;
   onEdit: (row: StackyMemoryObservation) => void;
 }) {
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const isDirective = row.type === "directive";
   return (
     <article className={styles.memoryRow}>
@@ -67,7 +69,7 @@ function MemoryRow({
             {isDirective && row.enforcement ? ` · ${row.enforcement}` : ""}
             {row.revision_count ? ` · rev ${row.revision_count}` : ""}
             {row.topic_key ? ` · ${row.topic_key}` : ""}
-            {row.source_ado_id ? ` · ADO-${row.source_ado_id}` : ""}
+            {row.source_ado_id ? ` · ${refDeTicket(trackerType, row.source_ado_id)}` : ""}
           </div>
         </div>
         <span className={`${styles.statusPill} ${styles[`status_${row.status}`] ?? ""}`}>

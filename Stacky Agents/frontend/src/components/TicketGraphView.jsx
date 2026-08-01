@@ -12,7 +12,9 @@ import {
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 // Plan 276 F7 — los rótulos siguen al tracker del proyecto activo, no dicen "ADO" siempre.
-import { accionSincronizar } from "../lib/trackerLabels";
+import { accionAbrirEn, accionSincronizar, refDeTicket, trackerEfectivo } from "../lib/trackerLabels";
+// Plan 282 F6 — el vocabulario de estados sale del helper por tracker.
+import { esEstadoCerrado } from "../lib/trackerEstados";
 import AgentRuntimeSelector from "./AgentRuntimeSelector";
 
 // Feature #4 (mejora post-SDD): la inferencia LLM (Tickets.adoPipelineStatus)
@@ -56,6 +58,33 @@ const STATE_COLORS = {
   "Removed":      { bg: "#111", border: "#374151", text: "#4b5563" },
 };
 
+// Plan 282 F6 — sin esto, en GitLab (estados `opened`/`closed`) TODOS los nodos
+// caian al gris de "New": el grafo no distinguia abierto de cerrado.
+const COLORES_GITLAB = {
+  "opened":              { bg: "#1e3a5f", border: "#3b82f6", text: "#93c5fd" },
+  "closed":              { bg: "#052e16", border: "#22c55e", text: "#86efac" },
+  "stacky::in_progress": { bg: "#1e3a5f", border: "#3b82f6", text: "#93c5fd" },
+  "stacky::functional":  { bg: "#2d1b69", border: "#a855f7", text: "#d8b4fe" },
+  "stacky::accepted":    { bg: "#052e16", border: "#22c55e", text: "#86efac" },
+  "stacky::rejected":    { bg: "#3d0a0a", border: "#ef4444", text: "#fca5a5" },
+};
+
+/** Paleta del nodo POR TRACKER. Nunca devuelve undefined. */
+function coloresDeEstado(estado, tracker) {
+  const esGitLab = String(tracker || "").toLowerCase() === "gitlab";
+  const tabla = esGitLab ? COLORES_GITLAB : STATE_COLORS;
+  const crudo = String(estado || "");
+  if (tabla[crudo]) return tabla[crudo];
+  const min = crudo.toLowerCase();
+  for (const clave of Object.keys(tabla)) {
+    if (clave.toLowerCase() === min) return tabla[clave];
+  }
+  if (esEstadoCerrado(crudo, tracker)) {
+    return { bg: "#052e16", border: "#22c55e", text: "#86efac" };
+  }
+  return STATE_COLORS["New"];
+}
+
 const EPIC_COLORS = { bg: "#1e1040", border: "#7c3aed", text: "#c4b5fd" };
 
 const AGENT_LABELS = {
@@ -80,6 +109,9 @@ function epicPipelineSummary(epicNode) {
 // ─── RunModal (grafo) ─────────────────────────────────────────────────────────
 
 function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgents, isLaunching, errorMessage, onConfirm, onClose }) {
+  // Plan 282 F4 — tracker del ticket con FALLBACK al del proyecto: el campo
+  // tracker_type es OPCIONAL en el payload legacy.
+  const ttTicket = trackerEfectivo(ticket?.tracker_type, useWorkbench((s) => s.activeProject?.tracker_type ?? null));
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const [note, setNote] = useState("");
@@ -96,7 +128,7 @@ function RunModal({ ticket, mode, suggestedLabel, suggestedFilename, vsCodeAgent
           <span className={styles.modalIcon}>{mode === "suggested" ? "🤖" : "⚙️"}</span>
           <div className={styles.modalTitleBlock}>
             <div className={styles.modalTitle}>{mode === "suggested" ? "Run Sugerido" : "Run Personalizado"}</div>
-            <div className={styles.modalSub}>ADO-{ticket.ado_id} · {ticket.title.length > 48 ? ticket.title.slice(0, 48) + "…" : ticket.title}</div>
+            <div className={styles.modalSub}>{refDeTicket(ttTicket, ticket.ado_id)} · {ticket.title.length > 48 ? ticket.title.slice(0, 48) + "…" : ticket.title}</div>
           </div>
           <button className={styles.modalClose} onClick={onClose}>✕</button>
         </div>
@@ -277,7 +309,7 @@ export class NodeErrorBoundary extends React.Component {
             maxWidth: 240,
           }}
         >
-          <strong>Error al renderizar ADO-{adoId}</strong>
+          <strong>Error al renderizar #{adoId}</strong>
           <div style={{ marginTop: 4, opacity: 0.85 }}>{msg}</div>
           <div style={{ marginTop: 4, opacity: 0.6 }}>Recargá la página para reintentar.</div>
         </div>
@@ -290,6 +322,8 @@ export class NodeErrorBoundary extends React.Component {
 // ─── TicketNode Card ──────────────────────────────────────────────────────────
 
 function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map(), flowConfigMap = new Map(), memoryBadges = {} }) {
+  // Plan 282 F4/F6 — tracker del ticket con FALLBACK al del proyecto.
+  const ttTicket = trackerEfectivo(ticket?.tracker_type, useWorkbench((s) => s.activeProject?.tracker_type ?? null));
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -300,7 +334,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const [launchError, setLaunchError] = useState(null);
 
   const inferResult = inferMap[ticket.id] || null;
-  const colors = isEpic ? EPIC_COLORS : (STATE_COLORS[ticket.ado_state] || STATE_COLORS["New"]);
+  const colors = isEpic ? EPIC_COLORS : coloresDeEstado(ticket.ado_state, ttTicket);
   const summary = isEpic ? epicPipelineSummary(ticket) : ticket.pipeline_summary;
   // B5: sugerencia con fallback compartido (FlowConfig → pipeline_summary →
   // por tipo). Antes salía SOLO de FlowConfig por estado, así que un Feature/
@@ -319,7 +353,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
   const runningExecution = runningByTicket.get(ticket.id) ?? null;
   const memoryBadge = memoryBadges[String(ticket.id)] ?? null;
   const isRunning = !!runningExecution || runningByTicket.has(ticket.id);
-  const isClosed = ["Done", "Closed", "Resolved", "Removed", "Completed"].includes(ticket.ado_state);
+  const isClosed = esEstadoCerrado(ticket.ado_state, ttTicket);
   // Distintivo de INCIDENCIA: barra roja en la tarjeta + badge con ícono. El
   // acento va por box-shadow inset porque `borderColor` se pinta inline (estado)
   // y una regla de borde en clase perdería contra ese estilo.
@@ -377,7 +411,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
         <div className={styles.nodeHeader}>
           <div className={styles.nodeTopRow}>
             {isEpic && <span className={styles.epicBadge}>⚡ EPIC</span>}
-            <span className={styles.nodeAdoId} style={{ color: colors.text }}>ADO-{ticket.ado_id}</span>
+            <span className={styles.nodeAdoId} style={{ color: colors.text }}>{refDeTicket(ttTicket, ticket.ado_id)}</span>
             <span className={styles.nodeStateBadge} style={{ color: colors.text, borderColor: colors.border }}>
               {ticket.ado_state || "—"}
             </span>
@@ -440,7 +474,7 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
             )}
             {ticket.ado_url && (
               <a className={styles.adoLink} href={ticket.ado_url} target="_blank" rel="noreferrer">
-                Abrir en ADO ↗
+                {accionAbrirEn(ttTicket)}
               </a>
             )}
 

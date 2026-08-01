@@ -25,6 +25,8 @@ import { formatModelEffortTrace, type ModelEffortTraceV264 } from "../services/m
 import ModelDecisionChip from "./ModelDecisionChip";
 import type { AgentExecution } from "../types";
 import styles from "./ExecutionDetailDrawer.module.css";
+import { useWorkbench } from "../store/workbench";
+import { nombreDeTracker, refDeTicket } from "../lib/trackerLabels";
 
 /** Plan 194 F4.a — opciones "Copiar como…" del drawer (SIN "Enlace": §4.6). */
 function drawerCopyOptions(e: AgentExecution): CopyAsOption[] {
@@ -54,6 +56,8 @@ function formatTokens(value: unknown): string {
 }
 
 export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const execQ = useQuery({
     queryKey: ["execution-detail", executionId],
     queryFn: () => Executions.byId(executionId!),
@@ -333,10 +337,10 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
                   <div className={styles.trace}>
                     {s.ado_id != null && (
                       <div>
-                        <span className={styles.muted}>ADO ID: </span>
-                        <strong>ADO-{String(s.ado_id)}</strong>
+                        <span className={styles.muted}>{nombreDeTracker(trackerType)} ID: </span>
+                        <strong>{refDeTicket(trackerType, String(s.ado_id))}</strong>
                         {typeof s.ado_url === "string" && s.ado_url && (
-                          <> · <a href={s.ado_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>ver en ADO</a></>
+                          <> · <a href={s.ado_url} target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>{`ver en ${nombreDeTracker(trackerType)}`}</a></>
                         )}
                       </div>
                     )}

@@ -67,6 +67,10 @@ import {
 import { publishActivity } from "./services/activityCenter";
 // Plan 165 F3 — fuente única del contrato de rutas (type Tab/TAB_PATHS/parseo).
 import { parseRoute, serializeRoute, TAB_PATHS, type Tab, type RouteState } from "./services/routes";
+// Plan 282 F4/F7 — los rótulos y los tabs siguen al tracker del proyecto activo.
+import { useWorkbench } from "./store/workbench";
+import { tituloDeTickets } from "./lib/trackerLabels";
+import { tabDisponible, motivoNoDisponible } from "./lib/tabsPorTracker";
 import styles from "./App.module.css";
 
 export default function App() {
@@ -91,6 +95,9 @@ export default function App() {
   // (components/Toast.tsx), montado en el shell.
   const [toast, setToast] = useState<ToastState | null>(null);
   const sections = useUiSectionsStore((s) => s.sections);
+  // Plan 282 F4/F7 — tracker del proyecto activo. Misma fuente que TicketBoard
+  // (Plan 276 F7); `Project.tracker_type` vive en store/workbench.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   // Plan 74: tab migrador visible solo si el flag está ON en el backend
   const [migradorGate, setMigradorGate] = useState<GateState>("unknown");
   // Plan 87: tab DevOps visible solo si el flag está ON en el backend
@@ -431,6 +438,7 @@ export default function App() {
             collapsed={sidebarCollapsed}
             onToggleCollapsed={toggleSidebar}
             badges={shellBadges}
+            trackerType={trackerType}
           />
           <main className={styles.shellContent}>
             <PageErrorBoundary resetKey={tab}>{pages}</PageErrorBoundary>
@@ -452,7 +460,7 @@ export default function App() {
               className={`${styles.navTab} ${tab === "tickets" ? styles.active : ""}`}
               onClick={() => selectTab("tickets")}
             >
-              📋 Tickets ADO
+              📋 {tituloDeTickets(trackerType)}
             </button>
             {isGateOn(incidentInboxGate) && (
               <button
@@ -486,6 +494,10 @@ export default function App() {
               <button
                 className={`${styles.navTab} ${tab === "pm" ? styles.active : ""}`}
                 onClick={() => selectTab("pm")}
+                // Plan 282 F7 — se DESHABILITA con motivo, no se oculta: los
+                // gates de tab que nacen `false` matan el deep link.
+                disabled={!tabDisponible("pm", trackerType)}
+                title={motivoNoDisponible("pm", trackerType) || undefined}
               >
                 📊 PM
               </button>

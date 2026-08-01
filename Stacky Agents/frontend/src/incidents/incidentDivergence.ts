@@ -7,6 +7,7 @@
  * en el DTO de /api/incident-inbox/items.
  */
 import type { IncidentInboxItem, IncidentInboxStatus } from "./incidentInboxModel";
+import { nombreLargoDeTracker } from "../lib/trackerLabels";
 
 /** Estado terminal de Stacky que implica "yo ya cerre esto". Espejo de
  *  services/status_vocabulary.py:11 TERMINAL_STATUSES, subconjunto "exitoso". */
@@ -89,7 +90,9 @@ export function describeCloseDestination(
     const causa = d.reason ?? "destino sin resolver";
     return d.workaround ? `No se puede cerrar: ${causa}. ${d.workaround}` : `No se puede cerrar: ${causa}`;
   }
-  const donde = d.tracker_type === "gitlab" ? "GitLab" : "Azure DevOps";
+  // Plan 282 F4 — el nombre sale del diccionario unico, no de un ternario que
+  // asume que todo lo que no es GitLab es Azure DevOps.
+  const donde = nombreLargoDeTracker(d.tracker_type);
   const cierra = d.closes === true ? "queda cerrada" : "NO queda cerrada";
   return `Se escribe en ${donde} como "${d.native_state}" — ${cierra}.`;
 }

@@ -303,7 +303,7 @@ const STAGE_LABELS: Record<string, string> = {
   evaluator: "Assertion evaluator",
   failure_analyzer: "Failure analyzer",
   dossier: "Dossier builder",
-  publisher: "ADO publisher",
+  publisher: "Publicador del tracker",
 };
 
 const STAGE_ORDER = [

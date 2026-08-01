@@ -15,6 +15,9 @@
 import React, { useState, useCallback } from "react";
 import type { Ticket } from "../types";
 import styles from "./AssignmentRecommendationPanel.module.css";
+// Plan 282 F4 — el panel nombra el tracker REAL del ticket, no "ADO" siempre.
+import { useWorkbench } from "../store/workbench";
+import { nombreDeTracker, refDeTicket, trackerEfectivo } from "../lib/trackerLabels";
 
 interface AssignmentCandidate {
   ado_unique_name: string;
@@ -66,6 +69,10 @@ export function AssignmentRecommendationPanel({
   ticket,
   onAssigned,
 }: AssignmentRecommendationPanelProps): React.ReactElement {
+  // Plan 282 F4 — el tracker sale del TICKET: es el destino real de la escritura.
+  const trackerDelProyecto = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
+  const tt = trackerEfectivo(ticket.tracker_type, trackerDelProyecto);
+  const TRACKER = nombreDeTracker(tt);
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [candidates, setCandidates] = useState<AssignmentCandidate[]>([]);
@@ -92,7 +99,7 @@ export function AssignmentRecommendationPanel({
         return;
       }
       if (data.error === "no_users_configured") {
-        setError("No hay usuarios configurados. Ejecuta 'Sincronizar usuarios desde ADO' primero.");
+        setError(`No hay usuarios configurados. Ejecuta 'Sincronizar usuarios desde ${TRACKER}' primero.`);
         setPhase("error");
         return;
       }
@@ -143,7 +150,7 @@ export function AssignmentRecommendationPanel({
         setPhase("done");
         onAssigned();
       } else {
-        setError(data.message || "Error al aplicar asignacion en ADO");
+        setError(data.message || `Error al aplicar asignacion en ${TRACKER}`);
         setPhase("confirming");
       }
     } catch (e: any) {
@@ -253,7 +260,7 @@ export function AssignmentRecommendationPanel({
               )}
               <div className={styles.advisory}>
                 Recomendacion solo consultiva (advisory_only). La asignacion requiere
-                confirmacion explicita del operador antes de escribir en ADO.
+                confirmacion explicita del operador antes de escribir en {TRACKER}.
               </div>
               <button
                 className={styles.btnSecondary}
@@ -268,10 +275,10 @@ export function AssignmentRecommendationPanel({
           {phase === "confirming" && selected && (
             <div className={styles.confirmBox}>
               <div className={styles.confirmTitle}>
-                Confirmar asignacion en ADO
+                {`Confirmar asignacion en ${TRACKER}`}
               </div>
               <div className={styles.confirmDetail}>
-                <strong>Ticket:</strong> ADO-{ticket.ado_id} — {ticket.title}
+                <strong>Ticket:</strong> {refDeTicket(tt, ticket.ado_id)} — {ticket.title}
                 <br />
                 <strong>Asignar a:</strong> {selected.display_name} ({selected.ado_unique_name})
                 <br />
@@ -281,7 +288,7 @@ export function AssignmentRecommendationPanel({
               </div>
               {dryRunResult && (
                 <div style={{ fontSize: 11, color: "#374151", marginBottom: 10 }}>
-                  <strong>Se ejecutara en ADO:</strong>
+                  <strong>{`Se ejecutara en ${TRACKER}:`}</strong>
                   {dryRunResult.actions.map((a) => (
                     <div key={a.action} style={{ fontFamily: "monospace", marginTop: 2 }}>
                       {a.would_call}
@@ -309,13 +316,13 @@ export function AssignmentRecommendationPanel({
 
           {phase === "applying" && (
             <div className={styles.loading}>
-              Aplicando asignacion en ADO...
+              {`Aplicando asignacion en ${TRACKER}...`}
             </div>
           )}
 
           {phase === "done" && (
             <div className={styles.success}>
-              Asignacion aplicada correctamente en ADO. El ticket fue sincronizado.
+              {`Asignacion aplicada correctamente en ${TRACKER}. El ticket fue sincronizado.`}
               <button
                 className={styles.btnSecondary}
                 style={{ marginLeft: 10 }}

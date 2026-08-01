@@ -9,7 +9,12 @@
  * Plan 267 F5 — se agrega el vocabulario "devops-action" y la funcion pura
  * devopsActionCommands(). Edicion ADITIVA: no se reordena CommandKind, ni se
  * modifica NAV_COMMANDS, fuzzyScore o mergeDeepResults.
+ *
+ * Plan 282 F4 — se agrega buildNavCommands(tracker): el rotulo del tab de
+ * tickets sigue al tracker del proyecto activo. NAV_COMMANDS se CONSERVA (es
+ * buildNavCommands(null)) para no romper importadores ni su test.
  */
+import { tituloDeTickets } from "../lib/trackerLabels";
 import {
   IMPACT_TEXT,
   navPathWithParams,
@@ -69,9 +74,15 @@ interface NavCommandSpec {
   icon: string;
 }
 
-/** Una entrada por cada uno de los 13 tabs de App.tsx:30 (TAB_PATHS, App.tsx:32-46). */
+/** Una entrada por cada uno de los 13 tabs de App.tsx:30 (TAB_PATHS, App.tsx:32-46).
+ *
+ *  Plan 282 F4 — el rótulo del tab de tickets NO se hardcodea más: sale de
+ *  `tituloDeTickets`, que sin tracker devuelve el neutro "Tickets". La constante
+ *  se CONSERVA exportada (la consumen `commandPaletteData.test.ts` y los
+ *  importadores existentes) y equivale a `buildNavCommands(null)`; el consumidor
+ *  real usa `buildNavCommands(trackerType)`. */
 export const NAV_COMMANDS: NavCommandSpec[] = [
-  { id: "nav-tickets", path: "/", label: "Ir a Tickets ADO", icon: "📋" },
+  { id: "nav-tickets", path: "/", label: `Ir a ${tituloDeTickets(null)}`, icon: "📋" },
   // Plan 238 — el emoji va literal: NAV_COMMANDS es data pura sin imports de
   // utilidades. Es el mismo valor que INCIDENT_ICON (utils/workItemTypeColor).
   { id: "nav-incidencias", path: "/incidencias", label: "Ir a Incidencias", icon: "🚑" },
@@ -88,6 +99,17 @@ export const NAV_COMMANDS: NavCommandSpec[] = [
   { id: "nav-migrador", path: "/migrador", label: "Ir a Migrador", icon: "🔀" },
   { id: "nav-devops", path: "/devops", label: "Ir a DevOps", icon: "🛠️" },
 ];
+
+/** Plan 282 F4 — el catálogo de navegación con el rótulo del tracker activo.
+ *
+ *  Mismo largo, mismos `path` y mismos `id` que `NAV_COMMANDS` (los `id` son
+ *  claves estables que el consumidor filtra por gate): lo único que cambia es el
+ *  `label` del tab de tickets. Función pura: no lee ningún store. */
+export function buildNavCommands(tracker: string | null | undefined): NavCommandSpec[] {
+  return NAV_COMMANDS.map((nc) =>
+    nc.id === "nav-tickets" ? { ...nc, label: `Ir a ${tituloDeTickets(tracker)}` } : nc,
+  );
+}
 
 export interface RemoteHit {
   kind: string;

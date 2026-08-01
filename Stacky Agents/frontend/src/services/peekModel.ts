@@ -5,6 +5,8 @@
 // cerrar (para poder mover el mouse HACIA la tarjeta sin que se escape).
 
 import type { ExecutionHistoryItem } from "../api/endpoints";
+// Plan 282 F4 — los rotulos del peek siguen al tracker del ticket.
+import { etiquetaEstadoDeTicket, refDeTicket, trackerEfectivo } from "../lib/trackerLabels";
 import type { Ticket } from "../types";
 import { formatRelativeTime } from "../utils/formatRelativeTime";
 import type { EntityKind } from "./entityActions";
@@ -100,10 +102,16 @@ export function buildExecutionPeek(it: ExecutionHistoryItem): PeekContent {
   };
 }
 
-export function buildTicketPeek(t: Ticket): PeekContent {
+export function buildTicketPeek(
+  t: Ticket,
+  /** Plan 282 F4 — tracker del proyecto activo, como FALLBACK: el campo
+   *  `tracker_type` del ticket es OPCIONAL en el payload legacy. */
+  trackerDelProyecto?: string | null,
+): PeekContent {
+  const tt = trackerEfectivo(t.tracker_type, trackerDelProyecto);
   const fields: PeekField[] = [
     { label: "Tipo", value: t.work_item_type ?? "—" },
-    { label: "Estado ADO", value: t.ado_state ?? "—" },
+    { label: etiquetaEstadoDeTicket(tt), value: t.ado_state ?? "—" },
     { label: "Estado Stacky", value: t.stacky_status ?? "—" },
     { label: "Prioridad", value: t.priority != null ? formatInt(t.priority) : "—" },
     { label: "Asignado", value: t.assigned_to_ado ?? "—" },
@@ -118,5 +126,5 @@ export function buildTicketPeek(t: Ticket): PeekContent {
       value: `${(p.done_stages ?? []).length} etapas · próx: ${p.next_suggested ?? "—"}`,
     });
   }
-  return { title: `ADO-${t.ado_id} — ${truncar(t.title ?? "", 80)}`, fields };
+  return { title: `${refDeTicket(tt, t.ado_id)} — ${truncar(t.title ?? "", 80)}`, fields };
 }

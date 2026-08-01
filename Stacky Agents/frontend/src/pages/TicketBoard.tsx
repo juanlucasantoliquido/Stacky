@@ -41,7 +41,13 @@ import {
 } from "../services/agentLaunch";
 import { useWorkbench } from "../store/workbench";
 // Plan 276 F7 — los rótulos siguen al tracker del proyecto activo, no dicen "ADO" siempre.
-import { accionSincronizar, nombreDeTracker, tituloDeTickets } from "../lib/trackerLabels";
+import {
+  accionAbrirEn, accionSincronizar, nombreDeTracker, refDeTicket,
+  tituloDeTickets, trackerEfectivo,
+} from "../lib/trackerLabels";
+// Plan 282 F6 — el vocabulario de ESTADOS tambien sigue al tracker: en GitLab el
+// filtro "Solo abiertos" no filtraba nada y todos los badges caian al mismo gris.
+import { colorDeEstado, esEstadoCerrado, sugerenciasDeEstadoCerrado } from "../lib/trackerEstados";
 import { canResolveWithAgent } from "../incidents/devResolverModel";
 import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incidentDevPrModel";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
@@ -84,18 +90,7 @@ function findAgentFilenameByType(
 
 type ViewMode = "tree" | "graph";
 
-const ADO_STATE_COLORS: Record<string, string> = {
-  "Active":             "#3b82f6",
-  "In Progress":        "#3b82f6",
-  "En Progreso":        "#3b82f6",
-  "Resolved":           "#a855f7",
-  "Committed":          "#f59e0b",
-  "New":                "#6b7280",
-  "Done":               "#22c55e",
-  "Closed":             "#22c55e",
-};
 
-const CLOSED_STATES = ["Done", "Closed", "Resolved", "Removed", "Completed"];
 
 const NEXT_AGENT_LABELS: Record<string, string> = {
   business:   "💼 Negocio",
@@ -105,9 +100,9 @@ const NEXT_AGENT_LABELS: Record<string, string> = {
   qa:         "✅ QA",
 };
 
-function stateColor(state?: string): string {
+function stateColor(state?: string, tracker?: string | null): string {
   if (!state) return "#6b7280";
-  return ADO_STATE_COLORS[state] ?? "#6b7280";
+  return colorDeEstado(state, tracker ?? null);
 }
 
 // ─── RunModal ─────────────────────────────────────────────────────────────────
@@ -142,6 +137,12 @@ function RunModal({
 }: RunModalProps) {
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
+  // Plan 282 F4 — tracker del ticket con FALLBACK al del proyecto: el campo
+  // `tracker_type` del ticket es OPCIONAL en el payload legacy.
+  const tt = trackerEfectivo(
+    ticket.tracker_type,
+    useWorkbench((s) => s.activeProject?.tracker_type ?? null),
+  );
   const [note, setNote] = useState("");
   // Plan 212 F4 — modelo/effort por corrida, elegidos donde se lanza el trabajo.
   const [pickerModel, setPickerModel] = useState<string | null>(null);
@@ -172,7 +173,7 @@ function RunModal({
               {mode === "suggested" ? "Run Sugerido" : "Run Personalizado"}
             </div>
             <div className={styles.modalSub}>
-              ADO-{ticket.ado_id} · {ticket.title.length > 48 ? ticket.title.slice(0, 48) + "…" : ticket.title}
+              {refDeTicket(tt, ticket.ado_id)} · {ticket.title.length > 48 ? ticket.title.slice(0, 48) + "…" : ticket.title}
             </div>
           </div>
           <button className={styles.modalClose} onClick={onClose}>✕</button>
@@ -351,7 +352,11 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
     ? findAgentFilenameByType(effectiveNext, vsCodeAgents, pinnedAgents)
     : null;
 
-  const isClosed = CLOSED_STATES.includes(ticket.ado_state ?? "");
+  // Plan 282 F4/F6 — el tracker del ticket, con FALLBACK al del proyecto:
+  // el campo tracker_type del ticket es OPCIONAL en el payload legacy y sin fallback un proyecto
+  // ADO pasaria a rotular "Tracker-1234" en todas sus tarjetas.
+  const tt = trackerEfectivo(ticket.tracker_type, useWorkbench((s) => s.activeProject?.tracker_type ?? null));
+  const isClosed = esEstadoCerrado(ticket.ado_state, tt);
   // Fuente dual: AgentExecution activa (prop) O stacky_status del ticket (BD)
   const isRunning = !isClosed && (!!runningExecution || ticket.stacky_status === "running");
   const runningAgentType = runningExecution?.agent_type ?? null;
@@ -435,7 +440,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
     adoState: ticket.ado_state,
     isRunning,
     enabled: Boolean(devResolverEnabled),
-    closedStates: CLOSED_STATES,
+    closedStates: sugerenciasDeEstadoCerrado(tt),
   });
   // Plan 177 — checkbox "Abrir PR" (premarcado); solo visible si dev_pr_enabled.
   const [openPr, setOpenPr] = useState(DEFAULT_OPEN_PR);
@@ -496,10 +501,10 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
           onClick={() => setExpanded((x) => !x)}
         >
           <div className={styles.cardTop}>
-            <span className={styles.adoId}>ADO-{ticket.ado_id}</span>
+            <span className={styles.adoId}>{refDeTicket(tt, ticket.ado_id)}</span>
             <span
               className={styles.stateBadge}
-              style={{ background: `${stateColor(ticket.ado_state)}22`, color: stateColor(ticket.ado_state), border: `1px solid ${stateColor(ticket.ado_state)}44` }}
+              style={{ background: `${stateColor(ticket.ado_state, tt)}22`, color: stateColor(ticket.ado_state, tt), border: `1px solid ${stateColor(ticket.ado_state, tt)}44` }}
             >
               {ticket.ado_state ?? "—"}
             </span>
@@ -523,7 +528,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
             {/* Plan 175 F4 — solo las acciones SEGURAS: quickActions filtra con
                 doble cerrojo (quick Y safe), así que nada con efecto puede
                 aparecer a un click de distancia en la tarjeta. */}
-            {quickActions(actionsForTicket(ticket)).map((a) => (
+            {quickActions(actionsForTicket(ticket, tt)).map((a) => (
               <IconButton
                 key={a.id}
                 size="sm"
@@ -627,7 +632,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                     ? `Correr agente sugerido: ${nextLabel}`
                     : ticket.ado_state
                     ? `No hay agente configurado para el estado '${ticket.ado_state}'. Configurá el flujo en la pestaña Estados.`
-                    : "El ticket no tiene estado ADO asignado."
+                    : `El ticket no tiene estado ${nombreDeTracker(tt)} asignado.`
                 }
               >
                 ▶ Run Sugerido
@@ -729,7 +734,7 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                 rel="noreferrer"
                 onClick={(e) => e.stopPropagation()}
               >
-                Abrir en Azure DevOps ↗
+                {accionAbrirEn(tt)}
               </a>
             )}
           </div>
@@ -792,7 +797,8 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
   });
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
-  const isClosed = CLOSED_STATES.includes(epic.ado_state ?? "");
+  const ttEpic = trackerEfectivo(epic.tracker_type, useWorkbench((s) => s.activeProject?.tracker_type ?? null));
+  const isClosed = esEstadoCerrado(epic.ado_state, ttEpic);
   const runningExec = runningByTicket.get(epic.id) ?? null;
   const isRunning = !isClosed && !!runningExec;
   const functionalFilename = findAgentFilenameByType("functional", vsCodeAgents, pinnedAgents);
@@ -841,10 +847,10 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
         >
           {(epic.work_item_type ?? "EPIC").toUpperCase()}
         </span>
-        <span className={styles.epicAdoId}>ADO-{epic.ado_id}</span>
+        <span className={styles.epicAdoId}>{refDeTicket(ttEpic, epic.ado_id)}</span>
         <span
           className={styles.epicState}
-          style={{ color: stateColor(epic.ado_state), borderColor: `${stateColor(epic.ado_state)}44` }}
+          style={{ color: stateColor(epic.ado_state, ttEpic), borderColor: `${stateColor(epic.ado_state, ttEpic)}44` }}
         >
           {epic.ado_state ?? "—"}
         </span>
@@ -1075,7 +1081,7 @@ export default function TicketBoard() {
       const childMatch = node.children.some((c) => filterNode(c));
       if (!selfMatch && !childMatch) return false;
     }
-    if (onlyPending && CLOSED_STATES.includes(node.ado_state ?? "")) return false;
+    if (onlyPending && esEstadoCerrado(node.ado_state, trackerEfectivo(node.tracker_type, trackerType))) return false;
     // #3: si el agente activo tiene allowed_states, filtrar por estado
     if (activeAllowedStates.length > 0 && !activeAllowedStates.includes(node.ado_state ?? "")) {
       // Pero si tiene hijos que sí aplican, mostrar el nodo padre igual
@@ -1091,7 +1097,7 @@ export default function TicketBoard() {
 
   // Tickets activos (no cerrados) con ejecución en curso
   const runningTickets = getRunningTickets(
-    (tickets ?? []).filter((t) => !CLOSED_STATES.includes(t.ado_state ?? ""))
+    (tickets ?? []).filter((t) => !esEstadoCerrado(t.ado_state, trackerEfectivo(t.tracker_type, trackerType)))
   );
 
   return (
@@ -1166,10 +1172,10 @@ export default function TicketBoard() {
             className={styles.filterToggle}
             title={
               showAll
-                ? "Mostrando todas las tareas del proyecto. Desmarcá para ver solo las asignadas a vos en ADO."
+                ? `Mostrando todas las tareas del proyecto. Desmarcá para ver solo las asignadas a vos en ${nombreDeTracker(trackerType)}.`
                 : myUniqueName
                 ? `Mostrando solo tareas asignadas a ${adoUser?.ado_display_name || myUniqueName}.`
-                : "No se pudo resolver tu identidad ADO; se muestran todas las tareas. Verificá el PAT del proyecto."
+                : `No se pudo resolver tu identidad en ${nombreDeTracker(trackerType)}; se muestran todas las tareas. Verificá el PAT del proyecto.`
             }
           >
             <input
@@ -1180,7 +1186,7 @@ export default function TicketBoard() {
             Mostrar todas las tareas
             {!showAll && adoUser && !adoUser.linked && (
               <span style={{ marginLeft: 6, color: "#fbbf24", fontSize: 11 }}>
-                ⚠ ADO no vinculado
+                {`⚠ ${nombreDeTracker(trackerType)} no vinculado`}
               </span>
             )}
           </label>
@@ -1242,7 +1248,7 @@ export default function TicketBoard() {
               const exec = runningByTicket.get(t.id);
               return (
                 <span key={t.id} className={styles.activeExecChip}>
-                  ADO-{t.ado_id}
+                  {refDeTicket(trackerEfectivo(t.tracker_type, trackerType), t.ado_id)}
                   {exec && <span className={styles.activeExecChipAgent}>{exec.agent_type}</span>}
                   <span className={styles.activeExecChipTitle}>{t.title.slice(0, 28)}{t.title.length > 28 ? "…" : ""}</span>
                 </span>
@@ -1267,7 +1273,7 @@ export default function TicketBoard() {
       <div className={styles.searchBar}>
         <input
           className={styles.searchInput}
-          placeholder="Buscar por título o ADO-ID…"
+          placeholder={`Buscar por título o ${refDeTicket(trackerType, "ID")}…`}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />

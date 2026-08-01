@@ -6,12 +6,16 @@ import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useWorkbench } from "../store/workbench";
 import type { Ticket } from "../types";
 import styles from "./TicketSelector.module.css";
+import { useWorkbench as useWorkbenchStore } from "../store/workbench";
+import { accionSincronizar, nombreLargoDeTracker, refDeTicket, trackerEfectivo } from "../lib/trackerLabels";
 
 export default function TicketSelector() {
   const [search, setSearch] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const { activeTicketId, setActiveTicket, activeProject } = useWorkbench();
   const activeProjectName = activeProject?.name ?? null;
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = activeProject?.tracker_type ?? null;
   const queryClient = useQueryClient();
   const { isTicketRunning } = useRunningStatus();
 
@@ -56,7 +60,7 @@ export default function TicketSelector() {
             sync.mutate();
           }}
           disabled={sync.isPending}
-          title="Actualizar tickets desde Azure DevOps"
+          title={`Actualizar tickets desde ${nombreLargoDeTracker(trackerType)}`}
         >
           {sync.isPending ? "↻" : "⟳"} {sync.isPending ? "Actualizando…" : "Actualizar"}
         </button>
@@ -98,13 +102,15 @@ function Row({
   running: boolean;
   onSelect: () => void;
 }) {
+  // Plan 282 F4 — fallback: `tracker_type` es opcional en el payload legacy.
+  const trackerDelProyecto = useWorkbenchStore((s) => s.activeProject?.tracker_type ?? null);
   return (
     <button
       className={`${styles.row} ${active ? styles.active : ""} ${running ? styles.rowRunning : ""}`}
       onClick={onSelect}
     >
       <div className={styles.rowHead}>
-        <span className={styles.adoId}>ADO-{ticket.ado_id}</span>
+        <span className={styles.adoId}>{refDeTicket(trackerEfectivo(ticket.tracker_type, trackerDelProyecto), ticket.ado_id)}</span>
         <span className={styles.state}>{ticket.ado_state ?? "—"}</span>
         {running && (
           <span className={styles.runningBadge} title="Agente en ejecución">

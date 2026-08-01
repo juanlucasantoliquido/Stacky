@@ -43,7 +43,9 @@ const VARIANT_PRESETS: Record<EmptyVariant, {
   tickets: {
     icon: "🎫",
     title: "Sin tickets visibles",
-    message: "Conectá un tracker (ADO, Jira, Mantis) o cambiá de proyecto para ver tickets.",
+    // Plan 282 F4 — mensaje NEUTRO: enumerar trackers acá le hablaba de ADO a un
+    // operador de GitLab. El tracker concreto se elige en Configuración.
+    message: "Conectá el tracker del proyecto o cambiá de proyecto para ver tickets.",
     actionLabel: "Configurar proyecto",
   },
   agents: {

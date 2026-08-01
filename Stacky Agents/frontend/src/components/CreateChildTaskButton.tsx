@@ -24,6 +24,9 @@ import {
 } from "../api/endpoints";
 import Toast, { type ToastState } from "./Toast";
 import styles from "./CreateChildTaskButton.module.css";
+// Plan 282 F4 — el boton nombra el tracker real del proyecto, no "ADO" siempre.
+import { useWorkbench } from "../store/workbench";
+import { nombreDeTracker, refDeTicket } from "../lib/trackerLabels";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +57,9 @@ export default function CreateChildTaskButton({
 }: Props) {
   const qc = useQueryClient();
   const modalId = useId();
+  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
+  const TRACKER = nombreDeTracker(trackerType);
 
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -164,7 +170,7 @@ export default function CreateChildTaskButton({
 
     // Toast resumen
     if (errorCount === 0) {
-      setToast({ variant: "success", body: `${createdCount} Task(s) creada(s) en ADO exitosamente.` });
+      setToast({ variant: "success", body: `${createdCount} Task(s) creada(s) en ${TRACKER} exitosamente.` });
       if (createdCount > 0) onTaskCreated?.();
     } else {
       setToast({
@@ -197,11 +203,11 @@ export default function CreateChildTaskButton({
         title={
           totalPending === 0
             ? "No hay Tasks pendientes de crear"
-            : `Crear ${totalPending} Task(s) hija(s) en ADO`
+            : `Crear ${totalPending} Task(s) hija(s) en ${TRACKER}`
         }
-        aria-label={`Crear Tasks en ADO (${totalPending} pendiente${totalPending !== 1 ? "s" : ""})`}
+        aria-label={`Crear Tasks en ${TRACKER} (${totalPending} pendiente${totalPending !== 1 ? "s" : ""})`}
       >
-        Crear Tasks en ADO ({totalPending} pendiente{totalPending !== 1 ? "s" : ""})
+        {`Crear Tasks en ${TRACKER} (${totalPending} pendiente${totalPending !== 1 ? "s" : ""})`}
       </button>
 
       {open && (
@@ -216,7 +222,7 @@ export default function CreateChildTaskButton({
             {/* Header */}
             <header className={styles.header}>
               <h3 id={`${modalId}-title`} className={styles.title}>
-                Crear Tasks en ADO
+                {`Crear Tasks en ${TRACKER}`}
               </h3>
               <button
                 className={styles.close}
@@ -230,7 +236,7 @@ export default function CreateChildTaskButton({
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8 }}>
               <span className={styles.epicTag}>EPIC-{epicAdoId}</span>
-              <span className={styles.muted}>{totalPending} RF(s) pendiente(s) de crear en ADO</span>
+              <span className={styles.muted}>{`${totalPending} RF(s) pendiente(s) de crear en ${TRACKER}`}</span>
             </div>
 
             {/* Lista de RFs */}
@@ -296,7 +302,7 @@ export default function CreateChildTaskButton({
                   onChange={(e) => setDryRun(e.target.checked)}
                   disabled={isRunning}
                 />{" "}
-                Dry run — solo validar, no crear en ADO
+                {`Dry run — solo validar, no crear en ${TRACKER}`}
               </label>
             </section>
 
@@ -330,7 +336,7 @@ export default function CreateChildTaskButton({
                               rel="noopener noreferrer"
                               className={styles.resultLink}
                             >
-                              ADO-{r.response.task_ado_id}
+                              {refDeTicket(trackerType, r.response.task_ado_id)}
                             </a>
                             {" creada"}
                           </>
@@ -344,11 +350,11 @@ export default function CreateChildTaskButton({
                               rel="noopener noreferrer"
                               className={styles.resultLink}
                             >
-                              ADO-{r.response.task_ado_id}
+                              {refDeTicket(trackerType, r.response.task_ado_id)}
                             </a>
                           </>
                         )}
-                        {r.status === "partial" && ` — Task ADO-${r.response?.task_ado_id} creada, adjunto falló`}
+                        {r.status === "partial" && ` — Task ${refDeTicket(trackerType, r.response?.task_ado_id)} creada, adjunto falló`}
                         {r.status === "error" && ` — Error: ${r.error ?? r.response?.message ?? "desconocido"}`}
                       </div>
                       {r.response?.human_action_required && (
@@ -378,13 +384,13 @@ export default function CreateChildTaskButton({
                 className={styles.primary}
                 onClick={handleCreate}
                 disabled={!canCreate}
-                aria-label={dryRun ? "Simular creación (dry run)" : "Crear Task en ADO"}
+                aria-label={dryRun ? "Simular creación (dry run)" : `Crear Task en ${TRACKER}`}
               >
                 {isRunning
                   ? "Procesando..."
                   : dryRun
                   ? "Simular (dry run)"
-                  : `Crear Task en ADO (${selected.size})`}
+                  : `Crear Task en ${TRACKER} (${selected.size})`}
               </button>
             </footer>
           </div>

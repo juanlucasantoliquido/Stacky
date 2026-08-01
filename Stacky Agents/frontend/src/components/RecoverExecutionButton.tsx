@@ -23,6 +23,8 @@ import type { AgentExecution } from "../types";
 import { getErrorInfo } from "../utils/agentCompletionErrors";
 import Toast, { type ToastState } from "./Toast";
 import styles from "./RecoverExecutionButton.module.css";
+import { useWorkbench } from "../store/workbench";
+import { nombreDeTracker } from "../lib/trackerLabels";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -80,6 +82,8 @@ export default function RecoverExecutionButton({
   onRecovered,
   compact = false,
 }: Props) {
+  // Plan 282 F4 — el tooltip nombra el tracker real del proyecto.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const qc = useQueryClient();
   const toastId = useId();
 
@@ -246,7 +250,7 @@ export default function RecoverExecutionButton({
         className={`${styles.recoverBtn} ${compact ? styles.recoverBtnCompact : ""}`}
         onClick={handleClick}
         disabled={isBusy}
-        title="Cerrar la ejecución huérfana y publicar en ADO"
+        title={`Cerrar la ejecución huérfana y publicar en ${nombreDeTracker(trackerType)}`}
         aria-label="Cerrar ejecución y publicar"
       >
         {isBusy

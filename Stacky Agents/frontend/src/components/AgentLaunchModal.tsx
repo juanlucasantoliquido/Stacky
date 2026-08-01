@@ -17,6 +17,7 @@ import LoadErrorState from "./LoadErrorState";
 import { formatLoadErrorMessage } from "../utils/loadError";
 import { Dialog } from "./ui";
 import styles from "./AgentLaunchModal.module.css";
+import { refDeTicket, trackerEfectivo } from "../lib/trackerLabels";
 
 interface TicketComment { author: string; date: string; text: string; }
 
@@ -63,6 +64,8 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
   const setAgentRuntime = useWorkbench((s) => s.setAgentRuntime);
   const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
+  // Plan 282 F4 — fallback:  es opcional en el payload legacy.
+  const trackerDelProyecto = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const [query, setQuery] = useState("");
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [filtered, setFiltered] = useState<Ticket[]>([]);
@@ -382,7 +385,7 @@ export default function AgentLaunchModal({ agent, avatarValue, onClose }: AgentL
                 className={selected?.id === t.id ? styles.ticketActive : styles.ticket}
                 onClick={() => setSelected(t)}
               >
-                <span className={styles.ticketId}>ADO-{t.ado_id}</span>
+                <span className={styles.ticketId}>{refDeTicket(trackerEfectivo(t.tracker_type, trackerDelProyecto), t.ado_id)}</span>
                 <span className={styles.ticketTitle}>{t.title}</span>
                 {t.ado_state && (
                   <span className={styles.ticketState}>{t.ado_state}</span>

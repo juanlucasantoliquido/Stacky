@@ -10,7 +10,7 @@ import { rawGet } from "../api/client";
 import LoadErrorState from "./LoadErrorState";
 import type { RemoteGroup } from "./commandPaletteData";
 import {
-  NAV_COMMANDS,
+  buildNavCommands,
   devopsActionCommands,
   fuzzyScore,
   mergeDeepResults,
@@ -21,6 +21,8 @@ import { runDevOpsAction } from "../services/devopsActionRunner";
 import type { DevOpsActionMeta } from "../services/devopsActionTypes";
 import { useConfirm } from "./ui";
 import { useOnboardingStore } from "../store/onboardingStore";
+// Plan 282 F4 — el rotulo del tab de tickets sigue al tracker del proyecto activo.
+import { useWorkbench } from "../store/workbench";
 import styles from "./CommandPalette.module.css";
 
 interface Props {
@@ -54,6 +56,8 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
   // NUNCA en un intervalo (§4 principio 9: ninguna fase introduce sondeo).
   const [devopsActions, setDevopsActions] = useState<DevOpsActionMeta[]>([]);
   const askConfirm = useConfirm();
+  // Plan 282 F4 — misma fuente que App.tsx y TicketBoard.
+  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
 
   useEffect(() => {
     if (!open) return;
@@ -115,7 +119,7 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
     const commands: Command[] = [];
     commands.push(
       // Plan 238 — la entrada de la bandeja se filtra con el mismo gate que el tab.
-      ...NAV_COMMANDS.filter((nc) => nc.id !== "nav-incidencias" || incidentInboxEnabled).map((nc) => ({
+      ...buildNavCommands(trackerType).filter((nc) => nc.id !== "nav-incidencias" || incidentInboxEnabled).map((nc) => ({
         id: nc.id,
         kind: "nav" as const,
         icon: nc.icon,
@@ -198,7 +202,7 @@ export default function CommandPalette({ open, onClose, onNavigate, deepSearchEn
       ),
     );
     return commands;
-  }, [tickets, agents, packs, projects, devopsActions, askConfirm, onNavigate, onOpenShortcuts]);
+  }, [tickets, agents, packs, projects, devopsActions, askConfirm, onNavigate, onOpenShortcuts, trackerType, incidentInboxEnabled]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) {

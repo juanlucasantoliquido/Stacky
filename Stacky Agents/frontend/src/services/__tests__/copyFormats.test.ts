@@ -91,16 +91,23 @@ describe("copyFormats — Markdown (§4.2)", () => {
 });
 
 describe("copyFormats — entidades", () => {
-  it("13 — ticketToMarkdown: ado_url gana; fallback adoUrl; sin description sin cuerpo", () => {
+  it("13 — ticketToMarkdown: ado_url gana; SIN url no se emite la línea (Plan 282 F5)", () => {
     const withUrl = ticketToMarkdown({
       ado_id: 100,
       title: "T",
       ado_url: "https://custom/url/100",
     } as Ticket);
     expect(withUrl).toContain("- Enlace: https://custom/url/100");
+
+    // ANTES este test exigía `toContain("dev.azure.com")`: el fallback fabricaba
+    // una URL con la organización y el proyecto de OTRO cliente HARDCODEADOS, y
+    // en un proyecto GitLab el markdown copiado pegaba ese link ajeno. Ahora,
+    // sin URL resoluble, la línea NO se emite.
     const noUrl = ticketToMarkdown({ ado_id: 100, title: "T" } as Ticket);
-    expect(noUrl).toContain("dev.azure.com");
-    expect(noUrl.endsWith("edit/100")).toBe(true); // trimEnd: sin cuerpo tras los bullets
+    expect(noUrl).not.toContain("dev.azure.com");
+    expect(noUrl).not.toContain("- Enlace:");
+    // Guarda: el resto del markdown sigue saliendo igual (no se rompió el formato).
+    expect(noUrl).toContain("- Prioridad: n/d");
   });
 
   it("14 — executionToMarkdown golden completo + opcionales null", () => {

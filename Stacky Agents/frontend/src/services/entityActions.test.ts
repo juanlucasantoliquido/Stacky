@@ -8,6 +8,8 @@ import {
 } from "./entityActions";
 import type { ExecutionHistoryItem } from "../api/endpoints";
 import type { Ticket } from "../types";
+// Plan 282 F5 — el link ya no se fabrica con una organización hardcodeada.
+import { urlDeTicket } from "../utils/trackerUrls";
 
 function exec(over: Partial<ExecutionHistoryItem> = {}): ExecutionHistoryItem {
   return { id: 7, status: "completed", ...over } as ExecutionHistoryItem;
@@ -147,8 +149,24 @@ describe("actionsForTicket", () => {
     expect(a).toContain("ticket-copy-ado-link");
   });
 
-  it("sin ado_url pero con id válido igual se puede abrir", () => {
-    expect(ids(actionsForTicket(ticket({ ado_id: 99 })))).toContain("ticket-open-ado");
+  it("Plan 282 F5 — sin ado_url NO se ofrece abrir: no hay a dónde ir", () => {
+    // ANTES este test exigía lo contrario ("igual se puede abrir"), porque
+    // `adoUrl` fabricaba una URL con la organización y el proyecto de OTRO
+    // cliente HARDCODEADOS. En un proyecto GitLab esa acción mandaba al
+    // operador a `dev.azure.com/<org ajena>`. Ahora, sin URL resoluble, la
+    // acción NO se ofrece.
+    expect(ids(actionsForTicket(ticket({ ado_id: 99 })))).not.toContain("ticket-open-ado");
+  });
+
+  it("Plan 282 F5 — con organización y proyecto REALES sí se puede abrir", () => {
+    // Guarda del caso de arriba: si `urlDeTicket` dejara de construir NUNCA,
+    // el assert de ausencia pasaría por accidente.
+    const url = urlDeTicket(
+      { type: "azure_devops", organization: "MiOrg", project: "MiProy" }, 99,
+    );
+    expect(url).toBe("https://dev.azure.com/MiOrg/MiProy/_workitems/edit/99");
+    expect(ids(actionsForTicket(ticket({ ado_id: 99, ado_url: url ?? undefined }))))
+      .toContain("ticket-open-ado");
   });
 
   it("sin nada a dónde ir, no se ofrecen acciones externas", () => {

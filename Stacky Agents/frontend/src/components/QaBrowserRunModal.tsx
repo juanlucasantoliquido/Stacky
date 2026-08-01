@@ -1,11 +1,12 @@
 import { Copy, Play, X } from "lucide-react";
+import { useWorkbench } from "../store/workbench";
 import { useEffect, useMemo, useState } from "react";
 import { QaBrowser, Tickets } from "../api/endpoints";
 import type { QaBrowserRunResponse } from "../api/endpoints";
 import type { Ticket } from "../types";
-import { useWorkbench } from "../store/workbench";
 import { Dialog } from "./ui";
 import styles from "./QaBrowserRunModal.module.css";
+import { nombreDeTracker, refDeTicket, trackerEfectivo } from "../lib/trackerLabels";
 
 interface QaBrowserRunModalProps {
   ticket?: Ticket | null;
@@ -15,6 +16,8 @@ interface QaBrowserRunModalProps {
 const DEFAULT_BASE_URL = "http://localhost:35017/AgendaWeb/";
 
 export default function QaBrowserRunModal({ ticket, onClose }: QaBrowserRunModalProps) {
+  // Plan 282 F4 — fallback: `tracker_type` es opcional en el payload legacy.
+  const trackerDelProyecto = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Ticket | null>(ticket ?? null);
@@ -81,7 +84,7 @@ export default function QaBrowserRunModal({ ticket, onClose }: QaBrowserRunModal
   }
 
   const selectedLabel = selected
-    ? `ADO-${selected.ado_id} - ${selected.title}`
+    ? `${refDeTicket(trackerEfectivo(selected.tracker_type, trackerDelProyecto), selected.ado_id)} - ${selected.title}`
     : "Selecciona un ticket";
   const runStarted = run?.status === "running";
 
@@ -118,7 +121,7 @@ export default function QaBrowserRunModal({ ticket, onClose }: QaBrowserRunModal
                   className={selected?.id === t.id ? styles.ticketActive : styles.ticket}
                   onClick={() => setSelected(t)}
                 >
-                  <span>ADO-{t.ado_id}</span>
+                  <span>{refDeTicket(trackerEfectivo(t.tracker_type, trackerDelProyecto), t.ado_id)}</span>
                   <strong>{t.title}</strong>
                   <em>{t.ado_state ?? "-"}</em>
                 </button>
@@ -162,7 +165,7 @@ export default function QaBrowserRunModal({ ticket, onClose }: QaBrowserRunModal
               <span>
                 {runStarted
                   ? "Stacky ya trajo descripcion, comentarios y adjuntos del ticket, inicio Codex y abrio la consola para seguir la ejecucion. El prompt queda disponible abajo como respaldo operativo."
-                  : "Stacky ya trajo descripcion, comentarios y adjuntos del ticket. El prompt quedo copiado: pegalo en Codex para que el navegador visible ejecute el plan y cierre el run publicando el comentario en ADO."}
+                  : `Stacky ya trajo descripcion, comentarios y adjuntos del ticket. El prompt quedo copiado: pegalo en Codex para que el navegador visible ejecute el plan y cierre el run publicando el comentario en ${nombreDeTracker(trackerEfectivo(selected?.tracker_type, trackerDelProyecto))}.`}
               </span>
             </div>
             <div className={styles.sourceList}>

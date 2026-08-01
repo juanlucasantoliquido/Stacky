@@ -25,8 +25,12 @@ describe("ticketExternalLink", () => {
     );
   });
 
-  it("sin url pero con id se construye", () => {
-    expect(ticketExternalLink({ ado_id: 9 })).toContain("9");
+  it("Plan 282 F5 — sin url y sin organizacion REAL devuelve null", () => {
+    // ANTES devolvia una URL construida con la organizacion y el proyecto de OTRO
+    // cliente HARDCODEADOS. En un proyecto GitLab mandaba al operador a
+    // dev.azure.com de un tercero. Ahora, sin URL resoluble, no hay link.
+    expect(ticketExternalLink({ ado_id: 9 })).toBeNull();
+    expect(ticketExternalLink({ ado_id: 9, tracker_type: "gitlab" })).toBeNull();
   });
 
   it("sin url y sin id válido devuelve null, no una url rota", () => {
@@ -35,7 +39,7 @@ describe("ticketExternalLink", () => {
     expect(ticketExternalLink({ ado_id: -1 })).toBeNull();
   });
 
-  it("una url vacía no cuenta como url", () => {
-    expect(ticketExternalLink({ ado_url: "", ado_id: 7 })).toContain("7");
+  it("una url vacía no cuenta como url (y sin org tampoco se construye)", () => {
+    expect(ticketExternalLink({ ado_url: "", ado_id: 7 })).toBeNull();
   });
 });

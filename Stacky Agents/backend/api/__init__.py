@@ -18,6 +18,7 @@ from .decisions import bp as decisions_bp
 from .diag import bp as diag_bp
 from .evals import bp as evals_bp
 from .executions import bp as executions_bp
+from .exec_verification import bp as exec_verification_bp  # Plan 31 E2.1 — reporte de verificación adjunto al verdict
 from .extras import bp as extras_bp
 from .git import bp as git_bp
 from .glossary import bp as glossary_bp
@@ -96,6 +97,10 @@ api_bp.register_blueprint(agents_bp)
 api_bp.register_blueprint(chat_bp)
 api_bp.register_blueprint(evals_bp)
 api_bp.register_blueprint(executions_bp)
+# Plan 31 E2.1 — comparte url_prefix "/executions" con executions_bp (nombre de
+# blueprint distinto, regla distinta) → GET /api/executions/<id>/exec-verification.
+# Sin esta línea el módulo entero era inalcanzable: construido, testeado y muerto.
+api_bp.register_blueprint(exec_verification_bp)
 api_bp.register_blueprint(tickets_bp)
 api_bp.register_blueprint(packs_bp)
 api_bp.register_blueprint(similarity_bp)

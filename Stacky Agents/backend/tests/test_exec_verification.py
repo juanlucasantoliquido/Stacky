@@ -376,3 +376,61 @@ def test_project_allowlist_skips_if_not_in_list(tmp_path):
         report = verify(workspace=str(tmp_path), changed_files=[str(py_file)], agent_type="developer")
     assert report.passed is None
     assert "allowlist" in (report.skipped_reason or "")
+
+
+# ── 16. E2.1 — el blueprint del reporte está CABLEADO (Plan 31) ──────────────
+#
+# Gap detectado en el censo del 2026-08-01: `api/exec_verification.py` existía
+# completo y testeado, pero NUNCA se registraba en `api/__init__.py`, así que el
+# endpoint era inalcanzable y E2.1 quedaba sin cerrar. Estos tests prueban el
+# CABLEADO (que alguien lo llama), no la construcción (que el símbolo exista).
+
+_E21_RULE = "/api/executions/<int:execution_id>/exec-verification"
+
+
+def test_e21_guarda_el_modulo_expone_la_ruta():
+    """GUARDA anti-falso-verde: sin esto, un fallo de import haría pasar por
+    'ausente' lo que en realidad es un módulo roto, y el test siguiente no
+    probaría nada. Se afirma en POSITIVO antes de afirmar cobertura."""
+    from api.exec_verification import bp, get_exec_verification, serialize_exec_verification_block
+
+    assert bp.name == "exec_verification"
+    assert bp.url_prefix == "/executions"
+    assert callable(get_exec_verification)
+    assert callable(serialize_exec_verification_block)
+
+
+def test_e21_la_ruta_esta_en_el_url_map():
+    """El gate real de E2.1: la ruta es alcanzable en la app de producción."""
+    from app import create_app
+
+    reglas = {str(r) for r in create_app().url_map.iter_rules()}
+    assert _E21_RULE in reglas, (
+        "E2.1 sin cablear: api/exec_verification.py no está registrado en "
+        "api/__init__.py, así que el endpoint es inalcanzable."
+    )
+
+
+def test_e21_el_blueprint_esta_registrado_una_sola_vez():
+    """Registrarlo dos veces revienta Flask; y el url_prefix lo comparte con
+    `executions_bp`, así que la regla tiene que aparecer exactamente 1 vez."""
+    from app import create_app
+
+    reglas = [str(r) for r in create_app().url_map.iter_rules()]
+    assert reglas.count(_E21_RULE) == 1
+
+
+def test_e21_endpoint_responde_con_flag_off_en_vez_de_404():
+    """Con la flag apagada el endpoint responde 200 + enabled=False.
+    Un 404 acá significaría que la ruta no está montada (no que la flag esté OFF):
+    en Stacky 403/404 nunca son permisos, son cableado o flag."""
+    from app import create_app
+    import config as cfg
+
+    application = create_app()
+    application.config["TESTING"] = True
+    with patch.object(cfg.config, "STACKY_EXEC_VERIFICATION_VERDICT_CARD_ENABLED", False):
+        resp = application.test_client().get("/api/executions/1/exec-verification")
+
+    assert resp.status_code == 200
+    assert resp.get_json() == {"enabled": False, "block": None}

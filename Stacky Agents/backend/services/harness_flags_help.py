@@ -400,6 +400,73 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el grafo y las notas se ven igual que siempre, sin avisos de 'desactualizado'.",
         example="Tocaste un archivo de código la semana pasada pero la nota que lo explica no se editó: aparece un aviso ⚠ y con un click encolás su corrección.",
     ),
+    # ── Plan 284 — el Documentador deja de mezclar y de adivinar ──────────
+    "STACKY_DOCS_TAXONOMY_ENABLED": PlainHelp(
+        what="Separa los documentos de plan de la documentación propia del proyecto, para que no se mezclen ni se tapen entre sí.",
+        on_effect="Si la activás: cada documento queda etiquetado como plan, sistema o proyecto, y los planes dejan de aparecer en las búsquedas de documentación y de ensuciar la medición de salud.",
+        off_effect="Si la apagás: todos los documentos se tratan igual y los planes vuelven a mezclarse con la documentación del proyecto, como hasta ahora.",
+        example="Tenés 240 documentos de plan y 15 notas del sistema en la misma carpeta: al activarla, buscar 'arquitectura' deja de devolverte planes viejos.",
+    ),
+    "STACKY_DOCS_OPERATOR_NOTE_ENABLED": PlainHelp(
+        what="Te deja escribir indicaciones libres al lanzar el Documentador, para orientarlo antes de que empiece a trabajar.",
+        on_effect="Si la activás: aparece un campo de texto opcional al lanzarlo, y lo que escribas le llega al agente como indicación de alta prioridad.",
+        off_effect="Si la apagás: no aparece el campo y el Documentador arranca sin ninguna indicación tuya, como hasta ahora.",
+        example="Escribís 'enfocate en el módulo de pagos y no toques la documentación de infraestructura' y el Documentador lo respeta.",
+    ),
+    "STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS": PlainHelp(
+        what="Cuántas letras como máximo puede tener la nota que le escribís al Documentador al lanzarlo.",
+        on_effect="Si subís el número: podés darle indicaciones más largas y detalladas en una sola nota.",
+        off_effect="Si lo bajás: la nota se corta sola al llegar al tope, sin rechazarte el pedido ni hacerte reescribirla.",
+        example="Ponerlo en 4000 alcanza para un párrafo largo con varias instrucciones y algún ejemplo.",
+    ),
+    "STACKY_DOCS_CITATION_GATE_ENABLED": PlainHelp(
+        what="Impide que se guarde documentación que cita partes del código que no existen.",
+        on_effect="Si la activás: antes de guardar cada archivo se comprueba que las referencias al código existan de verdad; el que no pasa no se escribe y te queda listado con el motivo.",
+        off_effect="Si la apagás: los archivos se guardan igual aunque citen líneas inexistentes, y las citas malas sólo se cuentan después.",
+        example="El agente escribe 'ver pagos.py línea 999' pero ese archivo tiene 40 líneas: el documento se rechaza en vez de quedar guardado con datos falsos.",
+    ),
+    "STACKY_DOCS_CITATION_GATE_MIN_RATIO": PlainHelp(
+        what="Qué proporción de las referencias al código tiene que ser correcta para aceptar un documento.",
+        on_effect="Si subís el número: sos más exigente y se rechazan más documentos; en 1 exigís que todas las referencias apunten a algo real.",
+        off_effect="Si lo bajás: aceptás documentos con más referencias equivocadas.",
+        example="Con 0,8 un documento con 10 referencias se acepta si al menos 8 apuntan a algo que existe.",
+    ),
+    "STACKY_DOCS_TICKET_MINING_ENABLED": PlainHelp(
+        what="Revisa los tickets del proyecto y separa los que cuentan algo útil de los que no aportan nada.",
+        on_effect="Si la activás: antes de documentar se barren los tickets con reglas fijas y explicables, y sólo los que aportan historia real se le pasan al agente.",
+        off_effect="Si la apagás: los tickets no participan de la documentación y se pierde la historia de por qué se hicieron las cosas.",
+        example="De 228 tickets, los vacíos y los de prueba quedan afuera y los bien descritos entran como historia del proyecto.",
+    ),
+    "STACKY_DOCS_TICKET_MINING_MAX": PlainHelp(
+        what="Cuántos tickets como máximo se revisan en un solo uso del Documentador.",
+        on_effect="Si subís el número: se revisan más tickets y la historia queda más completa, aunque el barrido tarde un poco más.",
+        off_effect="Si lo bajás: se revisan menos y el resumen queda marcado como incompleto.",
+        example="Ponerlo en 500 alcanza de sobra para un proyecto con un par de cientos de tickets.",
+    ),
+    "STACKY_DOCS_PIPELINE_STAGES_ENABLED": PlainHelp(
+        what="Hace que el Documentador trabaje por etapas en vez de resolver todo de una sola pasada.",
+        on_effect="Si la activás: primero propone qué documentar, después se critica a sí mismo, corrige, recién ahí escribe y al final verifica, dejando a la vista el resultado de cada etapa.",
+        off_effect="Si la apagás: el Documentador escribe de una sola pasada y termina sin dejar veredicto, como hasta ahora.",
+        example="En vez de tirarte 20 archivos de golpe, te muestra el plan y su propia autocrítica para que veas qué va a hacer antes de hacerlo.",
+    ),
+    "STACKY_DOCS_PIPELINE_AUTOAPPLY": PlainHelp(
+        what="Deja que el Documentador escriba la documentación sin pedirte permiso antes.",
+        on_effect="Si la activás: el Documentador escribe solo, sin frenar a preguntarte. Es la única forma de que escriba sin que vos digas que sí.",
+        off_effect="Si la apagás: el trabajo se detiene y espera tu aprobación antes de tocar un solo archivo.",
+        example="Con esta apagada, ves el plan y la autocrítica y decidís vos si se escribe o no; con ella encendida, se escribe sin consultarte.",
+    ),
+    "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS": PlainHelp(
+        what="Techo de consultas al agente que puede hacer el Documentador en un solo uso.",
+        on_effect="Si subís el número: puede trabajar más y cubrir más terreno, pero cada uso sale más caro.",
+        off_effect="Si lo bajás: se frena antes y conserva lo que ya escribió; ponerlo en 0 o menos lo deja frenado siempre.",
+        example="Ponerlo en 12 alcanza para las etapas de análisis más el trabajo de escritura de un proyecto mediano.",
+    ),
+    "STACKY_DOCS_RADIOGRAPHY_ENABLED": PlainHelp(
+        what="Te muestra qué parte del proyecto quedó documentada y qué parte todavía no.",
+        on_effect="Si la activás: al terminar ves la cobertura, qué módulos siguen sin documentar y cuánto mejoraste respecto de la vez anterior.",
+        off_effect="Si la apagás: sólo ves la lista de archivos escritos, sin saber cuánto falta por cubrir.",
+        example="Te dice 'cubriste 12 de 15 módulos, subiste 12 puntos y cerraste 3' en vez de darte una lista suelta de archivos.",
+    ),
     # ── calidad_verificacion ──────────────────────────────────────────────
     "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED": PlainHelp(
         what="Le muestra al agente, como lista de tareas obligatoria, los criterios que el ticket exige cumplir.",

@@ -1007,6 +1007,19 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_CONSOLE_RICH_RENDER_ENABLED",   # Plan 265
     "STACKY_CONSOLE_REPO_PANEL_ENABLED",    # Plan 265
     "STACKY_CONSOLE_AUDIT_LOG_ENABLED",     # Plan 265
+    # Plan 284 — el Documentador deja de mezclar y de adivinar. Entran acá SÓLO las
+    # 6 booleanas que declaran `default=True`. Las otras 5 flags del plan NO entran
+    # y NO declaran `default=` en su FlagSpec, por dos asserts que se contradicen si
+    # se las cura: test_default_known_only_for_curated exige que toda spec con
+    # `default=` esté en este set, pero test_declared_default_true_set exige que toda
+    # key de este set tenga declared_default is True. Un `default=False` (AUTOAPPLY)
+    # o un `default=` numérico (los 4 knobs) no puede cumplir las dos a la vez.
+    "STACKY_DOCS_TAXONOMY_ENABLED",         # Plan 284 — clasificar es cálculo puro
+    "STACKY_DOCS_OPERATOR_NOTE_ENABLED",    # Plan 284 — campo opcional, vacío = como hoy
+    "STACKY_DOCS_CITATION_GATE_ENABLED",    # Plan 284 — endurece, no afloja
+    "STACKY_DOCS_TICKET_MINING_ENABLED",    # Plan 284 — barrido de sólo lectura, on-demand
+    "STACKY_DOCS_PIPELINE_STAGES_ENABLED",  # Plan 284 — planear/criticar/verificar es lectura
+    "STACKY_DOCS_RADIOGRAPHY_ENABLED",      # Plan 284 — lectura derivada del grafo
 }
 
 

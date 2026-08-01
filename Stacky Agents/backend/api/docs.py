@@ -111,6 +111,26 @@ def get_docs_index():
 
     file_count = sum(count_files(root.get("children", [])) for root in index.get("roots", []))
 
+    # Plan 284 F1.4 — resumen por clase documental. Con la flag OFF queda {}.
+    def _collect_file_paths(nodes, acc):
+        for node in nodes:
+            if node.get("kind") == "folder":
+                _collect_file_paths(node.get("children", []), acc)
+            else:
+                acc.append(str(node.get("path") or ""))
+        return acc
+
+    class_summary: dict = {}
+    try:
+        if bool(getattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", False)):
+            from services import doc_taxonomy
+            _paths: list[str] = []
+            for _root in index.get("roots", []):
+                _collect_file_paths(_root.get("children", []), _paths)
+            class_summary = doc_taxonomy.summarize_classes(_paths)
+    except Exception:
+        class_summary = {}
+
     logger.info(
         "docs_api",
         "docs_index_built",
@@ -126,6 +146,7 @@ def get_docs_index():
         "active_project": index.get("active_project"),
         "workspace_root": index.get("workspace_root"),
         "roots": index["roots"],
+        "class_summary": class_summary,  # Plan 284 F1.4
     })
 
 

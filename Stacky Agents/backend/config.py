@@ -747,6 +747,48 @@ class Config:
         "STACKY_DOCS_STALENESS_ENABLED", "true"
     ).strip().lower() == "true"
 
+    # ── Plan 284 — taxonomía documental (plan vs proyecto) ────────────────────
+    STACKY_DOCS_TAXONOMY_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_TAXONOMY_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 284 — nota libre del operador al lanzar el Documentador
+    STACKY_DOCS_OPERATOR_NOTE_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_OPERATOR_NOTE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS: int = int(
+        os.getenv("STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS", "4000") or "4000"
+    )
+    # Plan 284 — el verificador de citas pasa a ser gate bloqueante
+    STACKY_DOCS_CITATION_GATE_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_CITATION_GATE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    STACKY_DOCS_CITATION_GATE_MIN_RATIO: float = float(
+        os.getenv("STACKY_DOCS_CITATION_GATE_MIN_RATIO", "0.8") or "0.8"
+    )
+    # Plan 284 — minería determinista del corpus de tickets
+    STACKY_DOCS_TICKET_MINING_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_TICKET_MINING_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    STACKY_DOCS_TICKET_MINING_MAX: int = int(
+        os.getenv("STACKY_DOCS_TICKET_MINING_MAX", "500") or "500"
+    )
+    # Plan 284 — pipeline interno de 5 etapas con veredicto
+    STACKY_DOCS_PIPELINE_STAGES_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_PIPELINE_STAGES_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 284 — autoaplicado sin confirmación humana. Excepción (B).
+    STACKY_DOCS_PIPELINE_AUTOAPPLY: bool = os.getenv(
+        "STACKY_DOCS_PIPELINE_AUTOAPPLY", "false"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 284 A1 — tope duro de invocaciones LLM por run del Documentador
+    STACKY_DOCS_PIPELINE_MAX_LLM_CALLS: int = int(
+        os.getenv("STACKY_DOCS_PIPELINE_MAX_LLM_CALLS", "12") or "12"
+    )
+    # Plan 284 — cobertura/radiografía sobre el grafo del 268
+    STACKY_DOCS_RADIOGRAPHY_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_RADIOGRAPHY_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+
     # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente (default OFF, editable por UI) ─
     STACKY_PALETTE_DEEP_SEARCH_ENABLED: bool = os.getenv(
         "STACKY_PALETTE_DEEP_SEARCH_ENABLED", "true"

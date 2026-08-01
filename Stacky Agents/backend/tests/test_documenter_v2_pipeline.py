@@ -232,3 +232,149 @@ def test_apply_proposals_incluye_preview(tmp_path):
                        marks_ok=True, sources=[])
     result = apply_proposals([prop], str(tmp_path), None, workspace_root=str(tmp_path))
     assert len(result.files[0]["content_preview"]) == 4000
+
+
+# ===========================================================================
+# Plan 284 F1 — frontera dura PLANES vs PROYECTO
+# ===========================================================================
+
+def _iter_file_nodes(nodes):
+    """Recorre recursivamente y devuelve solo los nodos de ARCHIVO."""
+    for n in nodes:
+        if n.get("kind") == "folder":
+            yield from _iter_file_nodes(n.get("children", []))
+        else:
+            yield n
+
+
+def test_plan284_index_node_lleva_doc_class(monkeypatch):
+    """Con la flag ON, todo nodo de archivo trae doc_class, y aparecen las dos
+    clases que importan (plan y system)."""
+    from config import config
+    from services import doc_indexer
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", True)
+    doc_indexer.invalidate_cache()  # el índice se cachea 300s: sin esto leemos el árbol viejo
+
+    roots = doc_indexer._index_technical_docs()
+    files = list(_iter_file_nodes(roots))
+
+    # AUSENCIA: ningún nodo de archivo sin doc_class (ni ausente ni None).
+    assert files, "el árbol técnico no debería estar vacío"
+    for n in files:
+        assert "doc_class" in n, f"nodo sin doc_class: {n.get('path')}"
+        assert n["doc_class"] is not None
+
+    # PRESENCIA: las dos clases que este plan viene a separar existen de verdad.
+    clases = {n["doc_class"] for n in files}
+    assert "plan" in clases, f"no se detectó ningún plan; clases vistas: {clases}"
+    assert "system" in clases, f"no se detectó ninguna nota de sistema; clases: {clases}"
+
+    doc_indexer.invalidate_cache()
+
+
+def test_plan284_doc_class_inerte_con_flag_off(monkeypatch):
+    """Con la flag OFF el campo queda inerte ("") pero el árbol SIGUE teniendo
+    nodos: si estuviera vacío, el assert de ausencia pasaría por accidente."""
+    from config import config
+    from services import doc_indexer
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", False)
+    doc_indexer.invalidate_cache()
+
+    roots = doc_indexer._index_technical_docs()
+    files = list(_iter_file_nodes(roots))
+
+    # PRESENCIA de control: hay nodos que inspeccionar.
+    assert len(files) > 0, "sin nodos el assert de ausencia sería un falso verde"
+    # AUSENCIA: ninguno trae clasificación.
+    for n in files:
+        assert n.get("doc_class") == "", f"{n.get('path')} debería estar inerte"
+
+    doc_indexer.invalidate_cache()
+
+
+def test_plan284_rag_excluye_planes(monkeypatch, tmp_path):
+    """El corpus RAG deja de tragarse los documentos de plan."""
+    from config import config
+    from services import docs_rag
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", True)
+
+    docs = tmp_path / "docs"
+    (docs / "sistema").mkdir(parents=True)
+    (docs / "137_PLAN_X.md").write_text("# Plan X\n\nContenido del plan.\n", encoding="utf-8")
+    (docs / "sistema" / "01-overview.md").write_text("# Overview\n\nNota canónica.\n", encoding="utf-8")
+    (docs / "guia.md").write_text("# Guia\n\nDoc del proyecto.\n", encoding="utf-8")
+
+    # Capturamos qué archivos llegan al troceador: es el punto exacto donde se
+    # ve el efecto del filtro. Y neutralizamos la escritura en DB (este test
+    # verifica el filtro, no la persistencia).
+    import contextlib
+
+    indexados: list[str] = []
+    _real_split = docs_rag._split_markdown_to_chunks
+
+    def _spy_split(content, rel_path):
+        indexados.append(str(rel_path))
+        return _real_split(content, rel_path)
+
+    class _NoopSession:
+        def query(self, *a, **k):
+            return self
+
+        def filter_by(self, *a, **k):
+            return self
+
+        def delete(self, *a, **k):
+            return 0
+
+        def add(self, *a, **k):
+            return None
+
+    @contextlib.contextmanager
+    def _fake_scope():
+        yield _NoopSession()
+
+    monkeypatch.setattr(docs_rag, "_split_markdown_to_chunks", _spy_split)
+    monkeypatch.setattr(docs_rag, "session_scope", _fake_scope)
+
+    res = docs_rag.index_project("P", str(tmp_path), docs_subpath="docs")
+    # PRESENCIA de control: el barrido corrió de verdad sobre archivos reales.
+    assert res["files_scanned"] == 2, f"debía escanear 2 de 3 archivos: {res}"
+
+    unidos = " | ".join(indexados)
+    # PRESENCIA: la doc real del proyecto sí se indexa.
+    assert "01-overview.md" in unidos, f"faltó la nota de sistema: {unidos}"
+    assert "guia.md" in unidos, f"faltó la doc de proyecto: {unidos}"
+    # AUSENCIA: el plan queda afuera.
+    assert "137_PLAN_X.md" not in unidos, f"el plan contaminó el corpus: {unidos}"
+
+
+def test_plan284_salud_ignora_planes(monkeypatch):
+    """La flag gobierna el filtro: con ON los planes no mueven el
+    frontmatter_ratio; con OFF sí lo mueven (prueba que el filtro está vivo)."""
+    from config import config
+    from services import doc_graph, doc_indexer
+
+    prefix = doc_indexer.PROJECT_DOC_SOURCE_PREFIX
+
+    def _nota(path, doc_class, fm):
+        return {"kind": "note", "source_id": f"{prefix}x", "path": path,
+                "doc_class": doc_class, "has_frontmatter": fm}
+
+    base = [_nota("docs/a.md", "project", True), _nota("docs/b.md", "project", True)]
+    planes = [_nota(f"docs/{i}0_PLAN_X.md", "plan", False) for i in range(1, 6)]
+    edges = [{"kind": "wikilink"}]
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", True)
+    con_on_sin = doc_graph.classify_doc_health(base, edges, None)
+    con_on_con = doc_graph.classify_doc_health(base + planes, edges, None)
+    assert con_on_sin["frontmatter_ratio"] == con_on_con["frontmatter_ratio"], (
+        "con la flag ON los 5 planes no deberían mover el ratio")
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", False)
+    con_off_sin = doc_graph.classify_doc_health(base, edges, None)
+    con_off_con = doc_graph.classify_doc_health(base + planes, edges, None)
+    assert con_off_sin["frontmatter_ratio"] != con_off_con["frontmatter_ratio"], (
+        "con la flag OFF los planes SÍ deben contaminar: si no, el filtro no está vivo")

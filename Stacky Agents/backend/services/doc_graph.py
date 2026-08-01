@@ -229,12 +229,32 @@ def build_graph(project_name: str | None = None,
     return payload
 
 
+def _doc_class_for(rel_path: str) -> str:
+    """Plan 284 F1.2 — clase del documento (plan/system/project/agent/other).
+    Con la flag OFF devuelve "" y el payload queda equivalente al de hoy.
+    Nunca lanza.
+
+    Es prerrequisito DURO de F1.3: classify_doc_health filtra sobre nodos que
+    salen de _serialize_node. Sin esta clave, el filtro miraría un campo que no
+    existe y no filtraría nada (falso verde silencioso).
+    """
+    try:
+        from config import config as _cfg
+        if not bool(getattr(_cfg, "STACKY_DOCS_TAXONOMY_ENABLED", False)):
+            return ""
+        from services import doc_taxonomy
+        return doc_taxonomy.classify_doc_path(rel_path)
+    except Exception:
+        return ""
+
+
 def _serialize_node(node: dict) -> dict:
     return {
         "id": node["id"], "kind": node["kind"], "label": node["label"],
         "path": node["path"], "source_id": node["source_id"],
         "in_degree": node["in_degree"], "out_degree": node["out_degree"],
         "has_frontmatter": node["has_frontmatter"], "exists": node["exists"],
+        "doc_class": _doc_class_for(node.get("path", "")),  # Plan 284 F1.2
     }
 
 
@@ -432,6 +452,15 @@ def classify_doc_health(nodes: list[dict], edges: list[dict],
             if n.get("kind") == "note"
             and str(n.get("source_id", "")).startswith(doc_indexer.PROJECT_DOC_SOURCE_PREFIX)
         ]
+        # Plan 284 F1.3 — la salud documental mide la doc DEL PROYECTO. Los 240
+        # documentos de plan traen frontmatter propio y distorsionan tanto el
+        # frontmatter_ratio como el conteo de huérfanas. Depende de F1.2: el
+        # campo doc_class lo pone _serialize_node.
+        from config import config as _cfg284
+        if bool(getattr(_cfg284, "STACKY_DOCS_TAXONOMY_ENABLED", False)):
+            project_notes = [
+                n for n in project_notes if n.get("doc_class") != "plan"
+            ]
         wikilink_edges = sum(1 for e in edges if e.get("kind") == "wikilink")
         n_notes = len(project_notes)
         fm = sum(1 for n in project_notes if n.get("has_frontmatter"))

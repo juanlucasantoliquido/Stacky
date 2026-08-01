@@ -96,6 +96,19 @@ def _should_exclude(path: Path) -> bool:
     return False
 
 
+def _doc_class_for(rel_path: str) -> str:
+    """Plan 284 — clase del documento. Con la flag OFF devuelve "" (campo inerte,
+    aditivo: el frontend actual lo ignora). Nunca lanza."""
+    try:
+        from config import config
+        if not bool(getattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", False)):
+            return ""
+        from services import doc_taxonomy
+        return doc_taxonomy.classify_doc_path(rel_path)
+    except Exception:
+        return ""
+
+
 def _is_relative_to(candidate: Path, root: Path) -> bool:
     """Compatibilidad clara para verificar contencion de paths."""
     try:
@@ -156,6 +169,7 @@ def _make_node(
         "source_id": source_id,
         "size_bytes": size,
         "headings": _extract_headings(file_path),
+        "doc_class": _doc_class_for(rel_path),  # Plan 284 — plan vs proyecto
         "children": [],
     }
 
@@ -171,6 +185,7 @@ def _make_folder_node(label: str, rel_path: str, source_id: str, display_path: s
         "source_id": source_id,
         "size_bytes": 0,
         "headings": [],
+        "doc_class": "other",  # Plan 284 — una carpeta no es un documento
         "children": [],
     }
 

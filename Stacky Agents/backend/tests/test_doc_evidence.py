@@ -173,3 +173,77 @@ def test_apply_proposals_sin_workspace_root_sin_files_citations(tmp_path):
     prop = DocProposal(path="out.md", action="create", content="[V] a.py:1", marks_ok=True, sources=[])
     result = apply_proposals([prop], str(tmp_path), None)
     assert result.files == []
+
+
+# ===========================================================================
+# Plan 284 F0.2 — taxonomía documental (plan vs proyecto)
+# ===========================================================================
+
+def test_plan284_classify_doc_path_tabla_completa():
+    """Tabla exacta de clasificación, con los casos frontera que hacen fallar
+    la regla laxa `^\d{2,3}_` a secas."""
+    from services.doc_taxonomy import classify_doc_path
+
+    # Planes / incidentes / checklists numerados
+    assert classify_doc_path("docs/137_PLAN_DOCUMENTADOR_V2.md") == "plan"
+    assert classify_doc_path("docs/20_INCIDENTE_ADO_241.md") == "plan"
+    assert classify_doc_path("docs/25_CHECKLIST_NUEVO_RUNTIME.md") == "plan"
+
+    # Notas canónicas del sistema
+    assert classify_doc_path("docs/sistema/01-overview.md") == "system"
+    assert classify_doc_path("docs/sistema/13-docs-rag-grafo.md") == "system"
+    # La regla 2 (carpeta "sistema") gana sobre la extensión: no es .md y aun así es system.
+    assert classify_doc_path("docs/sistema/error_fingerprints.json") == "system"
+
+    # Documentación del proyecto
+    assert classify_doc_path("docs/arquitectura.md") == "project"
+
+    # Agentes
+    assert classify_doc_path("prompts/Documentador.agent.md") == "agent"
+
+    # Otros
+    assert classify_doc_path("README.txt") == "other"
+    assert classify_doc_path("") == "other"
+    assert classify_doc_path(None) == "other"
+
+    # Caso frontera 1: la regla de carpeta "sistema" tiene PRIORIDAD sobre la
+    # de plan numerado. Un archivo que parece plan pero vive en docs/sistema/
+    # es documentación canónica y NO debe salir del corpus.
+    assert classify_doc_path("docs/sistema/99_PLAN_FALSO.md") == "system"
+
+    # Caso frontera 2: estos 4 archivos EXISTEN de verdad en Stacky Agents/docs/
+    # y son documentación DEL PRODUCTO. Con la regla laxa `^\d{2,3}_` caerían
+    # como "plan" y sacaríamos del corpus la doc de arquitectura del proyecto:
+    # exactamente el bug opuesto al que este plan viene a arreglar.
+    assert classify_doc_path("docs/00_VISION.md") == "project"
+    assert classify_doc_path("docs/02_ARCHITECTURE.md") == "project"
+    assert classify_doc_path("docs/03_DATA_MODEL.md") == "project"
+    assert classify_doc_path("docs/14_MANUAL_PARA_AGENTES_WS2.md") == "project"
+
+
+def test_plan284_summarize_classes_forma_garantizada():
+    """El resumen cuenta bien Y devuelve las 5 claves aunque alguna sea 0."""
+    from services.doc_taxonomy import DOC_CLASSES, summarize_classes
+
+    paths = [
+        "docs/137_PLAN_X.md",          # plan
+        "docs/20_INCIDENTE_Y.md",      # plan
+        "docs/sistema/01-overview.md",  # system
+        "docs/guia.md",                # project
+        "docs/00_VISION.md",           # project
+    ]
+    out = summarize_classes(paths)
+
+    # PRESENCIA: los conteos son los correctos.
+    assert out["plan"] == 2
+    assert out["system"] == 1
+    assert out["project"] == 2
+
+    # AUSENCIA (con su gemelo de presencia): las clases sin ocurrencias siguen
+    # estando, en 0 — la forma es garantizada para la UI.
+    assert out["agent"] == 0
+    assert out["other"] == 0
+    assert set(out.keys()) == set(DOC_CLASSES)
+    assert len(out) == 5
+    # La clasificación es una PARTICIÓN: nada se pierde ni se cuenta dos veces.
+    assert sum(out.values()) == len(paths)

@@ -158,6 +158,15 @@ def index_project(
         return {"chunks_indexed": 0, "files_scanned": 0, "warning": f"Directorio no encontrado: {root}"}
 
     md_files = sorted(root.rglob("*.md"))
+    # Plan 284 — los documentos de plan no son documentación del proyecto:
+    # con 240 planes contra 15 notas de sistema, el retrieval devolvía planes.
+    from config import config as _cfg
+    if bool(getattr(_cfg, "STACKY_DOCS_TAXONOMY_ENABLED", False)):
+        from services import doc_taxonomy
+        md_files = [
+            f for f in md_files
+            if not doc_taxonomy.is_plan_doc(f.relative_to(root).as_posix())
+        ]
     logger.info("docs_rag: indexing %d .md files for project %s", len(md_files), project_name)
 
     all_chunks: list[DocChunk] = []

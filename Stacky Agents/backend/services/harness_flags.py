@@ -150,6 +150,11 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_RAG_HYBRID_MAX_NEIGHBORS",  # Plan 112 — pesos + tope vecinos
         "STACKY_DOCS_DOCUMENTER_MAX_FILES",  # Plan 113 — tope de archivos por run
         "STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS",  # Plan 137 — tope de evidencia de código
+        # Plan 284 — knobs numéricos del Documentador (nota, gate de citas, minería, presupuesto)
+        "STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS",
+        "STACKY_DOCS_CITATION_GATE_MIN_RATIO",
+        "STACKY_DOCS_TICKET_MINING_MAX",
+        "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS",
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -444,6 +449,14 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_STALENESS_ENABLED",        # Plan 114 — chip staleness doc↔código
         "STACKY_DOCS_DOCUMENTER_ENABLED",       # Plan 113 — botón "Lanzar Documentador"
         "STACKY_DOCS_DOCUMENTER_V2_ENABLED",    # Plan 137 — evidencia real + citas + historial
+        # Plan 284 — el Documentador deja de mezclar y de adivinar
+        "STACKY_DOCS_TAXONOMY_ENABLED",         # Plan 284 — clasifica plan vs proyecto
+        "STACKY_DOCS_OPERATOR_NOTE_ENABLED",    # Plan 284 — nota libre del operador
+        "STACKY_DOCS_CITATION_GATE_ENABLED",    # Plan 284 — el gate de citas rechaza
+        "STACKY_DOCS_TICKET_MINING_ENABLED",    # Plan 284 — triage determinista de tickets
+        "STACKY_DOCS_PIPELINE_STAGES_ENABLED",  # Plan 284 — pipeline de 5 etapas
+        "STACKY_DOCS_PIPELINE_AUTOAPPLY",       # Plan 284 — escribe sin confirmación (OFF)
+        "STACKY_DOCS_RADIOGRAPHY_ENABLED",      # Plan 284 — cobertura sobre el grafo
         "STACKY_DOCS_RAG_HYBRID_ENABLED",       # Plan 112 — retrieval híbrido docs
         "STACKY_CAPS_ADVISOR_ENABLED",          # I3.3 — GET /metrics/caps-advisor (solo lectura)
         "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",# Plan 74 — migrador ADO→GitLab (dry-run + HITL)
@@ -2756,6 +2769,182 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "un botón 'Proponer actualización' que encola el Documentador (Plan 113) en "
             "modo ACTUALIZAR acotado a esa sola nota. Señal 100% git, sin LLM en la "
             "detección; degrada a 'sin staleness' si no hay git. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_GRAPH_ENABLED",
+    ),
+    # ── Plan 284 — el Documentador deja de mezclar y de adivinar ──────────────
+    FlagSpec(
+        key="STACKY_DOCS_TAXONOMY_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: separar planes de documentación del proyecto (Plan 284)",
+        description=(
+            "Plan 284 — Si está en ON, cada documento del árbol lleva su clase "
+            "(plan / sistema / proyecto / agente), los documentos de plan dejan de "
+            "contaminar el corpus de búsqueda documental y el cómputo de salud "
+            "documental los ignora. Clasificar es cálculo puro sobre el nombre del "
+            "archivo: no mueve ni borra nada. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_GRAPH_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_OPERATOR_NOTE_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: nota libre del operador al lanzarlo (Plan 284)",
+        description=(
+            "Plan 284 — Si está en ON, al lanzar el Documentador aparece un campo de "
+            "texto opcional donde el operador escribe indicaciones libres, que se "
+            "inyectan como bloque de contexto prioritario del agente. Vacío ⇒ el "
+            "comportamiento es idéntico al de hoy. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS",
+        type="int",
+        label="Documentador: tope de caracteres de la nota del operador",
+        description=(
+            "Plan 284 — Máximo de caracteres de la nota libre del operador. La nota "
+            "más larga se trunca en silencio (no se rechaza: rechazar sería trabajo "
+            "extra para el operador). Default 4000."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=0,
+        max_value=100000,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_CITATION_GATE_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: rechazar archivos con citas inválidas (Plan 284)",
+        description=(
+            "Plan 284 — Si está en ON, un archivo de documentación cuyas citas "
+            "archivo:línea no resuelven contra el código NO se escribe: se rechaza "
+            "antes de tocar el disco y aparece en el panel con el motivo. Endurece el "
+            "artefacto (antes se escribía y recién después se contaban las citas). "
+            "Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_CITATION_GATE_MIN_RATIO",
+        type="float",
+        label="Documentador: proporción mínima de citas válidas",
+        description=(
+            "Plan 284 — Proporción mínima de citas archivo:línea que deben resolver "
+            "para que el archivo se escriba. Un documento sin ninguna cita no se "
+            "rechaza. Default 0.8."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=0.0,
+        max_value=1.0,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_TICKET_MINING_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: minar el corpus de tickets (Plan 284)",
+        description=(
+            "Plan 284 — Si está en ON, el Documentador barre los tickets del proyecto "
+            "y separa señal de ruido con criterios deterministas y auditables (sin "
+            "modelo), pasando al agente sólo los que aportan historia documentable. "
+            "Es un barrido de sólo lectura y sólo cuando el operador lanza el "
+            "Documentador: no hay bucle ni proceso de fondo. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_TICKET_MINING_MAX",
+        type="int",
+        label="Documentador: tope de tickets barridos por run",
+        description=(
+            "Plan 284 — Máximo de tickets que el barrido examina en un run. Si el "
+            "corpus supera el tope, el resumen queda marcado como truncado. "
+            "Default 500."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=1,
+        max_value=100000,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_PIPELINE_STAGES_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: pipeline de 5 etapas con veredicto (Plan 284)",
+        description=(
+            "Plan 284 — Si está en ON, el Documentador deja de resolver todo en una "
+            "pasada y corre PROPONER, CRITICAR, MEJORAR, IMPLEMENTAR y VERIFICAR, con "
+            "el estado de cada etapa persistido y un veredicto explícito al final. "
+            "Planear, criticar y verificar son lectura y cálculo. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        # Plan 284 — nace OFF por la excepción (B): le saca la decisión al operador.
+        # Con ON, la etapa IMPLEMENTAR escribe sin esperar la confirmación humana.
+        # Igual que STACKY_PIPELINE_COPILOT_COMMIT_ENABLED (Plan 279), su FlagSpec
+        # NO declara `default=`: si lo declarara, default_is_known() daría True y el
+        # assert de igualdad de conjuntos de test_default_known_only_for_curated
+        # exigiría curarla, pero test_declared_default_true_set exige que toda key
+        # curada tenga declared_default is True. Sin `default=`, ambos quedan verdes.
+        key="STACKY_DOCS_PIPELINE_AUTOAPPLY",
+        type="bool",
+        label="Documentador: aplicar sin pedir confirmación (Plan 284)",
+        description=(
+            "Plan 284 — Si está en ON, el Documentador escribe la documentación sin "
+            "pedirte confirmación. Si la encendés, el Documentador escribe sin pedirte "
+            "confirmación. Con OFF (default) el run se detiene y espera tu aprobación "
+            "antes de tocar un solo archivo. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_PIPELINE_MAX_LLM_CALLS",
+        type="int",
+        label="Documentador: tope de invocaciones al agente por run",
+        description=(
+            "Plan 284 — Techo duro de invocaciones al agente en un solo run del "
+            "Documentador. Al agotarse, el run se detiene ordenadamente y conserva lo "
+            "ya escrito. Un valor de 0 o menos significa AGOTADO, nunca 'sin límite'. "
+            "Default 12."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=1,
+        max_value=200,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RADIOGRAPHY_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: radiografía de cobertura documental (Plan 284)",
+        description=(
+            "Plan 284 — Si está en ON, al terminar el run se calcula qué parte del "
+            "proyecto quedó documentada y cuál no, más la variación contra el run "
+            "anterior. Es una lectura derivada del grafo documental que ya existe: no "
+            "construye un grafo paralelo ni escribe nada. Default ON."
         ),
         group="global",
         env_only=False,

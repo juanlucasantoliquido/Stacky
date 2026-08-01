@@ -81,7 +81,21 @@ export function formatSkipReason(reason: string): string {
     max_files_cap: "Superó el tope de archivos del run",
   };
   if (reason.startsWith("write_error:")) return "Error de escritura";
+  // Plan 284 F3 — la razón trae el detalle ("citations_below_threshold:2/9"),
+  // así que el mapeo es por PREFIJO, no por clave exacta.
+  if (reason.startsWith("citations_below_threshold")) {
+    const detail = reason.split(":")[1] ?? "";
+    return `Rechazado: citas archivo:línea que no existen (${detail} verificadas)`;
+  }
   return map[reason] ?? reason;
+}
+
+/** Plan 284 — normaliza la nota del operador antes de mandarla al backend.
+ *  Devuelve undefined si no hay nada que mandar (así el body queda como el de hoy). */
+export function normalizeOperatorNote(raw: string, maxChars = 4000): string | undefined {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, maxChars);
 }
 
 export interface DocumenterFileView {

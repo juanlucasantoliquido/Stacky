@@ -59,6 +59,10 @@ def get_doc_sources():
     payload["documenter_enabled"] = bool(getattr(config, "STACKY_DOCS_DOCUMENTER_ENABLED", False))  # Plan 113
     payload["staleness_enabled"] = bool(getattr(config, "STACKY_DOCS_STALENESS_ENABLED", False))  # Plan 114
     payload["graph_explorer_enabled"] = bool(getattr(config, "STACKY_DOCS_GRAPH_EXPLORER_ENABLED", False))  # Plan 268
+    # Plan 284 — la nota del operador y su tope viajan desde el backend (C18):
+    # el maxLength del textarea NO se hardcodea contra una flag configurable.
+    payload["operator_note_enabled"] = bool(getattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", False))
+    payload["operator_note_max_chars"] = int(getattr(config, "STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS", 4000))
     return jsonify(payload)
 
 
@@ -302,9 +306,21 @@ def documenter_run():
     if not project:
         return jsonify({"ok": False, "error": "no_active_project"}), 400
     runtime = (body.get("runtime") or "claude_code_cli").strip()
+    # Plan 284 F2.3 — nota libre del operador. Se TRUNCA, no se rechaza por largo:
+    # un 400 por nota larga es trabajo extra para el operador. El 400 queda sólo
+    # para tipo inválido.
+    operator_note = ""
+    if bool(getattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", False)):
+        raw_note = body.get("operator_note")
+        if raw_note is not None and not isinstance(raw_note, str):
+            return jsonify({"ok": False, "error": "operator_note_invalid",
+                            "message": "La nota debe ser texto."}), 400
+        max_chars = int(getattr(config, "STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS", 4000))
+        operator_note = (raw_note or "").strip()[:max_chars]
     from services import doc_documenter
     try:
-        run_id = doc_documenter.start_documenter_run(project, runtime)
+        run_id = doc_documenter.start_documenter_run(
+            project, runtime, operator_note=operator_note)
     except doc_documenter.DocumenterBusy:
         return jsonify({"ok": False, "error": "documenter_busy"}), 409
     return jsonify({"ok": True, "run_id": run_id})

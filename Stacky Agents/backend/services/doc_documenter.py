@@ -277,9 +277,40 @@ def should_invoke_mode(mode: DocumenterMode, plan: DocumenterPlan,
     return True, ""
 
 
+def _operator_note_block(operator_note: str) -> dict | None:
+    """Plan 284 — context block con las indicaciones libres del operador.
+
+    Devuelve None si la nota está vacía o la flag está OFF (el prompt queda
+    byte-idéntico al de hoy). El texto se inyecta TAL CUAL: el enforcement de
+    los guardarraíles NO depende del prompt (lo hace apply_proposals), así que
+    una nota no puede aflojar docs/sistema/ read-only ni el anti-traversal.
+    """
+    from config import config as _cfg
+    if not bool(getattr(_cfg, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", False)):
+        return None
+    note = (operator_note or "").strip()
+    if not note:
+        return None
+    return {
+        "id": "operator-note",
+        "kind": "operator-note",
+        "title": "INDICACIONES DEL OPERADOR (prioridad alta)",
+        "content": (
+            "El operador escribió estas indicaciones al lanzarte. Respetalas salvo "
+            "que contradigan las reglas duras de tu system prompt (marcas de "
+            "confianza, formato de bloques, docs/sistema/ read-only):\n\n" + note
+        ),
+        "source": {"type": "operator", "readonly": True},
+    }
+
+
 def build_context_for_mode(mode: DocumenterMode, plan: DocumenterPlan,
-                           project_name: str) -> list[dict]:
-    """Arma los context_blocks para un modo. Siempre incluye el bloque canónico read-only."""
+                           project_name: str, operator_note: str = "") -> list[dict]:
+    """Arma los context_blocks para un modo. Siempre incluye el bloque canónico read-only.
+
+    Plan 284 — `operator_note` (default "" ⇒ todos los llamadores existentes
+    siguen compilando y produciendo el mismo prompt de hoy).
+    """
     blocks: list[dict] = []
     if mode == DocumenterMode.NORMALIZAR:
         for path in plan.notes_to_normalize:
@@ -297,6 +328,9 @@ def build_context_for_mode(mode: DocumenterMode, plan: DocumenterPlan,
     elif mode == DocumenterMode.ENRIQUECER:
         blocks.append(_subgraph_block(project_name))
     # ACTUALIZAR (plan 114): tolerado, sin contexto especial acá.
+    note_block = _operator_note_block(operator_note)
+    if note_block is not None:
+        blocks.insert(0, note_block)   # primero: el modelo lo lee antes que el resto
     blocks.append(_sistema_readonly_block(project_name))
     return blocks
 
@@ -690,12 +724,14 @@ def _new_run_record(project_name: str, runtime: str) -> dict:
             "health_before": None, "health_after": None, "branch": None,
             "degraded": False, "diff_stat": "", "target_root": None,
             "worktree": None, "error": None, "reason": "",
-            "modes_skipped": [], "files": []}
+            "modes_skipped": [], "files": [],
+            "operator_note": ""}  # Plan 284 F2.4
 
 
 def start_documenter_run(project_name: str, runtime: str, *,
                          only_note: str | None = None,
-                         forced_modes: list[DocumenterMode] | None = None) -> str:
+                         forced_modes: list[DocumenterMode] | None = None,
+                         operator_note: str = "") -> str:
     """Lanza el pipeline en background. DocumenterBusy si ya hay uno activo (C5).
 
     Plan 114: only_note/forced_modes (opcionales, backward-compatible) acotan el run
@@ -709,7 +745,8 @@ def start_documenter_run(project_name: str, runtime: str, *,
     t = threading.Thread(
         target=_run_documenter_thread,
         args=(run_id, project_name, runtime),
-        kwargs={"only_note": only_note, "forced_modes": forced_modes},
+        kwargs={"only_note": only_note, "forced_modes": forced_modes,
+                "operator_note": operator_note},  # Plan 284 F2.4
         daemon=True)
     t.start()
     return run_id
@@ -812,10 +849,12 @@ def list_runs(limit: int = 20) -> list[dict]:
 
 def _run_documenter_thread(run_id: str, project_name: str, runtime: str, *,
                            only_note: str | None = None,
-                           forced_modes: list[DocumenterMode] | None = None) -> None:
+                           forced_modes: list[DocumenterMode] | None = None,
+                           operator_note: str = "") -> None:
     try:
         run_documenter(project_name, runtime, run_id=run_id,
-                       only_note=only_note, forced_modes=forced_modes)
+                       only_note=only_note, forced_modes=forced_modes,
+                       operator_note=operator_note)
     except Exception as exc:  # noqa: BLE001 - nunca deja el run colgado
         logger.error("doc_documenter: run %s fallo: %s", run_id, exc, exc_info=True)
         _update_run(run_id, state="failed", error=str(exc))
@@ -823,7 +862,8 @@ def _run_documenter_thread(run_id: str, project_name: str, runtime: str, *,
 
 def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None,
                    only_note: str | None = None,
-                   forced_modes: list[DocumenterMode] | None = None) -> dict:
+                   forced_modes: list[DocumenterMode] | None = None,
+                   operator_note: str = "") -> dict:
     """Ejecuta el pipeline completo (sincrono). Devuelve el report dict.
 
     Plan 114: si forced_modes viene, reemplaza los modos del plan (p. ej. [ACTUALIZAR]);
@@ -863,6 +903,7 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         "worktree": worktree, "target_root": target_root,
         "modes": [str(m.value) for m in plan.modes],
         "written": [], "skipped": [],
+        "operator_note": operator_note,  # Plan 284 F2.4 — sobrevive a un restart
     })
 
     # Plan 137 F3 — short-circuit: no invocar el LLM para un modo sin targets.
@@ -887,7 +928,7 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
                 continue
         if run_id:
             _update_run(run_id, current_mode=str(mode.value))
-        ctx = build_context_for_mode(mode, plan, project_name)
+        ctx = build_context_for_mode(mode, plan, project_name, operator_note)
         # Tarea 2 (consola en vivo) — capturamos el execution_id apenas se crea
         # para engancharlo al run record; el frontend lo usa para abrir el
         # CodexConsoleDock mientras el modo está corriendo.
@@ -955,6 +996,7 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         "current_execution_id": None,
         "modes_skipped": modes_skipped,
         "files": result.files,
+        "operator_note": operator_note,  # Plan 284 F2.4
     }
     if run_id:
         _update_run(run_id, **report)

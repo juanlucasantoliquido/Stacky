@@ -6,6 +6,7 @@ import {
   buildFilesView,
   buildSkippedView,
   buildRunsView,
+  normalizeOperatorNote,
 } from "./documenterModel";
 import type { DocumenterStatusResponse } from "../api/endpoints";
 
@@ -164,5 +165,24 @@ describe("buildRunsView", () => {
     expect(buildRunsView(null)).toEqual([]);
     expect(buildRunsView({})).toEqual([]);
     expect(buildRunsView({ runs: "x" })).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// Plan 284 F2 - normalizacion de la nota del operador
+// ===========================================================================
+
+describe("Plan 284 - normalizeOperatorNote", () => {
+  it("test_plan284_normalizeOperatorNote", () => {
+    // Vacio o solo espacios => undefined: el body queda igual al de hoy.
+    expect(normalizeOperatorNote("")).toBeUndefined();
+    expect(normalizeOperatorNote("   ")).toBeUndefined();
+    // Recorta los bordes.
+    expect(normalizeOperatorNote("  hola  ")).toBe("hola");
+    // Trunca al tope sin romper.
+    const larga = "x".repeat(5000);
+    expect(normalizeOperatorNote(larga)?.length).toBe(4000);
+    // El tope es parametrizable (viaja desde el backend).
+    expect(normalizeOperatorNote(larga, 10)?.length).toBe(10);
   });
 });

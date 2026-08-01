@@ -3521,6 +3521,11 @@ export interface DocsSourcesResponse {
   /** Plan 268 — true si STACKY_DOCS_GRAPH_EXPLORER_ENABLED está ON (gatea el explorador del grafo).
    *  Pre-declarado por la costura P0 (2026-07-28): el paquete P4 NO edita este archivo. */
   graph_explorer_enabled?: boolean;
+  /** Plan 284 — true si STACKY_DOCS_OPERATOR_NOTE_ENABLED está ON (gatea el campo de nota). */
+  operator_note_enabled?: boolean;
+  /** Plan 284 — tope de caracteres de la nota. Viaja desde el backend (C18): el
+   *  maxLength del textarea no se hardcodea contra una flag configurable. */
+  operator_note_max_chars?: number;
 }
 
 /** Plan 113 — salud documental recomputada (subset de doc_health). */
@@ -3562,6 +3567,32 @@ export interface DocumenterStatusResponse {
   files?: DocumenterFileEntry[];
   /** Plan 137 F3 — modos sin targets que el short-circuit no invocó. [] con V2 OFF. */
   modes_skipped?: { mode: string; reason: string }[];
+  /** Plan 284 F7.0 — etapas del pipeline en orden canónico. */
+  stages?: Array<{
+    stage: string; state: string; summary?: string; artifact?: string;
+    verdict?: string; started_at?: string; ended_at?: string;
+    execution_id?: number | null;
+  }>;
+  /** Plan 284 — veredicto del run. "" si el pipeline está OFF. */
+  verdict?: string;
+  /** Plan 284 — cobertura documental (F6). */
+  radiography?: {
+    enabled?: boolean; modules_total?: number; modules_covered?: number;
+    coverage_ratio?: number; uncovered?: string[]; orphan_notes?: string[];
+    by_doc_class?: Record<string, number>;
+  };
+  /** Plan 284 A2 — variación contra el run anterior. */
+  radiography_delta?: {
+    has_previous?: boolean; ratio_delta?: number;
+    modules_closed?: string[]; modules_opened?: string[];
+  };
+  /** Plan 284 — resumen del triage de tickets (F4), sin los veredictos individuales. */
+  ticket_mining?: {
+    enabled?: boolean; scope?: string; total?: number; signal?: number;
+    noise?: number; by_tracker?: Record<string, number>; truncated?: boolean;
+  };
+  /** Plan 284 — la nota que el operador escribió al lanzar el run. */
+  operator_note?: string;
 }
 
 /** Plan 137 F4 — una corrida del historial persistido (GET /documenter/runs). */
@@ -3637,10 +3668,30 @@ export const Docs = {
   },
 
   /** Plan 113 — lanza el Documentador 1-click en background. 404 si la flag OFF, 409 si busy. */
-  documenterRun: (project?: string): Promise<{ ok: boolean; run_id?: string; error?: string }> =>
+  /** Plan 113 — lanza el Documentador en background. 404 si la flag OFF, 409 si busy.
+   *  Plan 284 — `operatorNote`: indicaciones libres del operador que se inyectan
+   *  como context block en el prompt del agente. Sin el 2º argumento el body es
+   *  byte-idéntico al de hoy. */
+  documenterRun: (
+    project?: string,
+    operatorNote?: string
+  ): Promise<{ ok: boolean; run_id?: string; error?: string }> =>
     api.post<{ ok: boolean; run_id?: string; error?: string }>(
       `/api/docs/documenter/run`,
-      project ? { project } : {}
+      {
+        ...(project ? { project } : {}),
+        ...(operatorNote ? { operator_note: operatorNote } : {}),
+      }
+    ),
+
+  /** Plan 284 F5.3 — aprueba (o cancela) el paso a IMPLEMENTAR de un run detenido
+   *  en awaiting_approval. 404 si la flag OFF, 409 si el run no está esperando. */
+  documenterStageApprove: (
+    run: string, approve: boolean, keepBranch = true
+  ): Promise<{ ok: boolean; state?: string; error?: string }> =>
+    api.post<{ ok: boolean; state?: string; error?: string }>(
+      `/api/docs/documenter/stage/approve`,
+      { run, approve, keep_branch: keepBranch }
     ),
 
   /** Plan 113 — estado del run del Documentador. */

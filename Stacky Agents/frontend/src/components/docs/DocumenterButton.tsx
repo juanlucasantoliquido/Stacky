@@ -5,18 +5,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Docs } from "../../api/endpoints";
-import { summarizeDocumenterStatus } from "../../docs/documenterModel";
+import { normalizeOperatorNote, summarizeDocumenterStatus } from "../../docs/documenterModel";
 import { DocumenterResultPanel } from "./DocumenterResultPanel";
 import { useWorkbench } from "../../store/workbench";
 
 interface Props {
   projectName?: string;
+  /** Plan 284 — gatea el campo de nota (STACKY_DOCS_OPERATOR_NOTE_ENABLED). */
+  noteEnabled?: boolean;
+  /** Plan 284 — tope de la nota; viaja desde el backend, no se hardcodea (C18). */
+  noteMaxChars?: number;
 }
 
-export function DocumenterButton({ projectName }: Props) {
+export function DocumenterButton({
+  projectName,
+  noteEnabled = true,
+  noteMaxChars = 4000,
+}: Props) {
   const [runId, setRunId] = useState<string | null>(null);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [note, setNote] = useState("");  // Plan 284 — nota libre del operador
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<"keep" | "discard" | null>(null);
   const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
@@ -49,7 +58,7 @@ export function DocumenterButton({ projectName }: Props) {
     setLaunchError(null);
     setDecided(null);
     try {
-      const res = await Docs.documenterRun(projectName);
+      const res = await Docs.documenterRun(projectName, normalizeOperatorNote(note));
       if (res.ok && res.run_id) {
         setRunId(res.run_id);
       } else {
@@ -60,7 +69,7 @@ export function DocumenterButton({ projectName }: Props) {
     } finally {
       setLaunching(false);
     }
-  }, [projectName]);
+  }, [projectName, note]);
 
   const decide = useCallback(
     async (action: "keep" | "discard") => {
@@ -80,6 +89,25 @@ export function DocumenterButton({ projectName }: Props) {
 
   return (
     <div>
+      {/* Plan 284 F2.1 — indicaciones libres del operador. Vacío ⇒ flujo 1-click
+          intacto. NO se limpia al terminar: el operador suele reintentar afinando. */}
+      {noteEnabled ? (
+        <>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Indicaciones extra para el Documentador (opcional). Ej: 'enfocate en el módulo de pipelines y no toques la doc de DevOps'."
+            maxLength={noteMaxChars}
+            disabled={launching || summary.running}
+            aria-label="Nota para el Documentador"
+            rows={3}
+            style={{ width: "100%", resize: "vertical", marginBottom: 6 }}
+          />
+          <div style={{ fontSize: "0.8em", color: "var(--text-secondary)", marginBottom: 6 }}>
+            {note.length}/{noteMaxChars}
+          </div>
+        </>
+      ) : null}
       <button type="button" onClick={launch} disabled={launching || summary.running}>
         {summary.running
           ? `Documentando… ${summary.currentMode ?? ""}`

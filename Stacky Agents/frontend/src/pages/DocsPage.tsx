@@ -367,7 +367,11 @@ export default function DocsPage() {
       <main className={styles.viewerPanel}>
         {documenterEnabled && (
           <div style={{ marginBottom: 8 }}>
-            <DocumenterButton projectName={projectName} />
+            <DocumenterButton
+              projectName={projectName}
+              noteEnabled={sourcesData?.operator_note_enabled !== false}
+              noteMaxChars={sourcesData?.operator_note_max_chars}
+            />
           </div>
         )}
         {graphEnabled && (

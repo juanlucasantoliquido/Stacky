@@ -378,3 +378,153 @@ def test_plan284_salud_ignora_planes(monkeypatch):
     con_off_con = doc_graph.classify_doc_health(base + planes, edges, None)
     assert con_off_sin["frontmatter_ratio"] != con_off_con["frontmatter_ratio"], (
         "con la flag OFF los planes SÍ deben contaminar: si no, el filtro no está vivo")
+
+
+# ===========================================================================
+# Plan 284 F2 - la nota del operador llega al prompt
+# ===========================================================================
+
+def _plan_enriquecer():
+    from services.doc_documenter import DocumenterPlan
+    return DocumenterPlan(status="SANA", modes=[], notes_to_normalize=[],
+                          notes_to_update=[])
+
+
+def _stub_run_documenter(monkeypatch, tmp_path):
+    """Neutraliza git, salud y persistencia para poder ejercitar el cable."""
+    from services import doc_documenter
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "sg", "kind": "sg", "title": "SG", "content": "x"})
+    monkeypatch.setattr(doc_documenter, "prepare_doc_branch",
+                        lambda *a, **k: (str(tmp_path), None, "rama", False))
+    monkeypatch.setattr(doc_documenter, "_health_for_root",
+                        lambda *a, **k: {"status": "SANA", "reasons": [],
+                                         "frontmatter_ratio": 0.0,
+                                         "wikilink_edges": 0, "uncovered_modules": []})
+    monkeypatch.setattr(doc_documenter, "_persist_run_report", lambda *a, **k: None)
+
+
+def _stub_plan(monkeypatch):
+    from services import doc_documenter
+    from services.doc_documenter import DocumenterMode, DocumenterPlan
+    monkeypatch.setattr(doc_documenter, "plan_documenter_run",
+                        lambda *a, **k: DocumenterPlan(
+                            status="SANA", modes=[DocumenterMode.ENRIQUECER],
+                            notes_to_normalize=[], notes_to_update=[], reason="test"))
+
+
+def test_plan284_nota_del_operador_llega_al_prompt(monkeypatch):
+    """El centinela aparece en el TEXTO real del prompt, no solo en el dict."""
+    from config import config
+    from prompt_builder import render_blocks
+    from services import doc_documenter
+    from services.doc_documenter import DocumenterMode, build_context_for_mode
+
+    monkeypatch.setattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", True)
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "sg", "kind": "sg", "title": "SG", "content": "x"})
+
+    blocks = build_context_for_mode(DocumenterMode.ENRIQUECER, _plan_enriquecer(),
+                                    "P", "NOTA_SENTINELA_284")
+    texto = render_blocks(blocks)
+
+    assert "NOTA_SENTINELA_284" in texto
+    assert "INDICACIONES DEL OPERADOR" in texto
+    assert blocks[0]["id"] == "operator-note"
+    # PRESENCIA de control: el bloque canonico sigue ahi (el render no esta vacio).
+    assert "docs/sistema/" in texto
+
+
+def test_plan284_nota_vacia_no_agrega_bloque(monkeypatch):
+    from config import config
+    from prompt_builder import render_blocks
+    from services import doc_documenter
+    from services.doc_documenter import DocumenterMode, build_context_for_mode
+
+    monkeypatch.setattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", True)
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "sg", "kind": "sg", "title": "SG", "content": "x"})
+
+    base = build_context_for_mode(DocumenterMode.ENRIQUECER, _plan_enriquecer(), "P")
+    for vacia in ("", "   "):
+        blocks = build_context_for_mode(DocumenterMode.ENRIQUECER, _plan_enriquecer(),
+                                        "P", vacia)
+        assert len(blocks) == len(base)
+        assert not any(b.get("id") == "operator-note" for b in blocks)
+        assert "docs/sistema/" in render_blocks(blocks)
+
+
+def test_plan284_nota_inerte_con_flag_off(monkeypatch):
+    from config import config
+    from prompt_builder import render_blocks
+    from services import doc_documenter
+    from services.doc_documenter import DocumenterMode, build_context_for_mode
+
+    monkeypatch.setattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", False)
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "sg", "kind": "sg", "title": "SG", "content": "x"})
+
+    blocks = build_context_for_mode(DocumenterMode.ENRIQUECER, _plan_enriquecer(),
+                                    "P", "NO_DEBE_APARECER_284")
+    texto = render_blocks(blocks)
+    assert "NO_DEBE_APARECER_284" not in texto
+    assert "docs/sistema/" in texto
+
+
+def test_plan284_nota_viaja_de_run_documenter_al_prompt(monkeypatch, tmp_path,
+                                                        clean_run_registry):
+    """[GATE REAL DE F2] El cable completo: run_documenter -> build_context_for_mode.
+
+    El censo AST solo prueba que _operator_note_block se llama DENTRO de
+    build_context_for_mode. No prueba los otros saltos de la cadena. Un
+    operator_note que se persiste en el reporte y nunca se pasa hacia abajo
+    satisface todos los demas tests y aun asi jamas llega al modelo: es la
+    deuda numero 1 de este repo (construido, testeado, verde y jamas cableado).
+    """
+    from config import config
+    from prompt_builder import render_blocks
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
+
+    capturado = {}
+
+    def _fake_invoke(mode, context_blocks, project_name, runtime, **kw):
+        capturado["blocks"] = context_blocks
+        return []
+
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", _fake_invoke)
+    _stub_plan(monkeypatch)
+    _stub_run_documenter(monkeypatch, tmp_path)
+
+    doc_documenter.run_documenter("P", "claude_code_cli",
+                                  operator_note="CENTINELA_CABLE_284")
+
+    # PRESENCIA de control: el monkeypatch engancho y hubo bloques de verdad.
+    assert capturado.get("blocks"), (
+        "invoke_documenter no fue llamada: el assert siguiente seria un falso verde")
+    # LO QUE IMPORTA: la nota llego al texto que ve el modelo.
+    assert "CENTINELA_CABLE_284" in render_blocks(capturado["blocks"])
+
+    # AUSENCIA GEMELA: sin nota, el centinela no esta pero SIGUE habiendo bloques.
+    capturado.clear()
+    doc_documenter.run_documenter("P", "claude_code_cli", operator_note="")
+    assert capturado.get("blocks"), (
+        "sin bloques, el assert de ausencia pasaria por accidente")
+    assert "CENTINELA_CABLE_284" not in render_blocks(capturado["blocks"])
+
+
+def test_plan284_nota_se_persiste_en_el_reporte(monkeypatch, tmp_path,
+                                                clean_run_registry):
+    from config import config
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    _stub_plan(monkeypatch)
+    _stub_run_documenter(monkeypatch, tmp_path)
+
+    report = doc_documenter.run_documenter("P", "claude_code_cli", operator_note="hola")
+    assert report["operator_note"] == "hola"

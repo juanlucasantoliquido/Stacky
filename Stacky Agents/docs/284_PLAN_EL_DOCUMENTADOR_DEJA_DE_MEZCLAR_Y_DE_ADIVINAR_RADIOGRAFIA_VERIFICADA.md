@@ -1,9 +1,48 @@
 # 284 — EL DOCUMENTADOR DEJA DE MEZCLAR Y DE ADIVINAR: FRONTERA PLANES/PROYECTO, NOTA DEL OPERADOR, PIPELINE DE 5 ETAPAS Y RADIOGRAFÍA VERIFICADA
 
-**Estado:** PROPUESTO (v1, sin criticar) — 2026-08-01
+**Estado:** MEJORADO (**v2**, criticado) — 2026-08-01
 **Autor:** StackyArchitectaUltraEficientCode
+**Juez (v1 → v2):** StackyArchitectaUltraEficientCode (contexto limpio, red-team con verificación de anclajes abriendo archivos)
+**Veredicto de la crítica v1:** **RECHAZADO** — 6 bloqueantes. Todos corregidos en esta v2.
 **Depende de:** 113 (Documentador 1-click), 114 (staleness), 137 (Documentador V2: evidencia + citas + historial), 109 (grafo documental), 268 (Explorador del grafo)
 **NO re-propone nada de 137 ni de 268.** La sección "Qué YA está construido" lo delimita archivo:línea.
+
+---
+
+## 0. CHANGELOG v1 → v2
+
+Ratio de anclajes de la v1 verificados abriendo los archivos reales: **101 / 104 correctos** (3 fallas duras, 6 off-by-one triviales). El anclaje exacto **no predijo nada**: la v1 tenía anclajes casi perfectos y aun así 6 bloqueantes, porque los defectos no estaban en *dónde* mira sino en *qué capacidades supone que existen*.
+
+| # | Hallazgo | Sev. | Qué cambió en la v2 |
+|---|---|---|---|
+| **C1** | **F5 invocaba `invoke_documenter` con `system_prompt_override`, parámetro que NO EXISTE** (firma real `doc_documenter.py:364-367`; el override está hardcodeado a `_DEFAULT_DOCUMENTADOR_PROMPT` en `:381`). Además `invoke_documenter` devuelve `list[DocProposal]` — parsea adentro — así que era imposible obtener el texto crudo que las etapas de papel necesitan. | BLOQ | **F5.0 nueva**: se extiende `invoke_documenter` con el kwarg y se agrega `invoke_raw_stage()` que devuelve texto. Sin esto F5 era papel mojado. |
+| **C2** | **F4 era inalcanzable: `mine_project_tickets` filtra por `stacky_project_name` y los 228 tickets están repartidos en 8 proyectos** (RIPLEY 65, RSPACIFICO 57, `p` 49, `P` 44, ONP 6, RSSICREA 3, `__demo__` 3, `test` 1). El techo real por proyecto es **65**, no 228. Y el censo de aceptación corría SQL **sin filtro de proyecto** ⇒ no ejercitaba la función de producción. | BLOQ | KPI-5 reescrito a la realidad medida; `scope` explícito (`project` \| `all`); match de proyecto **case-insensitive** (`p`/`P` son el mismo proyecto partido en dos); el censo ahora llama a `mine_project_tickets`, no a SQL suelto. |
+| **C3** | **El filtro de tickets sintéticos capturaba ~1 de 103.** `_SYNTHETIC_ADO_IDS = {-7}` se evaluaba contra `external_id`, pero `-7` es sentinela de **`ado_id`** (`doc_documenter.py:304`) y la fila cuyo `external_id == -7` tiene `ado_id == -2`. Hay **103 filas con `ado_id < 0`**. | BLOQ | Regla nueva: sintético = `ado_id < 0` **o** `external_id < 0`. Se elimina el frozenset de un elemento. |
+| **C4** | **F0.1 ponía rojo un test en el primer paso del plan.** `default_is_known(spec)` es `spec.default is not None` (`harness_flags.py:6566`) y `test_default_known_only_for_curated` asserta **igualdad de sets**. El plan declaraba **10** flags (decía 9), mandaba a `_CURATED_DEFAULTS_ON` sólo "las 7 booleanas ON" (que en realidad son **6**) y omitía la OFF y las 3 numéricas ⇒ 4 claves faltantes. | BLOQ | Conteo corregido a **10 flags (6 bool ON + 1 bool OFF + 3 numéricas)**; **las 10** van a `_CURATED_DEFAULTS_ON`; se corrige la ubicación del set. |
+| **C5** | **El camino por defecto del producto quedaba colgado.** Con `STAGES=ON` + `AUTOAPPLY=OFF` **todo** run se detiene en `awaiting_approval`, y la única salida era un endpoint (`/documenter/stage/approve`) **sin un solo test**, **sin función cliente en `endpoints.ts`**, y con `test_docs_api.py` **no registrado en ninguno de los dos ratchets**. | BLOQ | F5.3 ahora especifica el endpoint completo, su función cliente, sus 4 tests, y **registra `test_docs_api.py` en los DOS scripts** del arnés. |
+| **C6** | **F2 no probaba el cable, sólo el último eslabón.** El censo AST demostraba que `_operator_note_block` se llama dentro de `build_context_for_mode`, pero **nada** probaba que `run_documenter(operator_note=…)` propagara hasta ahí. Cinco saltos, uno verificado: el patrón *construido, testeado y jamás cableado* exacto. | BLOQ | Test nuevo `test_plan284_nota_viaja_de_run_documenter_al_prompt`: monkeypatchea `invoke_documenter` para **capturar** `context_blocks` y asserta el centinela sobre `render_blocks` del capturado. |
+| **C7** | KPI-7 ("0% de runs sin veredicto") **se contradecía con los defaults del propio plan**: con `AUTOAPPLY=OFF` el run se detiene antes de VERIFICAR ⇒ 100% de los runs terminan sin veredicto. | IMP | KPI-7 reescrito: el veredicto se emite **también** en la parada por aprobación (`PENDIENTE_DE_APROBACION`). |
+| **C8** | F7 afirmaba "ningún trabajo nuevo: la aprobación **reemplaza** al Conservar/Descartar", pero el plan **no elimina** `POST /documenter/decide` (`api/docs.py:364`) ⇒ el operador queda con **dos** decisiones por run. | IMP | Se declara honestamente y se fusionan: aprobar-e-implementar encadena la decisión de rama en la misma pantalla. |
+| **C9** | `_CURATED_DEFAULTS_ON` anclado a `services/harness_flags.py`, donde **sólo hay un comentario** (`:710`). Vive en `backend/tests/test_harness_flags.py:467-1003`. Un modelo menor lo grepea, no lo encuentra y se traba. | IMP | Ruta y rango corregidos. |
+| **C10** | F7 no mandaba extender `DocumenterStatusResponse` (`endpoints.ts:3552-3573`) con las 5 claves nuevas ⇒ **`npx tsc --noEmit` falla**, y ese exit 0 es criterio binario de la propia fase. | IMP | F7.0 nueva: extender el tipo primero. |
+| **C11** | **Cuerpos sin especificar** (inimplementables para un modelo menor): `build_tickets_context_block` (`...`), `compute_coverage` (sólo docstring), `StageResult.to_dict` (`...`), `_run_paper_stage` (prosa), `_STAGE_PROMPT_*` (nunca escritos), y `compute_verify_verdict` que **sólo aparecía en el test**. | IMP | Los 6 quedan escritos con cuerpo completo. |
+| **C12** | **Tabla de `classify_ticket` subespecificada**: "demo con descripción larga → noise, score 0" sólo cierra si la descripción está entre 200 y 799 y el tipo no es Task; con 1200 chars da 2 ⇒ **signal**, y el test sale rojo o se "arregla" debilitando el assert. Idem el caso `external_id=-7`. | IMP | Cada caso de la tabla ahora fija **todos** los campos y el score exacto. |
+| **C13** | **`ado_state` se aceptaba y se ignoraba.** Los estados vivos (`Active` 109, `opened` 63, `Done` 23, `Doing` 12, `Reviewed by Dev` 11, `To Do` 6, `Done by dev` 2, `New` 1, `Done by AI` 1) son justamente la señal de "obsoleto" que pidió el operador en su punto 6. | IMP | `ado_state` entra al scoring con las constantes medidas. |
+| **C14** | **El censo HITL de F5 no probaba lo que decía**: `Select-String … AUTOAPPLY \| Count == 1` cuenta menciones por subcadena (un comentario lo rompe) y no verifica que la consulta esté **antes** de escribir. Un gate que premia no documentar. | IMP | Reemplazado por censo AST de orden + el test de comportamiento como criterio real. |
+| **C15** | El censo de F6 era una **ausencia por subcadena sin presencia gemela** (y se evade con `getattr`). | IMP | Se agrega la presencia: `compute_coverage` debe leer `graph["doc_health"]["uncovered_modules"]` y `graph["orphans"]`. |
+| **C16** | La sección 2 afirmaba **"no existe ningún `docs/rag/rag_corpus.jsonl`"**. **Sí existe** (169.544 bytes, 2026-07-15). | IMP | Corregido: existe pero es un **sidecar muerto** (0 referencias en `backend/**` y `frontend/src/**`); la tesis de fondo (el corpus vivo es la tabla `docs_index`) **se sostiene**, pero la frase era falsa en un plan cuya bandera es no adivinar. |
+| **C17** | PROPONER sin gate de calidad más allá de `<200 chars`: 250 chars de basura pasan y disparan 2 invocaciones más. | IMP | Gate reforzado: longitud **y** al menos una ruta real del contexto. |
+| **C18** | F2 daba **dos instrucciones contradictorias para la misma línea** (`note.trim() \|\| undefined` en F2.1 vs `normalizeOperatorNote(note)` en el bloque de frontend), y `maxLength={4000}` hardcodeado contra una flag configurable. | MEN | Una sola instrucción; el máximo viaja desde el backend. |
+| **C19** | **Anclajes `:547` y `:558` invertidos**: `:547` es `_safe_rel_path` (anti-traversal) y `:558` es `_is_canonical` (`docs/sistema/` read-only), al revés de lo que decía la tabla. | MEN | Corregidos. |
+| **C20** | Off-by-one decorador-vs-`def` en `api/docs.py:67`, `:269`, `:292` (los `def` están en 68, 270, 293) y `FlagSpec` abre en `:2681`, no `:2682`. | MEN | Corregidos. |
+| **C21** | La tabla de defaults de flags **omitía `STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS`** — una flag sin default declarado en la tabla que gobierna los defaults. | MEN | Agregada. |
+| **C22** | R4 **sobreafirmaba**: el enforcement determinista protege el **filesystem**, no el **contenido**. Y F3 explícitamente no valida semántica (fuera de scope #5). | MEN | R4 reescrito con el alcance real y el modelo de amenaza mono-operador. |
+| **C23** | Sin huella de regresión en `docs/sistema/error_fingerprints.json`. | MEN | Agregada en el DoD. |
+| **C24** | `p` (49) y `P` (44) son el **mismo proyecto partido en dos claves** por case-sensitivity de SQLite. Hazard de datos no mencionado. | MEN | Documentado y mitigado con match case-insensitive. |
+
+**Adiciones proactivas de esta v2** (ver marcas `[ADICIÓN ARQUITECTO]`):
+- **A1 — Presupuesto de invocaciones LLM por run, medido y con tope duro.** La v1 admitía N→N+3 sin techo ni telemetría.
+- **A2 — Delta de radiografía entre runs.** Convierte el Documentador de one-shot en instrumento: "subiste de 62% a 74%, cerraste 3 módulos". Cero LLM extra.
 
 ---
 
@@ -21,9 +60,11 @@ Este plan lo convierte en un **instrumento de radiografía**: separa con fronter
 | KPI-2 | Documentos con `doc_class="plan"` excluibles del corpus RAG y del cómputo de salud | 0 (los 240 planes contaminan) | 240 |
 | KPI-3 | Notas del operador que llegan al prompt del agente | 0 (el body es `{project}` y nada más) | 1 por run, verificable por test sobre `render_blocks` |
 | KPI-4 | Archivos escritos con citas `archivo:línea` inválidas | sin tope (se escriben y después se cuentan) | 0 con el gate ON |
-| KPI-5 | Tickets barridos por el Documentador | 0 de 228 | 228 (162 ADO + 63 GitLab + 3 demo), con veredicto `signal`/`noise` por ticket |
+| KPI-5 | Tickets barridos por el Documentador **en el proyecto activo** | 0 | **65 de 65** con `scope="project"` sobre RIPLEY (el proyecto activo, `data/active_project.json`); **228 de 228** con `scope="all"`. Veredicto `signal`/`noise` por ticket en ambos casos |
 | KPI-6 | Etapas del run con estado persistido y veredicto | 0 (hay `current_mode`, no etapas) | 5 de 5 |
-| KPI-7 | Runs que terminan sin veredicto explícito | 100% | 0% |
+| KPI-7 | Runs que terminan sin veredicto explícito | 100% | 0% — **incluida la parada por aprobación**, que emite `PENDIENTE_DE_APROBACION` (ver C7) |
+
+> **Corrección v2 sobre KPI-5.** La v1 prometía "228 tickets barridos" con una función que filtra por `stacky_project_name`. Medido el 2026-08-01 sobre la base viva, los 228 tickets están repartidos en **8 proyectos**: `RIPLEY` 65, `RSPACIFICO` 57, `p` 49, `P` 44, `ONP` 6, `RSSICREA` 3, `__demo__` 3, `test` 1. **Ningún proyecto llega a 228**; el mayor es 65. Prometer 228 con un barrido por proyecto era un KPI inalcanzable por construcción. Además `p` y `P` son **el mismo proyecto partido en dos claves** por la comparación sensible a mayúsculas de SQLite — de ahí el match case-insensitive de F4.
 
 ---
 
@@ -67,7 +108,9 @@ Los planes recientes (276-283) cerraron paridad GitLab, ruteo por tracker y dese
 
 | Del plan | Qué existe | Anclaje |
 |---|---|---|
-| 113 | Selector determinista de modos, gate git con worktree aislado, aplicador determinista, anti-traversal, `docs/sistema/` read-only, lock de un run activo | `doc_documenter.py:115`, `:468`, `:563`, `:547`, `:558`, `:623` |
+| 113 | Selector determinista de modos (`plan_documenter_run`), gate git con worktree aislado (`prepare_doc_branch`), aplicador determinista (`apply_proposals`), anti-traversal (`_safe_rel_path`), `docs/sistema/` read-only (`_is_canonical`), lock de un run activo (`DocumenterBusy`) | `doc_documenter.py:115`, `:468`, `:563`, **`:547`**, **`:558`**, `:623` |
+
+> **Corrección v2 (C19):** la v1 tenía `:547` y `:558` **invertidos**. Verificado abriendo el archivo: `:547` es `def _safe_rel_path(path: str) -> str | None:` (**anti-traversal**) y `:558` es `def _is_canonical(norm: str) -> bool:` (**`docs/sistema/` read-only**). El lock efectivo, además, no está en `:623` (que es `class DocumenterBusy`) sino en `:704-706` (`with _registry_lock` → `raise DocumenterBusy()`).
 | 137 F1 | Evidencia real de módulo (árbol + símbolos con línea) | `doc_evidence.build_module_evidence` `doc_evidence.py:50` |
 | 137 F2 | Verificador de citas (extracción + validación contra filesystem) | `doc_evidence.verify_citations` `doc_evidence.py:139` |
 | 137 F3 | Short-circuit de modos sin targets | `should_invoke_mode` `doc_documenter.py:262` |
@@ -76,7 +119,17 @@ Los planes recientes (276-283) cerraron paridad GitLab, ruteo por tracker y dese
 | 268 | Explorador del grafo: filtros, búsqueda, zoom, foco, agrupación, peek, minimapa | `frontend/src/docs/docGraphModel.ts`, `forceLayout.ts` |
 | 109 | Grafo documental + `classify_doc_health` | `doc_graph.build_graph` `doc_graph.py:179`, `:424` |
 
-**Corrección de un supuesto circulante:** no existe ningún `docs/rag/rag_corpus.jsonl`. El corpus RAG se persiste en la tabla SQLite `docs_index` (`DocChunk.__tablename__`, `docs_rag.py:70-71`). Y el "grafo con tickets" del plan 276 es la vista jerárquica épica→hijos de `GET /hierarchy` (`api/tickets.py:735-736`), **no** el grafo documental. Cualquier fase que asuma lo contrario está mal.
+**Corrección de un supuesto circulante (reescrita en v2 — la v1 decía lo contrario y estaba mal).**
+
+`Stacky Agents/docs/rag/rag_corpus.jsonl` **SÍ EXISTE** (169.544 bytes, mtime 2026-07-15 15:28), junto a `manifest.json`, `schema.json` y `README.txt`. La v1 de este plan afirmaba que no existía: **era falso**, y en un plan cuya bandera es "dejar de adivinar" eso no puede pasar.
+
+Lo que **sí** es cierto, y es lo que importa para F1 y F6:
+
+- El corpus RAG **vivo** es la tabla SQLite `docs_index` (`DocChunk.__tablename__`, `docs_rag.py:70`). `docs_rag.py` es 100% SQLAlchemy: **no toca disco**.
+- `rag_corpus.jsonl` es un **sidecar muerto**: `grep -r "rag_corpus"` sobre `backend/**` y `frontend/src/**` da **0 referencias**. No tiene productor ni consumidor en código. Nació de un único commit (`4e56a779`) y su propio `README.txt` se declara sidecar: *"NO reemplaza ni modifica la fuente, ni el indice runtime TF-IDF (services/docs_rag.py -> tabla SQLite docs_index)"*. Usa extensión no-`.md` a propósito para que el `rglob("*.md")` de `_index_technical_docs` no lo indexe.
+- **Consecuencia para este plan:** F1.3 filtra `docs_rag.index_project`, que es el camino vivo — correcto. El `.jsonl` **no** se toca, no se regenera y no se borra. Queda anotado en "Fuera de scope" porque si alguien lo regenerara con la herramienta que lo creó, volvería a mezclar planes con doc de proyecto por el camino que este plan acaba de cerrar.
+
+Y el "grafo con tickets" del plan 276 es la vista jerárquica épica→hijos de `GET /hierarchy` (`api/tickets.py:735-736`), **no** el grafo documental. Cualquier fase que asuma lo contrario está mal.
 
 ---
 
@@ -93,10 +146,13 @@ Los planes recientes (276-283) cerraron paridad GitLab, ruteo por tracker y dese
 
 ### Regla de default de flags aplicada a este plan
 
+> **Conteo corregido en v2 (C4/C21): son 10 flags, no 9.** La v1 decía "9 flags" en tres lugares (objetivo de F0, orden de implementación y DoD) pero su propio bloque de `config.py` declaraba **10** asignaciones, y la tabla de defaults **omitía `STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS`**. Desglose real: **6 booleanas ON + 1 booleana OFF + 3 numéricas = 10**. (La v1 también decía "las 7 booleanas ON": son **6**.)
+
 | Flag | Tipo | Default | Justificación |
 |---|---|---|---|
 | `STACKY_DOCS_TAXONOMY_ENABLED` | bool | **ON** | Clasificar un path es solo lectura y cálculo puro. No es excepción. |
 | `STACKY_DOCS_OPERATOR_NOTE_ENABLED` | bool | **ON** | Campo de texto opcional que el operador llena on-demand. Vacío ⇒ comportamiento actual. No quema tokens en reposo. |
+| `STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS` | int | **4000** | *(faltaba en la v1 — C21.)* Tope de la nota. Bounds `[0, 100000]`. Numérico, no booleano. |
 | `STACKY_DOCS_CITATION_GATE_ENABLED` | bool | **ON** | Endurece (rechaza archivos con citas falsas). Aumenta la seguridad del artefacto, no la reduce. |
 | `STACKY_DOCS_CITATION_GATE_MIN_RATIO` | float | **0.8** | Umbral numérico, no booleano. Bounds `[0.0, 1.0]`. |
 | `STACKY_DOCS_TICKET_MINING_ENABLED` | bool | **ON** | Barrido SQL determinista, sin LLM, y **sólo cuando el operador lanza el Documentador**. No hay loop ni daemon ⇒ no es categoría (A). |
@@ -182,9 +238,15 @@ Agregar, inmediatamente después del bloque de `STACKY_DOCS_STALENESS_ENABLED` (
 1. **Categorías** — en `_CATEGORY_KEYS` (`harness_flags.py:120`):
    - Agregar a la tupla numérica (la que hoy contiene `"STACKY_DOCS_DOCUMENTER_MAX_FILES"` en `harness_flags.py:151` y `"STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS"` en `:152`) las claves: `"STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS"`, `"STACKY_DOCS_CITATION_GATE_MIN_RATIO"`, `"STACKY_DOCS_TICKET_MINING_MAX"`.
    - Agregar a la tupla de capacidades de docs (la que hoy contiene `"STACKY_DOCS_DOCUMENTER_V2_ENABLED"` en `harness_flags.py:446`) las claves booleanas: `"STACKY_DOCS_TAXONOMY_ENABLED"`, `"STACKY_DOCS_OPERATOR_NOTE_ENABLED"`, `"STACKY_DOCS_CITATION_GATE_ENABLED"`, `"STACKY_DOCS_TICKET_MINING_ENABLED"`, `"STACKY_DOCS_PIPELINE_STAGES_ENABLED"`, `"STACKY_DOCS_PIPELINE_AUTOAPPLY"`, `"STACKY_DOCS_RADIOGRAPHY_ENABLED"`.
-2. **FlagSpec** — agregar 9 specs siguiendo el patrón de `harness_flags.py:2682-2760`. Reglas exactas:
-   - Las 7 booleanas ON llevan `default=True` **y** el comentario `# curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)`.
-   - **Las 7 booleanas ON deben además agregarse a la lista `_CURATED_DEFAULTS_ON`.** Sin esto, `test_default_known_only_for_curated` se pone rojo. Buscá `_CURATED_DEFAULTS_ON` en `harness_flags.py` y sumá las 7 claves.
+2. **FlagSpec** — agregar **10** specs siguiendo el patrón de `harness_flags.py:2681-2760` (el `FlagSpec(` abre en **`:2681`**, no en `:2682` — C20). Reglas exactas:
+   - Las **6** booleanas ON llevan `default=True` **y** el comentario `# curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)`.
+   - **⚠️ BLOQUEANTE DE LA v1 (C4) — leé esto dos veces.** La v1 decía "agregá las 7 booleanas ON a `_CURATED_DEFAULTS_ON`". Eso pone el test **rojo** y era el primer paso del plan. La regla real, verificada:
+     - `default_is_known(spec)` es literalmente `return spec.default is not None` (`services/harness_flags.py:6566`).
+     - `test_default_known_only_for_curated` (`backend/tests/test_harness_flags.py:1078`) asserta **`known_keys == _CURATED_DEFAULTS_ON`**: **igualdad de sets**, que detecta drift en las **dos** direcciones.
+     - Por lo tanto **TODA** flag con `default=` explícito cuenta como "known": las 6 booleanas ON, **la booleana OFF** (`default=False` **no es** `None`) **y las 3 numéricas** (`4000`, `0.8`, `500`).
+     - ⇒ **Las 10 claves van a `_CURATED_DEFAULTS_ON`.** Si agregás sólo las 6 ON, faltan 4 y el test sale rojo con un diff de 4 claves.
+   - **Ubicación corregida (C9):** `_CURATED_DEFAULTS_ON` **NO vive en `services/harness_flags.py`** (ahí sólo hay una mención en un comentario, `:710`). Vive en **`backend/tests/test_harness_flags.py`**, abre en **`:467`** y cierra en **`:1003`**; es un **`set` literal de `str`** con ~308 claves agrupadas por plan. Agregá las 10 al final del bloque de docs, con el comentario `# Plan 284`.
+   - **Procedimiento a prueba de ambigüedad:** después de agregar las specs, corré `pytest tests/test_harness_flags.py -q -k default_known` y, si falla, **leé el diff de sets que imprime el assert** y agregá exactamente las claves que reporta. No adivines la lista.
    - `STACKY_DOCS_PIPELINE_AUTOAPPLY` lleva `default=False` **explícito** (no lo omitas: una flag que nace OFF sin declararlo es ambigua) y en su `help` la frase literal `Si la encendés, el Documentador escribe sin pedirte confirmación.`
    - Las que dependen del master llevan `requires="STACKY_DOCS_DOCUMENTER_ENABLED"`, igual que `harness_flags.py:2708` y `:2728`. `STACKY_DOCS_TAXONOMY_ENABLED` lleva `requires="STACKY_DOCS_GRAPH_ENABLED"` (mismo patrón que `harness_flags.py:2760`).
    - **Trampa conocida:** el gate del texto de ayuda exige la palabra `Si ` **sin tilde** al abrir la condicional. Escribí `Si está en ON...`, nunca `Sí está...`.
@@ -444,7 +506,9 @@ Las 4 condiciones (`C1..C4`) deben imprimir `True`.
   - `disabled={launching || summary.running}`
   - `aria-label="Nota para el Documentador"`
   - Debajo, un contador `{note.length}/4000`.
-- En `launch` (`DocumenterButton.tsx:47`), cambiar la llamada de `DocumenterButton.tsx:52` a `Docs.documenterRun(projectName, note.trim() || undefined)` y agregar `note` a las deps del `useCallback` (`DocumenterButton.tsx:63`).
+- En `launch` (`DocumenterButton.tsx:47`), cambiar la llamada de `DocumenterButton.tsx:52` a **`Docs.documenterRun(projectName, normalizeOperatorNote(note))`** y agregar `note` a las deps del `useCallback` (`DocumenterButton.tsx:63`, hoy `}, [projectName]);`).
+
+> **FIX C18 — una sola instrucción, no dos.** La v1 decía aquí `note.trim() || undefined` y más abajo, en el bloque de frontend, `normalizeOperatorNote(note)`, para **la misma línea**. Un modelo menor no puede resolver cuál gana. Manda `normalizeOperatorNote` (es la que tiene test). Importala desde `../../docs/documenterModel`.
 - El textarea **no se limpia** al terminar el run: el operador suele reintentar afinando la nota.
 
 #### F2.2 — API cliente
@@ -566,6 +630,28 @@ En `run_documenter`, la llamada de `doc_documenter.py:890` pasa a `ctx = build_c
 - `test_plan284_nota_vacia_no_agrega_bloque` — con nota `""` y con nota `"   "`, `build_context_for_mode` devuelve **la misma cantidad de bloques** que sin el argumento, y ninguno tiene `id == "operator-note"` (ausencia) **y** el bloque canónico sigue presente (presencia).
 - `test_plan284_nota_inerte_con_flag_off` — flag en `False` + nota no vacía ⇒ ningún bloque `operator-note`, pero el resto de los bloques intacto.
 - `test_plan284_nota_se_persiste_en_el_reporte` — `run_documenter` (con `invoke_documenter` monkeypatcheado a `lambda *a, **k: []` para no llamar al LLM) devuelve un report cuyo `report["operator_note"] == "hola"`.
+- **`test_plan284_nota_viaja_de_run_documenter_al_prompt`** — **[FIX C6 — el test que la v1 no tenía y que es el gate real de esta fase].**
+
+  **Por qué existe.** El censo AST prueba que `_operator_note_block` se llama **dentro de** `build_context_for_mode`. No prueba nada sobre los **otros 4 saltos** de la cadena: `documenter_run` → `start_documenter_run` → `_run_documenter_thread` → `run_documenter` → `build_context_for_mode`. Un `operator_note` que se persiste en el reporte y nunca se pasa hacia abajo satisface *todos* los tests de la v1 y aun así **jamás llega al modelo**. Es la deuda nº 1 de este repo: código construido, testeado, verde y jamás cableado.
+
+  **Pasos exactos:**
+  1. `monkeypatch.setattr(config.config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", True)`
+  2. Capturá los bloques que recibe el LLM:
+     ```python
+     capturado = {}
+     def _fake_invoke(mode, context_blocks, project_name, runtime, **kw):
+         capturado["blocks"] = context_blocks
+         return []
+     monkeypatch.setattr(doc_documenter, "invoke_documenter", _fake_invoke)
+     ```
+  3. `doc_documenter.run_documenter("P", "claude_code_cli", operator_note="CENTINELA_CABLE_284")`
+  4. **Presencia (lo que importa):**
+     `from prompt_builder import render_blocks` →
+     `assert "CENTINELA_CABLE_284" in render_blocks(capturado["blocks"])`
+  5. **Presencia de control:** `assert capturado.get("blocks")`, para que el paso 4 no pueda pasar por accidente sobre una lista vacía si el monkeypatch no enganchó.
+  6. **Ausencia gemela:** repetir con `operator_note=""` y asertar que el centinela **no** está, pero que `capturado["blocks"]` **sigue teniendo bloques**.
+
+  Si este test pasa, la nota del operador está cableada de punta a punta. Si el resto de F2 pasa pero éste falla, F2 **no está hecha**, por más verde que se vea el panel.
 
 **Frontend.** Agregar a `Stacky Agents/frontend/src/docs/documenterModel.test.ts` un test del helper puro nuevo. Para que haya lógica testeable sin RTL, agregar a `Stacky Agents/frontend/src/docs/documenterModel.ts`:
 
@@ -784,7 +870,44 @@ _NOISE_TITLE_RE = re.compile(
 )
 # Tickets sintéticos del propio Stacky (no son historia del proyecto).
 _SYNTHETIC_TRACKERS = frozenset({"demo"})
-_SYNTHETIC_ADO_IDS = frozenset({-7})   # doc_documenter._CONVERSATION_ADO_ID
+
+# ── FIX C3 (bloqueante de la v1) ──────────────────────────────────────────
+# La v1 hacía: _SYNTHETIC_ADO_IDS = frozenset({-7}) y evaluaba `external_id in
+# _SYNTHETIC_ADO_IDS`. Estaba mal por DOS motivos, ambos medidos en la base viva
+# el 2026-08-01:
+#   1) -7 es sentinela de **ado_id** (doc_documenter.py:304
+#      `_CONVERSATION_ADO_ID = -7`), NO de external_id. La fila cuyo
+#      external_id == -7 tiene ado_id == -2: es otro sentinela distinto.
+#   2) No son "unos pocos": hay **103 filas con ado_id < 0** de 228. Los
+#      sentinelas observados van (ado_id -2, -4, ...) x (external_id -4 .. -146+).
+# Con el frozenset de un elemento, el filtro capturaba ~1 de 103.
+# Regla correcta: cualquier id negativo es sintético. Es aritmética, no catálogo.
+def _es_sintetico(ado_id: int | None, external_id: int | None) -> bool:
+    """True si el ticket es interno de Stacky (ids sentinela negativos)."""
+    for v in (ado_id, external_id):
+        try:
+            if v is not None and int(v) < 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+# ── FIX C13 — estados que marcan un ticket como CERRADO/OBSOLETO ──────────
+# El operador pidió explícitamente distinguir "obsoletos". La v1 aceptaba
+# `ado_state` como parámetro y NUNCA lo usaba. Estos son los estados REALES
+# medidos en la base viva (2026-08-01), con su conteo:
+#   Active 109 | opened 63 | Done 23 | Doing 12 | Reviewed by Dev 11
+#   To Do 6 | Done by dev 2 | New 1 | Done by AI 1
+# Un ticket cerrado NO es basura: documenta lo que YA se hizo, que es
+# justamente la historia que buscamos. Pero un ticket cerrado y ADEMÁS flaco
+# no aporta nada. Por eso el cierre no penaliza solo: modula.
+_CLOSED_STATES = frozenset({
+    "done", "done by dev", "done by ai", "closed", "resolved", "completed",
+})
+_ACTIVE_STATES = frozenset({
+    "active", "opened", "doing", "new", "to do", "reviewed by dev",
+})
 
 
 @dataclass
@@ -798,18 +921,27 @@ class TicketVerdict:
     score: int = 0
 
 
-def classify_ticket(*, ticket_id: int, external_id: int | None, tracker_type: str,
+def classify_ticket(*, ticket_id: int, ado_id: int | None,
+                    external_id: int | None, tracker_type: str,
                     title: str, description: str, ado_state: str,
                     work_item_type: str) -> TicketVerdict:
     """Veredicto determinista de un ticket. PURA, sin I/O. Nunca lanza.
 
+    OJO v2: la firma cambió respecto de la v1 — ahora recibe **ado_id** además
+    de external_id (fix C3: los sentinelas sintéticos viven en ado_id).
+
     Puntuación (suma de enteros; >= 2 => "signal"):
-      +2  len(description) >= STRONG_SIGNAL_CHARS
-      +1  len(description) >= MIN_DESCRIPTION_CHARS
-      +1  len(title.strip()) >= MIN_TITLE_CHARS
-      +1  work_item_type no vacío y distinto de "Task"  (épicas/features documentan mejor)
+      +2  len(description) >= STRONG_SIGNAL_CHARS      (descripción rica)
+      +1  len(description) >= MIN_DESCRIPTION_CHARS    (descripción mínima)
+      +1  len(title.strip()) >= MIN_TITLE_CHARS        (título descriptivo)
+      +1  work_item_type no vacío y distinto de "Task" (épicas/features documentan mejor)
+      +1  ado_state cerrado Y descripción >= MIN_DESCRIPTION_CHARS
+          (fix C13: un ticket TERMINADO y bien descrito es la mejor historia
+           que existe — es trabajo real, hecho y contado)
+      -2  ado_state cerrado Y descripción < MIN_DESCRIPTION_CHARS
+          (fix C13: cerrado y flaco = obsoleto, exactamente la "basura" del pedido)
       -3  tracker_type en _SYNTHETIC_TRACKERS
-      -3  ado_id sintético (external_id in _SYNTHETIC_ADO_IDS)
+      -3  _es_sintetico(ado_id, external_id)           (fix C3)
       -2  el título matchea _NOISE_TITLE_RE
       -2  description vacía
 
@@ -820,6 +952,7 @@ def classify_ticket(*, ticket_id: int, external_id: int | None, tracker_type: st
     score = 0
     desc = (description or "").strip()
     ttl = (title or "").strip()
+    estado = (ado_state or "").strip().lower()
 
     if len(desc) >= STRONG_SIGNAL_CHARS:
         score += 2; reasons.append(f"descripcion_extensa:{len(desc)}")
@@ -830,9 +963,14 @@ def classify_ticket(*, ticket_id: int, external_id: int | None, tracker_type: st
     wit = (work_item_type or "").strip()
     if wit and wit.lower() != "task":
         score += 1; reasons.append(f"tipo_jerarquico:{wit}")
+    if estado in _CLOSED_STATES:
+        if len(desc) >= MIN_DESCRIPTION_CHARS:
+            score += 1; reasons.append(f"cerrado_y_documentado:{estado}")
+        else:
+            score -= 2; reasons.append(f"cerrado_sin_contenido:{estado}")
     if (tracker_type or "").strip().lower() in _SYNTHETIC_TRACKERS:
         score -= 3; reasons.append("tracker_sintetico")
-    if external_id in _SYNTHETIC_ADO_IDS:
+    if _es_sintetico(ado_id, external_id):
         score -= 3; reasons.append("ticket_interno_de_stacky")
     if _NOISE_TITLE_RE.match(ttl):
         score -= 2; reasons.append("titulo_ruido")
@@ -845,12 +983,16 @@ def classify_ticket(*, ticket_id: int, external_id: int | None, tracker_type: st
                          verdict=verdict, reasons=reasons, score=score)
 
 
-def mine_project_tickets(project_name: str, *, max_tickets: int | None = None
-                         ) -> dict:
-    """Barre los tickets del proyecto y devuelve el resumen del triage.
+def mine_project_tickets(project_name: str, *, max_tickets: int | None = None,
+                         scope: str = "project") -> dict:
+    """Barre los tickets y devuelve el resumen del triage.
+
+    `scope`:
+      - "project" (default): sólo los del proyecto, con match CASE-INSENSITIVE.
+      - "all": todo el corpus, sin filtro de proyecto.
 
     Salida (forma GARANTIZADA, todas las claves siempre presentes):
-      {"enabled": bool, "total": int, "signal": int, "noise": int,
+      {"enabled": bool, "scope": str, "total": int, "signal": int, "noise": int,
        "by_tracker": {tracker: int}, "verdicts": [TicketVerdict...],
        "truncated": bool}
 
@@ -858,25 +1000,32 @@ def mine_project_tickets(project_name: str, *, max_tickets: int | None = None
     Nunca lanza: ante error de DB loguea y devuelve la forma vacía.
     """
     from config import config as _cfg
-    empty = {"enabled": False, "total": 0, "signal": 0, "noise": 0,
-             "by_tracker": {}, "verdicts": [], "truncated": False}
+    empty = {"enabled": False, "scope": scope, "total": 0, "signal": 0,
+             "noise": 0, "by_tracker": {}, "verdicts": [], "truncated": False}
     if not bool(getattr(_cfg, "STACKY_DOCS_TICKET_MINING_ENABLED", False)):
         return empty
     cap = int(max_tickets if max_tickets is not None
               else getattr(_cfg, "STACKY_DOCS_TICKET_MINING_MAX", 500))
     try:
+        from sqlalchemy import func
         from db import session_scope
         from models import Ticket
         verdicts: list[TicketVerdict] = []
         by_tracker: dict[str, int] = {}
         with session_scope() as session:
-            q = (session.query(Ticket)
-                 .filter(Ticket.stacky_project_name == project_name)
-                 .order_by(Ticket.id))
+            q = session.query(Ticket)
+            if scope != "all":
+                # FIX C24: 'p' (49 filas) y 'P' (44) son el MISMO proyecto
+                # partido en dos claves porque la comparación de SQLite es
+                # sensible a mayúsculas. Un == exacto pierde la mitad del
+                # corpus sin avisar. Comparamos en minúsculas.
+                q = q.filter(func.lower(Ticket.stacky_project_name)
+                             == (project_name or "").strip().lower())
+            q = q.order_by(Ticket.id)
             total_rows = q.count()
             for t in q.limit(cap).all():
                 v = classify_ticket(
-                    ticket_id=t.id, external_id=t.external_id,
+                    ticket_id=t.id, ado_id=t.ado_id, external_id=t.external_id,
                     tracker_type=t.tracker_type or "", title=t.title or "",
                     description=t.description or "", ado_state=t.ado_state or "",
                     work_item_type=t.work_item_type or "")
@@ -884,21 +1033,59 @@ def mine_project_tickets(project_name: str, *, max_tickets: int | None = None
                 key = v.tracker_type or "desconocido"
                 by_tracker[key] = by_tracker.get(key, 0) + 1
         signal = sum(1 for v in verdicts if v.verdict == "signal")
-        return {"enabled": True, "total": len(verdicts), "signal": signal,
-                "noise": len(verdicts) - signal, "by_tracker": by_tracker,
-                "verdicts": verdicts, "truncated": total_rows > cap}
+        return {"enabled": True, "scope": scope, "total": len(verdicts),
+                "signal": signal, "noise": len(verdicts) - signal,
+                "by_tracker": by_tracker, "verdicts": verdicts,
+                "truncated": total_rows > cap}
     except Exception as exc:
         logger.warning("doc_ticket_mining: barrido fallo para %s: %s", project_name, exc)
         return dict(empty, enabled=True)
 
 
-def build_tickets_context_block(mining: dict, *, max_chars: int = 12000) -> dict | None:
+def build_tickets_context_block(mining: dict, *, max_chars: int = 12000
+                                ) -> dict | None:
     """Context block con SOLO los tickets 'signal'. None si no hay ninguno.
 
-    Cada línea: "[<tracker>#<external_id>] <título> — <motivos>". El bloque se
-    trunca a max_chars con el sufijo "\\n[...corpus truncado]" (mismo patrón que
-    doc_evidence.build_module_evidence)."""
-    ...
+    FIX C11: la v1 dejaba este cuerpo como `...` (inimplementable para un
+    modelo menor). Acá va completo.
+
+    Las claves del dict devuelto son las que consume prompt_builder.render_blocks
+    (verificado: usa `kind`, `title`, `content`; ignora el resto).
+    """
+    verdicts = (mining or {}).get("verdicts") or []
+    signal = [v for v in verdicts if getattr(v, "verdict", "") == "signal"]
+    if not signal:
+        return None
+    lineas: list[str] = []
+    usado = 0
+    truncado = False
+    for v in signal:
+        motivos = ", ".join(v.reasons[:3])
+        ident = v.external_id if v.external_id is not None else v.ticket_id
+        linea = f"[{v.tracker_type or 'desconocido'}#{ident}] {v.title} — {motivos}"
+        if usado + len(linea) + 1 > max_chars:
+            truncado = True
+            break
+        lineas.append(linea)
+        usado += len(linea) + 1
+    cuerpo = "\n".join(lineas)
+    if truncado:
+        cuerpo += "\n[...corpus truncado]"
+    total = int(mining.get("total", 0) or 0)
+    ruido = int(mining.get("noise", 0) or 0)
+    return {
+        "id": "tickets-signal",
+        "kind": "tickets-signal",
+        "title": "HISTORIA DEL PROYECTO SEGÚN SUS TICKETS (triage determinista)",
+        "content": (
+            f"Se barrieron {total} tickets; {len(signal)} aportan historia "
+            f"documentable y {ruido} se descartaron por ruido/obsolescencia.\n"
+            f"Usá estos tickets como CONTEXTO HISTÓRICO. No los cites como "
+            f"archivo:línea: no son código, y una cita inventada te va a hacer "
+            f"rechazar el archivo por el gate de citas.\n\n" + cuerpo
+        ),
+        "source": {"type": "tickets", "readonly": True},
+    }
 ```
 
 **Cableado (consumidor de producción).** En `Stacky Agents/backend/services/doc_documenter.py`, dentro de `build_context_for_mode`, para los modos `RECONSTRUIR` y `COMPLETAR` (rama de `doc_documenter.py:293-296`), agregar después del loop de módulos:
@@ -914,16 +1101,28 @@ y guardar el resumen en el run record: `_update_run(run_id, ticket_mining={k: v 
 
 **Tests (PRIMERO).** Agregar a `Stacky Agents/backend/tests/test_documenter_v2_pipeline.py`:
 
-- `test_plan284_classify_ticket_tabla` — tabla con 8 casos y el score exacto esperado:
-  - Ticket real ADO con 1200 chars de descripción, título de 40 chars, tipo `"Epic"` → `signal`, score 5.
-  - Ticket con descripción de 250 chars y título de 20 → `signal`, score 2 (frontera exacta).
-  - Ticket con descripción de 199 chars y título de 20 → `noise`, score 1 (frontera del otro lado).
-  - Ticket con descripción vacía → `noise`, y `"sin_descripcion" in reasons`.
-  - Ticket `tracker_type="demo"` con descripción larga → `noise` (score 3-3=0), y `"tracker_sintetico" in reasons`.
-  - Ticket con `external_id=-7` → `noise`, y `"ticket_interno_de_stacky" in reasons`.
-  - Ticket con título `"test"` → `noise`, y `"titulo_ruido" in reasons`.
-  - Ticket GitLab (`tracker_type="gitlab"`) con descripción larga → `signal` (**prueba de que el triage es multiproveedor y no favorece a ADO**).
-- `test_plan284_mine_project_tickets_forma_garantizada` — con la flag OFF, el dict tiene **las 7 claves** con `enabled=False` (presencia de la forma + ausencia de datos en el mismo test).
+- `test_plan284_classify_ticket_tabla` — **[REESCRITA EN v2 — FIX C12]**.
+
+  > **Por qué se reescribió.** La v1 decía cosas como *"Ticket `tracker_type="demo"` con descripción larga → `noise` (score 3-3=0)"*. Esa aritmética sólo cierra si la descripción está entre 200 y 799 chars **y** el tipo no es `Task`. Si el implementador escribe una descripción de 1200 chars — que es lo que "larga" sugiere — el score es 5-3=**2** ⇒ **`signal`**, y el test sale rojo. El riesgo real no es el rojo: es que alguien "arregle" el test debilitando el assert. **Cada fila fija ahora TODOS los campos.** Todos los casos usan `ado_state="Active"` salvo donde se indique.
+
+  | # | ado_id | external_id | tracker | título (chars) | desc (chars) | work_item_type | ado_state | score | veredicto |
+  |---|---|---|---|---|---|---|---|---|---|
+  | 1 | 1001 | 1001 | azure_devops | 40 | 1200 | `Epic` | Active | **5** | signal |
+  | 2 | 1002 | 1002 | azure_devops | 20 | 250 | `Task` | Active | **2** | signal (frontera) |
+  | 3 | 1003 | 1003 | azure_devops | 20 | 199 | `Task` | Active | **1** | noise (frontera) |
+  | 4 | 1004 | 1004 | azure_devops | 20 | 0 | `Task` | Active | **-1** | noise + `sin_descripcion` |
+  | 5 | 1005 | 1005 | **demo** | 20 | 300 | `Epic` | Active | **0** | noise + `tracker_sintetico` |
+  | 6 | **-2** | **-7** | azure_devops | 20 | 300 | `Epic` | Active | **0** | noise + `ticket_interno_de_stacky` |
+  | 7 | 1007 | 1007 | azure_devops | `"test"` (4) | 300 | `Task` | Active | **-1** | noise + `titulo_ruido` |
+  | 8 | 1008 | 1008 | **gitlab** | 40 | 1200 | `Issue` | opened | **5** | signal (**multiproveedor: no favorece a ADO**) |
+  | 9 | 1009 | 1009 | azure_devops | 40 | 1200 | `Epic` | **Done** | **6** | signal + `cerrado_y_documentado` |
+  | 10 | 1010 | 1010 | azure_devops | 20 | 50 | `Task` | **Done** | **-1** | noise + `cerrado_sin_contenido` (**el "obsoleto" del pedido**) |
+
+  La fila **6** es el caso que la v1 tenía roto (C3): con `external_id=-7` **y** `ado_id=-2`, la regla vieja no lo detectaba porque miraba `external_id` contra un frozenset de ado_ids. Las filas **9 y 10** son las que cubren `ado_state`, que la v1 aceptaba y tiraba a la basura (C13).
+
+- `test_plan284_es_sintetico_cubre_los_103` — **[NUEVO en v2]**. Tabla de `_es_sintetico`: `(-2, -7)`→True, `(-4, -123)`→True, `(1001, 1001)`→False, `(None, None)`→False, `(None, -5)`→True, `("x", None)`→False (no lanza). **Presencia + ausencia en el mismo test.**
+- `test_plan284_mine_project_tickets_forma_garantizada` — con la flag OFF, el dict tiene **las 8 claves** (`enabled, scope, total, signal, noise, by_tracker, verdicts, truncated`) con `enabled=False` (presencia de la forma + ausencia de datos en el mismo test).
+- `test_plan284_scope_project_es_case_insensitive` — **[NUEVO en v2 — FIX C24]**. Con una DB en memoria que tiene 2 tickets en `"p"` y 2 en `"P"`, `mine_project_tickets("P", scope="project")` devuelve `total == 4` (no 2). **Ausencia gemela:** un ticket en `"OTRO"` no aparece.
 - `test_plan284_build_tickets_block_solo_signal` — con un mining de 2 signal + 3 noise, el `content` del bloque **contiene** los títulos de los 2 signal y **no contiene** los de los 3 noise.
 
 **Comando:**
@@ -932,21 +1131,29 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .\.venv\Scripts\python.exe -m pytest tests/test_documenter_v2_pipeline.py -q
 ```
 
-**Criterio de aceptación binario:** `0 failed`, y este censo sobre la base viva (**read-only, `mode=ro`**) imprime un total de **228** y una partición `signal + noise == 228`:
+**Criterio de aceptación binario:** `0 failed`, y el censo de abajo cumple las 4 condiciones.
+
+> **FIX C2 — el censo de la v1 no ejercitaba la función de producción.** La v1 corría SQL crudo `select … from tickets` **sin filtro de proyecto** y esperaba 228. Pero la función que va a producción es `mine_project_tickets`, que **sí** filtra por proyecto. O sea: el gate validaba `classify_ticket` sobre 228 filas mientras el código real veía como mucho 65. Un gate que aprueba algo distinto de lo que se va a ejecutar no es un gate. Este censo llama a **`mine_project_tickets`**, en sus dos scopes.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-.\.venv\Scripts\python.exe -c "
-import sqlite3
-from services.doc_ticket_mining import classify_ticket
-p=r'N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\data\stacky_agents.db'
-c=sqlite3.connect('file:'+p+'?mode=ro',uri=True)
-rows=c.execute('select id,external_id,tracker_type,title,description,ado_state,work_item_type from tickets').fetchall()
-vs=[classify_ticket(ticket_id=r[0],external_id=r[1],tracker_type=r[2] or '',title=r[3] or '',description=r[4] or '',ado_state=r[5] or '',work_item_type=r[6] or '') for r in rows]
-s=sum(1 for v in vs if v.verdict=='signal')
-print('total',len(vs),'signal',s,'noise',len(vs)-s)
-c.close()"
+.\.venv\Scripts\python.exe -c @"
+from services.doc_ticket_mining import mine_project_tickets as m
+a = m('RIPLEY', scope='all')        # corpus completo
+p = m('RIPLEY', scope='project')    # proyecto activo (data/active_project.json)
+print('all   ', a['total'], a['signal'], a['noise'], a['by_tracker'])
+print('RIPLEY', p['total'], p['signal'], p['noise'])
+print('C1 corpus completo == 228     ->', a['total'] == 228)
+print('C2 particion all              ->', a['signal'] + a['noise'] == a['total'])
+print('C3 RIPLEY == 65               ->', p['total'] == 65)
+print('C4 particion proyecto         ->', p['signal'] + p['noise'] == p['total'])
+"@
 ```
+
+Las 4 condiciones deben imprimir `True`.
+- **C1/C3** son los números **medidos** el 2026-08-01 sobre la base viva. Si `C3` da 65 y no 44 o 49, el match case-insensitive de C24 está bien puesto.
+- **C2/C4** prueban que el triage es una **partición**: ningún ticket se pierde ni se cuenta dos veces.
+- **Este comando NO es un test**: corre contra la base viva y `mine_project_tickets` es sólo `SELECT`. Si preferís blindarlo, exportá `DATABASE_URL` apuntando a una copia. **Nunca corras `pytest` suelto contra la base viva** (escribe).
 
 > **Nunca corras pytest suelto contra la base viva:** un pytest sin `DATABASE_URL` en memoria escribe en la BD real. Los tests de esta fase usan `sqlite:///:memory:` (ya seteado en `test_documenter_v2_pipeline.py:9`). El comando de censo de arriba abre la base con `mode=ro` y **no** es un test.
 
@@ -960,6 +1167,91 @@ c.close()"
 
 **Objetivo:** que el Documentador deje de ser un one-shot y corra **PROPONER → CRITICAR → MEJORAR → IMPLEMENTAR → VERIFICAR**, con estado persistido por etapa y confirmación humana antes de escribir.
 **Valor:** el rigor deja de depender de que el modelo tenga un buen día.
+
+#### F5.0 — [BLOQUEANTE C1] Habilitar lo que F5 da por sentado
+
+> **La v1 era inimplementable acá y hay que arreglarlo ANTES de escribir una línea de F5.**
+>
+> La v1 decía: *"Invoca vía `invoke_documenter` **con un `system_prompt_override` propio por etapa**"* y *"`_run_paper_stage` **no** usa `parse_proposals`; lee el output crudo con `_wait_and_read_output`"*. Verificado abriendo el archivo, **las dos cosas son imposibles hoy**:
+>
+> 1. **`invoke_documenter` no acepta `system_prompt_override`.** Firma real (`doc_documenter.py:364-367`):
+>    ```python
+>    def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
+>                          project_name: str, runtime: str, *,
+>                          on_execution_started: Callable[[int], None] | None = None
+>                          ) -> list[DocProposal]:
+>    ```
+>    El override existe pero está **hardcodeado adentro**: `:381` `system_override = _DEFAULT_DOCUMENTADOR_PROMPT`, y recién ahí se pasa a `run_agent` (`:392`). No hay forma de inyectarlo desde afuera.
+> 2. **`invoke_documenter` devuelve `list[DocProposal]`**: parsea el output **adentro**. Las etapas de papel necesitan **texto plano**, y ese texto se pierde antes de volver.
+>
+> Sin F5.0, F5 entera es papel mojado: compila el plan, no compila el código.
+
+**Archivo a editar:** `Stacky Agents/backend/services/doc_documenter.py`
+
+**(a) Abrir el override.** Cambiar la firma de `invoke_documenter` (`:364`) agregando **un solo kwarg opcional al final**, y cambiar `:381`:
+
+```python
+def invoke_documenter(mode: DocumenterMode, context_blocks: list[dict],
+                      project_name: str, runtime: str, *,
+                      on_execution_started: Callable[[int], None] | None = None,
+                      system_prompt_override: str | None = None,   # Plan 284 F5.0
+                      ) -> list[DocProposal]:
+    ...
+    # :381 pasa de:  system_override = _DEFAULT_DOCUMENTADOR_PROMPT
+    system_override = system_prompt_override or _DEFAULT_DOCUMENTADOR_PROMPT
+```
+
+> Default `None` ⇒ **todos** los llamadores existentes conservan el comportamiento byte-idéntico. Es aditivo puro.
+
+**(b) Una vía para el texto crudo.** Agregar al lado de `invoke_documenter`:
+
+```python
+def invoke_raw_stage(stage_prompt: str, context_blocks: list[dict],
+                     project_name: str, runtime: str, *,
+                     on_execution_started: Callable[[int], None] | None = None
+                     ) -> str:
+    """Plan 284 F5.0 — invoca al agente y devuelve el TEXTO CRUDO, sin parsear.
+
+    Es el gemelo de invoke_documenter para las etapas de papel (PROPONER,
+    CRITICAR, MEJORAR), que producen prosa y no bloques <<<DOC>>>.
+    Reusa exactamente el mismo camino de invocación (agent_runner.run_agent),
+    así que es agnóstico de runtime igual que invoke_documenter.
+    Nunca lanza: ante error devuelve "".
+    """
+    try:
+        _sel = resolve_run_selection(runtime=runtime, project_name=project_name)
+        execution_id = agent_runner.run_agent(
+            agent_type="Documentador", ticket_id=_CONVERSATION_ADO_ID,
+            context_blocks=context_blocks, user="documenter", runtime=runtime,
+            vscode_agent_filename="Documentador.agent.md",
+            system_prompt_override=stage_prompt, project_name=project_name,
+            use_few_shot=False, use_anti_patterns=False, work_item_type="Doc",
+            model_override=_sel["model"], effort_override=_sel["effort"])
+        if on_execution_started is not None:
+            on_execution_started(execution_id)
+        return _wait_and_read_output(execution_id) or ""
+    except Exception as exc:
+        logger.warning("invoke_raw_stage: fallo en etapa de papel: %s", exc)
+        return ""
+```
+
+> **Copiá el cuerpo de `invoke_documenter` (`:380-399`) como molde**: mismos kwargs de `run_agent`, misma `resolve_run_selection`. Lo único que cambia es que **no** llama a `parse_proposals` y devuelve el texto.
+
+**Tests (PRIMERO).** Agregar a `Stacky Agents/backend/tests/test_documenter_v2_pipeline.py`:
+
+- `test_plan284_invoke_documenter_acepta_override` — monkeypatchear `agent_runner.run_agent` para capturar sus kwargs. Llamar `invoke_documenter(..., system_prompt_override="PROMPT_X")` y asertar `capturado["system_prompt_override"] == "PROMPT_X"` (**presencia**). **Ausencia gemela:** llamarla **sin** el kwarg y asertar que el valor capturado es `_DEFAULT_DOCUMENTADOR_PROMPT` — o sea, backward-compat exacta.
+- `test_plan284_invoke_raw_stage_devuelve_texto` — con `run_agent` y `_wait_and_read_output` monkeypatcheados, `invoke_raw_stage("P", [], "P", "claude_code_cli")` devuelve el texto crudo **y** `parse_proposals` **no** fue llamada (monkeypatcheala para que lance `AssertionError`; si el texto vuelve, es que no pasó por el parser).
+
+**Criterio de aceptación binario:** `0 failed`, y este censo AST devuelve **exactamente 1** (el override es un parámetro real, no un literal hardcodeado):
+
+```powershell
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+.\.venv\Scripts\python.exe -c "import ast,pathlib; t=ast.parse(pathlib.Path('services/doc_documenter.py').read_text(encoding='utf-8')); f=[n for n in ast.walk(t) if isinstance(n,ast.FunctionDef) and n.name=='invoke_documenter'][0]; print(sum(1 for a in f.args.kwonlyargs if a.arg=='system_prompt_override'))"
+```
+
+**Flag:** ninguna (es habilitación de sustrato; sin llamadores nuevos no cambia nada).
+**Runtimes:** `invoke_raw_stage` usa el mismo `agent_runner.run_agent` que `invoke_documenter`, **sin branching por runtime**. Idéntico en los 3.
+**Trabajo del operador:** ninguno.
 
 #### F5.1 — Contrato de etapas
 
@@ -997,26 +1289,117 @@ class StageResult:
 
 #### F5.2 — Las 3 etapas de papel
 
+Los 3 prompts de etapa, **escritos** (la v1 los nombraba y nunca los definía — C11). Cada uno es una constante de módulo en `doc_documenter.py`:
+
+```python
+_STAGE_PROMPT_PROPONER = (
+    "Sos el Documentador de Stacky en la etapa PROPONER.\n"
+    "NO escribas documentación todavía. NO uses bloques <<<DOC>>>.\n"
+    "Devolvé TEXTO PLANO con un plan de documentación para este proyecto:\n"
+    "1. Qué módulos hay que documentar y por qué, EN ORDEN DE PRIORIDAD.\n"
+    "2. Para cada uno, qué archivo de doc le corresponde y qué debe contener.\n"
+    "3. Qué NO se puede afirmar todavía por falta de evidencia en el contexto.\n"
+    "Citá rutas reales del contexto provisto. Si no tenés evidencia, decilo."
+)
+_STAGE_PROMPT_CRITICAR = (
+    "Sos el Documentador de Stacky en la etapa CRITICAR.\n"
+    "Arriba tenés TU PROPIO plan de la etapa anterior. Atacalo sin piedad.\n"
+    "NO escribas documentación. NO uses bloques <<<DOC>>>. TEXTO PLANO.\n"
+    "Listá C1..Cn: qué afirma el plan sin evidencia, qué módulo importante "
+    "omite, qué ruta citada no aparece en el contexto, y qué parte no se "
+    "puede verificar contra el código provisto."
+)
+_STAGE_PROMPT_MEJORAR = (
+    "Sos el Documentador de Stacky en la etapa MEJORAR.\n"
+    "Arriba tenés tu plan y su crítica. Reescribí el plan corrigiendo cada "
+    "punto de la crítica. NO escribas documentación todavía. TEXTO PLANO.\n"
+    "Si un punto de la crítica no se puede resolver con la evidencia "
+    "disponible, sacá ese ítem del plan en vez de inventarlo."
+)
+```
+
 `_run_paper_stage(stage, project_name, runtime, operator_note, prior_artifact) -> StageResult`:
-- Arma un `context_blocks` con: el bloque de la nota del operador (F2), el bloque de salud/grafo, el bloque de tickets `signal` (F4) y, si `prior_artifact` no está vacío, un bloque `{"kind": "prior-stage", "title": "<etapa anterior>", "content": prior_artifact}`.
-- Invoca vía `invoke_documenter` **con un `system_prompt_override` propio por etapa** (constantes `_STAGE_PROMPT_PROPONER`, `_STAGE_PROMPT_CRITICAR`, `_STAGE_PROMPT_MEJORAR`). Estos prompts NO piden bloques `<<<DOC>>>`: piden texto plano. Por eso `_run_paper_stage` **no** usa `parse_proposals`; lee el output crudo con `_wait_and_read_output`.
-- **Corte de costo (obligatorio):** si `PROPONER` devuelve un artefacto vacío o de menos de 200 caracteres, `CRITICAR` y `MEJORAR` se marcan `skipped` con `summary="sin plan que criticar"`. No se gastan 2 invocaciones al pedo.
+- Arma un `context_blocks` con: el bloque de la nota del operador (F2), el bloque de salud/grafo, el bloque de tickets `signal` (F4) y, si `prior_artifact` no está vacío, un bloque `{"id": "prior-stage", "kind": "prior-stage", "title": "<etapa anterior>", "content": prior_artifact}`.
+- Invoca vía **`invoke_raw_stage(_STAGE_PROMPT_<ETAPA>, blocks, project_name, runtime)`** (la primitiva que crea **F5.0**). **No** usa `invoke_documenter` ni `parse_proposals`: estas etapas producen prosa, no bloques `<<<DOC>>>`.
+- Devuelve `StageResult` con `artifact` = el texto devuelto, `state="done"` si hubo texto, `state="failed"` si volvió `""`.
+
+**Corte de costo (obligatorio) — reforzado en v2 (FIX C17).** La v1 cortaba sólo por longitud (`<200 chars`), así que 250 caracteres de basura pasaban el gate y disparaban 2 invocaciones más. El corte ahora es una función pura, testeable:
+
+```python
+def stage_artifact_is_usable(artifact: str, context_blocks: list[dict],
+                             *, min_chars: int = 200) -> bool:
+    """Plan 284 — ¿el artefacto de PROPONER amerita gastar CRITICAR + MEJORAR?
+
+    PURA, sin I/O. Nunca lanza. Dos condiciones, ambas necesarias:
+      1. Longitud >= min_chars.
+      2. Menciona al menos UNA ruta que aparezca en el contexto que le dimos.
+         Un plan que no nombra ni un archivo del repo no es un plan: es prosa.
+    """
+    try:
+        txt = (artifact or "").strip()
+        if len(txt) < min_chars:
+            return False
+        ctx = "\n".join(str(b.get("content", "")) for b in (context_blocks or []))
+        candidatos = {w.strip(".,;:()[]\"'") for w in ctx.split()
+                      if "/" in w and "." in w and len(w) > 6}
+        return any(c in txt for c in candidatos)
+    except Exception:
+        return False
+```
+
+Si `stage_artifact_is_usable(...)` es `False`, `CRITICAR` y `MEJORAR` quedan `state="skipped"` con `summary="sin plan que criticar"`. No se gastan 2 invocaciones al pedo.
 
 > **Nota de diseño honesta:** estas 3 etapas cuestan 3 invocaciones extra de LLM por run. Es el precio del rigor que pidió el operador. Está acotado: se pagan **una vez por run**, no por modo, y el corte de arriba las evita cuando no hay nada que criticar. Ver Riesgo R1.
 
 #### F5.3 — IMPLEMENTAR con human-in-the-loop
 
 - Si `STACKY_DOCS_PIPELINE_AUTOAPPLY` está **OFF** (default), al llegar a `IMPLEMENTAR` el run se marca `state="awaiting_approval"`, persiste el reporte con las 3 etapas de papel completas y **se detiene**. El operador lee el plan y la crítica en la UI y aprueba.
-- **Endpoint nuevo** en `Stacky Agents/backend/api/docs.py`:
+- **Endpoint nuevo** en `Stacky Agents/backend/api/docs.py` (blueprint `bp`, `api/docs.py:28`, `url_prefix="/docs"` bajo `/api`; los POST usan el atajo `@bp.post`).
+
+> **⚠️ FIX C5 — esto era un bloqueante silencioso de la v1.** Con los defaults del propio plan (`STAGES=ON`, `AUTOAPPLY=OFF`), **todo** run se detiene en `awaiting_approval`. O sea: **el camino por defecto del producto** depende enteramente de este endpoint. La v1 lo dejaba con (a) **cero tests**, (b) **sin función cliente en `endpoints.ts`** — el botón de F7 no tenía a qué llamar — y (c) apoyado en `test_docs_api.py`, que **no está registrado en ninguno de los dos ratchets** (verificado: `grep test_docs_api` → 0 hits en `run_harness_tests.ps1` y en `.sh`). Endpoint construido, jamás cableado, y encima invisible para el arnés.
 
 ```python
 @bp.post("/documenter/stage/approve")
 def documenter_stage_approve():
-    """Plan 284 — el operador aprueba pasar a IMPLEMENTAR. 404 si el master
-    está OFF o si el pipeline de etapas está OFF; 409 si el run no está
-    esperando aprobación."""
+    """Plan 284 — el operador aprueba (o cancela) pasar a IMPLEMENTAR.
+
+    Body: {"run": "<run_id>", "approve": true|false, "keep_branch": true|false}
+    404 si STACKY_DOCS_DOCUMENTER_ENABLED o STACKY_DOCS_PIPELINE_STAGES_ENABLED
+        están OFF  (capacidad desactivada, NO "permiso denegado": mono-operador).
+    404 run_not_found si el run_id no existe (reinicio del backend).
+    409 si el run no está en state == "awaiting_approval".
+    200 {"ok": true, "state": "running"|"cancelled_by_operator"}
+    """
 ```
-  Body: `{run, approve: true|false}`. Con `approve=false` el run termina en `state="cancelled_by_operator"` y la rama se descarta con `discard_doc_branch`.
+
+  - `approve=true` ⇒ el run reanuda en IMPLEMENTAR (los modos del 113) y sigue a VERIFICAR.
+  - `approve=false` ⇒ `state="cancelled_by_operator"` y la rama se descarta con `discard_doc_branch` (`doc_documenter.py:514`).
+  - **`keep_branch` (FIX C8).** La v1 afirmaba que esta aprobación *"reemplaza al Conservar/Descartar"*, pero **no eliminaba** `POST /documenter/decide` (`api/docs.py:364`), así que el operador quedaba con **dos** decisiones por run — es decir, la v1 agregaba trabajo mientras decía que no lo agregaba. Se resuelve fusionando: `keep_branch` viaja en **la misma** llamada y el backend encadena la decisión de rama al terminar. `POST /documenter/decide` **se conserva** por backward-compat (runs viejos, y el caso en que el operador cambie de opinión después), pero en el flujo con etapas ON ya no hace falta tocarlo. **Una decisión por run, no dos.**
+
+**Función cliente (faltaba por completo en la v1).** En `Stacky Agents/frontend/src/api/endpoints.ts`, junto a `documenterRun` (`:3648`):
+
+```ts
+  /** Plan 284 — aprueba (o cancela) el paso a IMPLEMENTAR de un run detenido
+   *  en awaiting_approval. 404 si la flag OFF, 409 si el run no está esperando. */
+  documenterStageApprove: (
+    run: string, approve: boolean, keepBranch = true
+  ): Promise<{ ok: boolean; state?: string; error?: string }> =>
+    api.post<{ ok: boolean; state?: string; error?: string }>(
+      `/api/docs/documenter/stage/approve`,
+      { run, approve, keep_branch: keepBranch }
+    ),
+```
+
+**Registrar el archivo de test en el arnés (obligatorio).** `test_docs_api.py` existe pero **no** está en los ratchets. Agregarlo a **LOS DOS**, respetando la sintaxis de cada uno (divergen):
+- `backend/scripts/run_harness_tests.ps1` → `  "tests/test_docs_api.py",` junto a `"tests/test_doc_evidence.py"` (`:364`).
+- `backend/scripts/run_harness_tests.sh` → `  tests/test_docs_api.py` junto a `tests/test_doc_evidence.py` (`:415`).
+> El ratchet es una **trampa de commit, no sólo de edición**: si no lo registrás en ambos, el commit pasa y el arnés nunca corre estos tests.
+
+**Tests del endpoint (PRIMERO).** En `Stacky Agents/backend/tests/test_docs_api.py`:
+- `test_plan284_approve_404_con_stages_off` — flag OFF ⇒ 404, y el body dice capacidad desactivada (**no** "permiso denegado").
+- `test_plan284_approve_409_si_no_espera` — run en `state="running"` ⇒ 409 y el run **no** cambia de estado (ausencia) **y** sigue existiendo (presencia).
+- `test_plan284_approve_true_reanuda` — run en `awaiting_approval` ⇒ 200 y `state != "awaiting_approval"`.
+- `test_plan284_approve_false_cancela_y_descarta` — 200, `state == "cancelled_by_operator"` **y** `discard_doc_branch` fue llamada exactamente 1 vez (monkeypatch con contador).
 - Si `STACKY_DOCS_PIPELINE_AUTOAPPLY` está **ON**, sigue de largo. **Es la única forma de que Stacky escriba documentación sin que el operador diga que sí.**
 
 #### F5.4 — VERIFICAR (determinista, sin LLM)
@@ -1024,18 +1407,51 @@ def documenter_stage_approve():
 `_run_verify_stage(result: ApplyResult, workspace_root, project_name) -> StageResult` calcula:
 - `citations_total`, `citations_ok`, `files_rejected` (de `result.files`, F3).
 - `coverage` (de F6, si `STACKY_DOCS_RADIOGRAPHY_ENABLED` ON).
-- Veredicto con reglas EXACTAS:
-  - `INSUFICIENTE` si `written == 0` **o** `files_rejected > len(written)`.
-  - `RADIOGRAFIA_COMPLETA` si `written > 0` **y** `files_rejected == 0` **y** `coverage_ratio >= 0.8`.
-  - `RADIOGRAFIA_PARCIAL` en cualquier otro caso.
-- El veredicto va al reporte final como `report["verdict"]` y `report["stages"]`.
+- El veredicto sale de una **función pura** (la v1 la usaba en un test y nunca la definía — C11):
+
+```python
+VERDICT_COMPLETA = "RADIOGRAFIA_COMPLETA"
+VERDICT_PARCIAL = "RADIOGRAFIA_PARCIAL"
+VERDICT_INSUFICIENTE = "INSUFICIENTE"
+VERDICT_PENDIENTE = "PENDIENTE_DE_APROBACION"   # FIX C7
+
+
+def compute_verify_verdict(written_count: int, files_rejected: int,
+                           coverage_ratio: float) -> str:
+    """Plan 284 — veredicto del run. PURA, sin I/O. Nunca lanza.
+
+    Reglas EXACTAS, en este orden (la primera que matchea gana):
+      1. written == 0                      -> INSUFICIENTE
+      2. files_rejected > written          -> INSUFICIENTE
+      3. files_rejected == 0 y ratio>=0.8  -> RADIOGRAFIA_COMPLETA
+      4. cualquier otro caso               -> RADIOGRAFIA_PARCIAL
+    """
+    try:
+        w = int(written_count or 0)
+        r = int(files_rejected or 0)
+        c = float(coverage_ratio or 0.0)
+        if w == 0 or r > w:
+            return VERDICT_INSUFICIENTE
+        if r == 0 and c >= 0.8:
+            return VERDICT_COMPLETA
+        return VERDICT_PARCIAL
+    except Exception:
+        return VERDICT_INSUFICIENTE
+```
+
+- El veredicto va al reporte final como `report["verdict"]` y las etapas como `report["stages"]`.
+
+> **FIX C7 — el KPI-7 de la v1 se contradecía con sus propios defaults.** KPI-7 promete *"0% de runs que terminan sin veredicto explícito"*. Pero con `STAGES=ON` + `AUTOAPPLY=OFF` (los defaults **del plan**), **todo** run se detiene en `awaiting_approval` y `VERIFICAR` **nunca corre** ⇒ el 100% de los runs terminaría sin veredicto. La fase prometía exactamente lo contrario de lo que sus defaults producen.
+>
+> **Resolución:** la parada por aprobación **también emite veredicto**. Al entrar en `awaiting_approval`, el run persiste `report["verdict"] = VERDICT_PENDIENTE` con el resumen de las 3 etapas de papel. No es un veredicto de calidad documental — es un estado terminal honesto y explícito, que es lo que KPI-7 mide. Cuando el operador aprueba, `VERIFICAR` corre y lo reemplaza por el veredicto real.
 
 **Tests (PRIMERO).** Agregar a `Stacky Agents/backend/tests/test_documenter_v2_pipeline.py`:
 
 - `test_plan284_stage_order_es_el_contrato` — `STAGE_ORDER` tiene exactamente 5 elementos en el orden PROPONER, CRITICAR, MEJORAR, IMPLEMENTAR, VERIFICAR.
 - `test_plan284_verdict_tabla` — función pura `compute_verify_verdict(written_count, files_rejected, coverage_ratio)` con la tabla de las 3 reglas, incluyendo las fronteras `coverage_ratio=0.8` (COMPLETA) y `0.79` (PARCIAL).
 - **`test_plan284_sin_autoaplicado_el_run_espera_aprobacion`** — con `STACKY_DOCS_PIPELINE_AUTOAPPLY=False`, `STACKY_DOCS_PIPELINE_STAGES_ENABLED=True` y `invoke_documenter` monkeypatcheado para devolver un artefacto de papel válido: el run termina en `state == "awaiting_approval"` (presencia) **y** `result.written == []` — no se escribió ni un archivo (ausencia). Es el test del riel human-in-the-loop.
-- `test_plan284_corte_de_costo_sin_plan` — si PROPONER devuelve `""`, las etapas CRITICAR y MEJORAR quedan `state="skipped"` y **`invoke_documenter` fue llamado exactamente 1 vez** (contador en el monkeypatch). Prueba que el corte ahorra de verdad.
+- `test_plan284_corte_de_costo_sin_plan` — si PROPONER devuelve `""`, las etapas CRITICAR y MEJORAR quedan `state="skipped"` y **`invoke_raw_stage` fue llamada exactamente 1 vez** (contador en el monkeypatch). Prueba que el corte ahorra de verdad. **Precondición obligatoria del test:** fijar `STACKY_DOCS_PIPELINE_AUTOAPPLY=False`; si quedara en `True` el run seguiría a IMPLEMENTAR y el contador subiría por los modos del 113, y el "exactamente 1" sería un falso rojo.
+- `test_plan284_stage_artifact_is_usable_tabla` — **[NUEVO en v2 — FIX C17]**: `("", ctx)`→False; 199 chars→False; 250 chars sin ninguna ruta del contexto→**False** (el caso que la v1 dejaba pasar); 250 chars que mencionan `services/doc_graph.py` presente en el contexto→True; `(None, None)`→False (no lanza).
 - `test_plan284_pipeline_off_es_backward_compatible` — con `STACKY_DOCS_PIPELINE_STAGES_ENABLED=False`, `run_documenter` devuelve un reporte **sin** las claves `stages` ni `verdict`, y con las mismas claves que hoy.
 
 **Comando:**
@@ -1044,12 +1460,33 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .\.venv\Scripts\python.exe -m pytest tests/test_documenter_v2_pipeline.py -q
 ```
 
-**Criterio de aceptación binario:** `0 failed` y el censo del riel HITL devuelve **exactamente 1** (existe un único punto donde el autoaplicado se consulta, y está antes de escribir):
+**Criterio de aceptación binario:** `0 failed`, **y** el censo de orden de abajo imprime `True`.
+
+> **FIX C14 — el censo de la v1 no probaba lo que decía.** Era `Select-String … "STACKY_DOCS_PIPELINE_AUTOAPPLY" | Count == 1`, con la glosa *"existe un único punto donde el autoaplicado se consulta, **y está antes de escribir**"*. Tres defectos: (1) cuenta **por subcadena**, así que un comentario que nombre la flag lo pone en 2 y lo rompe — un gate que **premia no documentar**; (2) no verifica **nada** sobre el orden, que es justo lo que la glosa promete; (3) el riel human-in-the-loop es de **comportamiento**, y eso se prueba con un test, no con un grep.
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-Select-String -Path "services\doc_documenter.py" -Pattern "STACKY_DOCS_PIPELINE_AUTOAPPLY" | Measure-Object | Select-Object -ExpandProperty Count
+.\.venv\Scripts\python.exe -c @"
+import ast, pathlib
+src = pathlib.Path('services/doc_documenter.py').read_text(encoding='utf-8')
+t = ast.parse(src)
+# 1) la consulta del autoaplicado existe como LECTURA de config, no como literal
+lecturas = [n.lineno for n in ast.walk(t)
+            if isinstance(n, ast.Constant) and n.value == 'STACKY_DOCS_PIPELINE_AUTOAPPLY']
+# 2) toda escritura de doc vive en apply_proposals; el gate tiene que ser previo
+fn = [n for n in ast.walk(t) if isinstance(n, ast.FunctionDef)
+      and n.name == 'apply_proposals'][0]
+escrituras = [n.lineno for n in ast.walk(fn)
+              if isinstance(n, ast.Call) and getattr(n.func, 'attr', '') == 'write_text']
+print('lecturas de la flag:', lecturas)
+print('escrituras en apply_proposals:', escrituras)
+print('G1 la flag se lee               ->', len(lecturas) >= 1)
+print('G2 toda lectura precede a la escritura ->',
+      all(l < w for l in lecturas for w in escrituras) if escrituras else True)
+"@
 ```
+
+`G1` y `G2` deben imprimir `True`. **Pero el gate REAL de este riel es el test** `test_plan284_sin_autoaplicado_el_run_espera_aprobacion`: si ese test pasa, el operador no puede ser salteado, censo o no censo.
 
 **Flag:** `STACKY_DOCS_PIPELINE_STAGES_ENABLED` (**ON**) + `STACKY_DOCS_PIPELINE_AUTOAPPLY` (**OFF**, excepción B).
 **Runtimes:** las 3 etapas de papel usan `invoke_documenter`, agnóstico de runtime. **Fallback por runtime:** si el runtime devuelve vacío en PROPONER (típico de un modelo con poco presupuesto), el corte de costo salta a IMPLEMENTAR con los modos del 113 — el comportamiento degrada exactamente al de hoy, nunca a un error.
@@ -1068,18 +1505,54 @@ Select-String -Path "services\doc_documenter.py" -Pattern "STACKY_DOCS_PIPELINE_
 """Plan 284 — Radiografía documental: cobertura módulo↔nota sobre el grafo del 109/268."""
 
 def compute_coverage(graph: dict, workspace_root: str | None) -> dict:
-    """Cobertura documental. Forma GARANTIZADA (todas las claves siempre):
+    """Cobertura documental. PURA respecto del grafo: NO reconstruye nada.
+
+    Forma GARANTIZADA (las 7 claves siempre presentes):
       {"enabled": bool, "modules_total": int, "modules_covered": int,
        "coverage_ratio": float, "uncovered": [str], "orphan_notes": [str],
        "by_doc_class": {clase: int}}
 
-    - modules_total / modules_covered / uncovered salen de doc_health.uncovered_modules
-      (ya calculado por classify_doc_health, doc_graph.py:424) — NO se recalcula.
-    - orphan_notes sale de graph["orphans"] (ya calculado por build_graph).
-    - by_doc_class usa doc_taxonomy.summarize_classes sobre los paths de las notas.
-    - coverage_ratio = modules_covered / modules_total, o 1.0 si modules_total == 0.
-    Nunca lanza: ante error devuelve la forma con enabled=True y ceros."""
+    Nunca lanza: ante error devuelve la forma con enabled=True y ceros.
+    """
+    from config import config as _cfg
+    vacio = {"enabled": False, "modules_total": 0, "modules_covered": 0,
+             "coverage_ratio": 0.0, "uncovered": [], "orphan_notes": [],
+             "by_doc_class": {}}
+    if not bool(getattr(_cfg, "STACKY_DOCS_RADIOGRAPHY_ENABLED", False)):
+        return vacio
+    try:
+        g = graph or {}
+        salud = g.get("doc_health") or {}
+        uncovered = list(salud.get("uncovered_modules") or [])
+        nodos = g.get("nodes") or []
+
+        # ── OJO: el total NO sale de doc_health ──────────────────────────
+        # La v1 decía "modules_total / modules_covered / uncovered salen de
+        # doc_health.uncovered_modules". Imposible: uncovered_modules es SOLO
+        # la lista de los NO cubiertos — no trae el total, y además viene
+        # vacía en 3 de las 4 ramas de classify_doc_health (SIN_DOCS,
+        # FORMATO_NO_OBSIDIAN, SANA) y en el except. De ahí no se puede
+        # derivar un ratio. El total sale de los nodos de código del grafo.
+        modulos = {str(n.get("path") or "") for n in nodos
+                   if str(n.get("kind") or "") in ("code", "module", "missing")}
+        modulos.discard("")
+        total = len(modulos) or len(uncovered)
+        cubiertos = max(total - len(uncovered), 0)
+        ratio = 1.0 if total == 0 else cubiertos / total
+
+        notas = [str(n.get("path") or "") for n in nodos
+                 if str(n.get("kind") or "") == "note"]
+        from services import doc_taxonomy
+        return {"enabled": True, "modules_total": total,
+                "modules_covered": cubiertos, "coverage_ratio": ratio,
+                "uncovered": uncovered,
+                "orphan_notes": list(g.get("orphans") or []),
+                "by_doc_class": doc_taxonomy.summarize_classes(notas)}
+    except Exception:
+        return dict(vacio, enabled=True)
 ```
+
+> **Nota de honestidad (hallazgo del juez, no del autor).** Si `classify_doc_health` devuelve `SANA` o `SIN_DOCS`, `uncovered_modules` viene `[]` y la cobertura da `1.0` aunque no haya una sola nota. Es un artefacto de reusar la salud existente en vez de recalcular — y reusar es lo correcto. El caso queda **explícito** en el test `test_plan284_coverage_ratio_fronteras` y el veredicto lo compensa: con `written == 0` el run es `INSUFICIENTE` sin importar el ratio.
 
 **Cableado:** en `run_documenter`, después de calcular `health_after` (`doc_documenter.py:934`), agregar `report["radiography"] = doc_radiography.compute_coverage(...)` cuando `STACKY_DOCS_RADIOGRAPHY_ENABLED` esté ON (si no, la clave no aparece).
 
@@ -1098,12 +1571,67 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
 .\.venv\Scripts\python.exe -m pytest tests/test_doc_evidence.py -q
 ```
 
-**Criterio de aceptación binario:** `0 failed` y este censo devuelve **0** (no se creó un motor de grafo paralelo):
+**Criterio de aceptación binario:** `0 failed` **y** el censo de abajo imprime `True` en sus dos condiciones.
+
+> **FIX C15 — la v1 tenía una ausencia sin presencia gemela.** El censo era `Select-String … "build_graph|rglob|_enumerate_note_files" | Count == 0`. Dos defectos: (1) es un **assert de ausencia** que pasa por accidente si el archivo está vacío o si alguien evade la subcadena (`getattr(doc_graph, "build_" + "graph")`); (2) no prueba lo único que importa — que `compute_coverage` **efectivamente lea el grafo que ya existe**. Ausencia **y** presencia, en el mismo censo:
 
 ```powershell
 cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
-Select-String -Path "services\doc_radiography.py" -Pattern "build_graph|rglob|_enumerate_note_files" | Measure-Object | Select-Object -ExpandProperty Count
+.\.venv\Scripts\python.exe -c @"
+import pathlib
+src = pathlib.Path('services/doc_radiography.py').read_text(encoding='utf-8')
+ausencia = not any(p in src for p in ('build_graph', 'rglob', '_enumerate_note_files'))
+presencia = ('doc_health' in src and 'uncovered_modules' in src and 'orphans' in src)
+print('A1 no hay motor paralelo   ->', ausencia)
+print('P1 lee el grafo existente  ->', presencia)
+"@
 ```
+
+#### F6.1 — [ADICIÓN ARQUITECTO A2] Delta de radiografía entre runs
+
+**Por qué.** El plan v1 medía la cobertura **de este run** y la mostraba como un número absoluto. Un número absoluto no le dice al operador si mejoró: "cobertura 68%" no se interpreta sin memoria. Lo que convierte al Documentador de *one-shot* en **instrumento** es la derivada, y este plan ya tiene todo para calcularla — sólo faltaba conectarlo.
+
+**Reuso puro, cero LLM, cero trabajo del operador.** El historial de corridas ya existe: `list_runs` (`doc_documenter.py:778`) y `_persist_run_report` (`:758`). Sólo hay que leer el run anterior y restar.
+
+**Archivo:** `Stacky Agents/backend/services/doc_radiography.py`
+
+```python
+def compute_coverage_delta(actual: dict, previo: dict | None) -> dict:
+    """Plan 284 A2 — variación de cobertura respecto del run anterior.
+
+    Forma GARANTIZADA: {"has_previous": bool, "ratio_delta": float,
+                        "modules_closed": [str], "modules_opened": [str]}
+    - modules_closed: módulos que estaban sin cubrir y ahora sí lo están.
+    - modules_opened: módulos que aparecieron sin cubrir (regresión o código nuevo).
+    Nunca lanza.
+    """
+    vacio = {"has_previous": False, "ratio_delta": 0.0,
+             "modules_closed": [], "modules_opened": []}
+    try:
+        if not previo or not previo.get("enabled"):
+            return vacio
+        ant = set(previo.get("uncovered") or [])
+        act = set((actual or {}).get("uncovered") or [])
+        return {
+            "has_previous": True,
+            "ratio_delta": float((actual or {}).get("coverage_ratio", 0.0))
+                           - float(previo.get("coverage_ratio", 0.0)),
+            "modules_closed": sorted(ant - act),
+            "modules_opened": sorted(act - ant),
+        }
+    except Exception:
+        return vacio
+```
+
+**Cableado:** en `run_documenter`, junto a `report["radiography"]`, agregar `report["radiography_delta"]` leyendo la `radiography` del run inmediatamente anterior vía `list_runs(limit=2)`. Si no hay run previo, `has_previous=False` y la UI no muestra nada (degradación silenciosa, nunca un error).
+
+**UI (F7):** `buildRadiographyView` suma `deltaLabel`: `"+12 pts desde el run anterior — cerraste 3 módulos"`, o `""` cuando `has_previous === false`.
+
+**Tests:** `test_plan284_coverage_delta_tabla` en `test_doc_evidence.py` — sin previo → `has_previous=False` (**y** las 4 claves presentes); previo con 5 uncovered y actual con 2 → `modules_closed` tiene los 3 (**presencia**) y `modules_opened` vacío (**ausencia gemela**); regresión inversa → al revés.
+
+**Flag:** hereda `STACKY_DOCS_RADIOGRAPHY_ENABLED` (**ON**). Es lectura y resta: no es excepción (A) ni (B).
+**Runtimes:** aritmética local. Idéntico en los 3.
+**Trabajo del operador:** ninguno. Aparece solo.
 
 **Flag:** `STACKY_DOCS_RADIOGRAPHY_ENABLED` (default **ON**).
 **Runtimes:** cálculo local. Idéntico en los 3.
@@ -1111,10 +1639,85 @@ Select-String -Path "services\doc_radiography.py" -Pattern "build_graph|rglob|_e
 
 ---
 
+### F6.2 — [ADICIÓN ARQUITECTO A1] Presupuesto de invocaciones LLM, medido y con tope duro
+
+**Por qué.** El riesgo R1 de la v1 reconoce que el run pasa de N a **N+3** invocaciones y lo mitiga con "se puede apagar la flag". Eso no es una mitigación: es un interruptor. Faltaban las dos cosas que hacen falta de verdad — **saber cuánto se gastó** y **que no se pueda ir al carajo**. El precedente del repo es explícito: un tope mal puesto (`RUNAWAY_MAX_TURNS=0` = *sin límite*) es peor que no tener tope.
+
+**Contador (observabilidad).** En `run_documenter`, llevar `llm_calls: int` incrementado en cada `invoke_documenter` / `invoke_raw_stage`, y publicarlo en el reporte:
+`report["llm_calls"] = llm_calls` y `report["llm_calls_budget"] = budget`.
+
+**Tope duro (seguridad).** Flag nueva — **son 11 flags, no 10**:
+
+| Flag | Tipo | Default | Justificación |
+|---|---|---|---|
+| `STACKY_DOCS_PIPELINE_MAX_LLM_CALLS` | int | **12** | Techo de invocaciones por run. Bounds `[1, 200]`. **Numérico, no booleano**; va a `_CURATED_DEFAULTS_ON` como las otras 3. `12` = 5 modos del 113 (techo observado) + 3 etapas de papel + 4 de holgura. |
+
+```python
+def budget_exhausted(llm_calls: int, budget: int) -> bool:
+    """Plan 284 A1 — ¿se agotó el presupuesto de invocaciones del run?
+
+    OJO: budget <= 0 significa AGOTADO, nunca "sin límite". Un 0 que
+    significa infinito es la forma más cara de romper un tope.
+    """
+    try:
+        return int(llm_calls) >= int(budget) if int(budget) > 0 else True
+    except Exception:
+        return False
+```
+
+Al agotarse: el run **no falla**, se detiene ordenadamente con `state="budget_exhausted"`, veredicto `RADIOGRAFIA_PARCIAL` y el detalle en el reporte. Los archivos ya escritos se conservan.
+
+**Tests** (en `test_documenter_v2_pipeline.py`):
+- `test_plan284_budget_exhausted_tabla` — `(0, 12)`→False; `(11, 12)`→False; `(12, 12)`→**True** (frontera); `(3, 0)`→**True** (**el caso que importa: cero NO es infinito**); `(3, -1)`→True; `("x", 12)`→False (no lanza).
+- `test_plan284_run_respeta_el_presupuesto` — con `STACKY_DOCS_PIPELINE_MAX_LLM_CALLS=2` y un `invoke_*` contado, el run se detiene con `state == "budget_exhausted"` (**presencia**) y `invoke_*` fue llamado **exactamente 2 veces** (**el tope se respeta, no se excede en uno**).
+
+**Flag:** `STACKY_DOCS_PIPELINE_MAX_LLM_CALLS` (**12**). Numérica con tope: no es excepción (A) ni (B) — **acota** el gasto, no lo genera.
+**Runtimes:** el contador es agnóstico; cuenta invocaciones, no runtimes. Idéntico en los 3.
+**Trabajo del operador:** ninguno. Si algún día le queda corto, es un número editable desde el panel de flags.
+
+---
+
 ### F7 — La UI se entiende (cierra el punto 1 del pedido)
 
 **Objetivo:** que el panel del Documentador se lea de un vistazo: veredicto arriba, etapas con su estado, archivos agrupados por clase, rechazos con motivo en castellano.
 **Valor:** el operador entiende qué pasó sin leer un `diff --stat`.
+
+#### F7.0 — [FIX C10] Extender el tipo ANTES de escribir la lógica
+
+> **La v1 hacía imposible su propio criterio de aceptación.** F7 exige `npx tsc --noEmit` con exit 0, y a la vez manda escribir `buildStagesView(status: DocumenterStatusResponse)` leyendo `status.stages`, `status.verdict`, `status.radiography`, `status.ticket_mining` y `status.operator_note` — **cinco claves que ese tipo no tiene**. `DocumenterStatusResponse` está en `endpoints.ts:3552-3573` con 16 claves y ninguna de esas cinco. `tsc` falla, y con él el criterio binario de la fase.
+
+**Archivo a editar:** `Stacky Agents/frontend/src/api/endpoints.ts`, interfaz `DocumenterStatusResponse` (`:3552-3573`). Agregar **6** campos, todos **opcionales** (`?`) para no romper a ningún consumidor actual:
+
+```ts
+  /** Plan 284 — etapas del pipeline en orden canónico. */
+  stages?: Array<{
+    stage: string; state: string; summary?: string; artifact?: string;
+    verdict?: string; started_at?: string; ended_at?: string;
+    execution_id?: number | null;
+  }>;
+  /** Plan 284 — veredicto del run. "" si el pipeline está OFF. */
+  verdict?: string;
+  /** Plan 284 — cobertura documental (F6). */
+  radiography?: {
+    enabled?: boolean; modules_total?: number; modules_covered?: number;
+    coverage_ratio?: number; uncovered?: string[]; orphan_notes?: string[];
+    by_doc_class?: Record<string, number>;
+  };
+  /** Plan 284 A2 — variación contra el run anterior. */
+  radiography_delta?: {
+    has_previous?: boolean; ratio_delta?: number;
+    modules_closed?: string[]; modules_opened?: string[];
+  };
+  /** Plan 284 — resumen del triage de tickets (F4), sin los veredictos individuales. */
+  ticket_mining?: {
+    enabled?: boolean; scope?: string; total?: number; signal?: number;
+    noise?: number; by_tracker?: Record<string, number>; truncated?: boolean;
+  };
+  /** Plan 284 — la nota que el operador escribió al lanzar el run. */
+  operator_note?: string;
+```
+
+> Todos con `?`: con las flags en OFF el backend no manda las claves y el tipo sigue siendo válido. **Aditivo puro, backward-compatible.**
 
 **Archivo a editar:** `Stacky Agents/frontend/src/docs/documenterModel.ts` (lógica pura, testeable sin RTL).
 
@@ -1180,7 +1783,7 @@ npx tsc --noEmit
 | **R1** | **Las 3 etapas de papel triplican el costo de LLM por run.** Hoy el run cuesta N invocaciones (una por modo); pasa a N+3. | Alto en tokens | Corte de costo obligatorio en F5.2 (sin plan ⇒ no se critica ni se mejora); las 3 etapas se pagan **una vez por run**, no por modo; `STACKY_DOCS_PIPELINE_STAGES_ENABLED` se puede apagar desde la UI de flags y el run vuelve a costar lo de hoy. |
 | **R2** | **El gate de citas rechaza demasiado y el run queda en 0 archivos.** Un modelo que cita mal produce `written=[]`. | Alto en UX | El umbral es una flag numérica editable (`..._MIN_RATIO`, default 0.8, no 1.0); los rechazados aparecen con su motivo y su preview en el panel (no desaparecen); el veredicto `INSUFICIENTE` lo dice explícitamente en vez de fingir éxito. Un doc sin citas **no** se rechaza (regla `total==0`). |
 | **R3** | **La regla de taxonomía clasifica mal en repos de cliente.** `^\d{2,3}_` es la convención de Stacky; un proyecto del operador puede numerar distinto, o tener una carpeta `sistema/` que no sea canónica. | Medio | La clasificación es **aditiva y no destructiva**: sólo excluye del RAG y de la salud. Si clasifica de más, se apaga `STACKY_DOCS_TAXONOMY_ENABLED` y todo vuelve atrás sin migración. El caso frontera `docs/sistema/99_PLAN_FALSO.md` está explícitamente testeado. |
-| **R4** | **La nota del operador se usa para intentar aflojar un guardarraíl.** | Bajo | Estructural: el enforcement es determinista en `apply_proposals` (`doc_documenter.py:584-592`), no en el prompt. Aunque el modelo obedezca, `docs/sistema/` sigue bloqueado y el traversal también. Testeado indirectamente por los tests preexistentes del 113. |
+| **R4** | **La nota del operador desvía la documentación.** *(Reescrito en v2 — C22: la v1 sobreafirmaba.)* | Bajo, **pero real** | **Lo que la mitigación SÍ cubre:** el enforcement de **filesystem** es determinista en `apply_proposals` (anti-traversal `_safe_rel_path` `:547`, `docs/sistema/` read-only `_is_canonical` `:558`, tope de archivos `:581`, marcas de confianza `:591`). Ninguna nota puede escribir donde no debe, obedezca el modelo o no. **Lo que NO cubre, y hay que decirlo:** la nota **sí** puede desviar el *contenido* ("no menciones el módulo X", "decí que Y es seguro"). El gate de citas (F3) verifica que `archivo:línea` **exista y esté en rango**, explícitamente **no** que la línea diga lo que la doc afirma (Fuera de scope #5) ⇒ una nota puede producir prosa confiadamente sesgada con citas formalmente válidas. **Por qué se acepta:** Stacky es **mono-operador sin auth real**; la nota la escribe el operador para sí mismo. El modelo de amenaza no es un atacante, es el propio operador equivocándose. Blindar contra prompt-injection acá sería teatro (el mismo teatro que un RBAC en un producto sin login). **Mitigación efectiva:** la nota se persiste **verbatim** en el reporte y en el `.json` del historial (F2.4) y se muestra en el panel, así que siempre es auditable qué se pidió; y el veredicto de VERIFICAR no depende de la nota. |
 | **R5** | **Registrar 9 flags rompe tests ajenos de fábrica** (4 de `test_harness_flags_help` + 1 de `env_read_meta`). | Medio | F0 obliga a sacar la foto del rojo previo **antes** de tocar nada y a comparar delta. Además: `_CURATED_DEFAULTS_ON` es obligatorio para las 7 ON, y el gate del texto de ayuda exige `Si ` sin tilde. Ambas trampas están escritas en F0.1. |
 | **R6** | **El barrido de tickets toca la base viva.** | Alto si sale mal | El barrido es **sólo SELECT** (`session.query(Ticket)...`, sin `add`/`delete`/`commit`). Los tests corren con `sqlite:///:memory:` (ya seteado en `test_documenter_v2_pipeline.py:9`). El comando de censo abre la DB con `mode=ro`. **Nunca correr un pytest sin `DATABASE_URL` en memoria.** |
 | **R7** | **`awaiting_approval` deja ramas `stacky/doc-*` colgadas** si el operador nunca aprueba. | Medio | `prepare_doc_branch` ya corre `git worktree prune` en cada arranque (`doc_documenter.py:477`); el endpoint de aprobación con `approve=false` llama `discard_doc_branch`; el mensaje de `run_not_found` ya instruye la limpieza manual (`api/docs.py:380-381`). |
@@ -1197,6 +1800,7 @@ npx tsc --noEmit
 5. **Validación semántica de la cita.** El gate verifica que `archivo:línea` **exista y esté en rango**; no verifica que la línea diga lo que la doc afirma. Eso requiere comparar contenido y es otro plan.
 6. **Multi-idioma de la documentación generada.** Todo en español, como el resto del producto.
 7. **Migrar los 240 planes a otra carpeta.** Se los clasifica, no se los mueve: mover 240 archivos rompería enlaces, historial de git y los anclajes de todos los planes anteriores.
+8. **Tocar `docs/rag/rag_corpus.jsonl`** *(nuevo en v2 — C16)*. El archivo **existe** (169.544 bytes, 2026-07-15) pero es un **sidecar muerto**: 0 referencias en `backend/**` y `frontend/src/**`, sin productor ni consumidor en código. Este plan **no lo lee, no lo regenera y no lo borra**. Queda anotado como deuda declarada: **si alguien lo regenerara con la herramienta que lo creó, volvería a mezclar planes con documentación de proyecto** por el camino que F1 acaba de cerrar. Cerrar esa puerta (o borrar el sidecar) es un plan aparte de una sola fase.
 
 ---
 
@@ -1222,15 +1826,19 @@ npx tsc --noEmit
 
 ## 8. Orden de implementación
 
-1. **F0.1** — Registrar las 9 flags (foto del rojo previo ANTES). Correr `tests/test_harness_flags.py` y comparar **delta**.
+> **Cambios de orden en v2:** F5.0 (habilitar `system_prompt_override` + `invoke_raw_stage`) va **antes** de todo F5 — sin eso F5 no compila. F7.0 (extender el tipo TS) va **antes** de la lógica de F7 — sin eso `tsc` falla. Y F1.2 (`doc_class` en `_serialize_node`) es **prerrequisito duro** de F1.3: `classify_doc_health` recibe nodos de `_serialize_node`, que hoy expone 9 claves y **ninguna es `doc_class`` — si F1.3 se hace primero, filtra sobre un campo que no existe y no filtra nada (falso verde silencioso).
+
+1. **F0.1** — Registrar las **11** flags (foto del rojo previo ANTES). Las **11** van a `_CURATED_DEFAULTS_ON` en `backend/tests/test_harness_flags.py:467-1003`. Correr `tests/test_harness_flags.py` y comparar **delta**.
 2. **F0.2** — `doc_taxonomy.py` + sus 2 tests en `test_doc_evidence.py`. Verde.
 3. **F1** — `doc_class` en índice, grafo, salud y RAG + `class_summary` en la API. 4 tests en `test_documenter_v2_pipeline.py`. Verde + censo C1..C4 en True.
-4. **F2** — Nota del operador: UI → `endpoints.ts` → `api/docs.py` → `doc_documenter` → `_operator_note_block` → `build_context_for_mode`. 4 tests backend + 1 frontend. Verde + censo AST del consumidor = 1.
+4. **F2** — Nota del operador: UI → `endpoints.ts` → `api/docs.py` → `doc_documenter` → `_operator_note_block` → `build_context_for_mode`. **5** tests backend + 1 frontend. Verde + censo AST del consumidor = 1 + **`test_plan284_nota_viaja_de_run_documenter_al_prompt` en verde (gate real de la fase)**.
 5. **F3** — Gate de citas: `evaluate_citation_gate` puro primero, después reordenar `apply_proposals`. 3+1 tests. Verde + censo AST de orden write/verify = 0.
-6. **F4** — `doc_ticket_mining.py` + cableado en `build_context_for_mode`. 3 tests. Verde + censo sobre la base viva (read-only) = 228.
-7. **F5** — Etapas, HITL y endpoint de aprobación. 5 tests. Verde + censo del riel HITL.
-8. **F6** — `doc_radiography.py` + claves nuevas en `documenter_status`. 3 tests. Verde + censo de motor paralelo = 0.
-9. **F7** — UI: 3 funciones puras en `documenterModel.ts` + panel. 4 tests vitest + `tsc --noEmit`. Verde.
+6. **F4** — `doc_ticket_mining.py` (con `_es_sintetico`, `ado_state` y `scope`) + cableado en `build_context_for_mode`. **5** tests. Verde + censo `mine_project_tickets` C1..C4 en True (**all=228, RIPLEY=65**).
+7. **F5.0** — **PRIMERO**: `system_prompt_override` en `invoke_documenter` + `invoke_raw_stage`. 2 tests. Verde + censo AST del kwarg = 1. **Sin esto, nada de F5 se puede construir.**
+8. **F5** — Etapas, prompts, corte de costo, HITL y endpoint de aprobación **con sus 4 tests y su función cliente**. Registrar `test_docs_api.py` en **los dos** ratchets. 7 tests. Verde + censo de orden G1/G2.
+9. **F6** — `doc_radiography.py` + delta (A2) + presupuesto (A1) + claves nuevas en `documenter_status`. 6 tests. Verde + censo A1/P1 en True.
+10. **F7.0** — Extender `DocumenterStatusResponse` con las 6 claves opcionales. `tsc --noEmit` verde **antes** de escribir la lógica.
+11. **F7** — UI: 3 funciones puras en `documenterModel.ts` + panel. 4 tests vitest + `tsc --noEmit`. Verde.
 10. **Cierre** — correr los 3 archivos de test backend por separado + vitest + tsc, y anotar el resultado real (pegado, no resumido) en la sección de estado de este documento.
 
 ---
@@ -1242,13 +1850,16 @@ Un implementador puede declarar este plan terminado **sólo si** todo lo siguien
 - [ ] `pytest tests/test_doc_evidence.py -q` → `0 failed`, con **≥ 20** tests (hoy 18).
 - [ ] `pytest tests/test_documenter_v2_pipeline.py -q` → `0 failed`, con **≥ 16** tests más que el baseline del archivo.
 - [ ] `pytest tests/test_documenter_autonomy.py -q` → `0 failed` (no debe romperse: es el guardián de la autonomía del 113).
-- [ ] `pytest tests/test_docs_api.py -q` → `0 failed` (los endpoints tocados).
-- [ ] `pytest tests/test_harness_flags.py -q` → **el mismo número de fallos que el baseline capturado en F0.1**, ni uno más. Los 4-5 rojos ajenos son de fábrica; sumar uno nuevo es un defecto de este plan.
-- [ ] `npx vitest run src/docs/documenterModel.test.ts` → `0 failed`, con **≥ 5** tests nuevos.
-- [ ] `npx tsc --noEmit` → exit 0, sin salida.
-- [ ] Los 5 censos por comando de F1, F2, F3, F5 y F6 devuelven exactamente el valor declarado.
-- [ ] **Con las 9 flags en su default, el comportamiento del Documentador es el descrito por este plan; con las 8 nuevas ON puestas en OFF y `AUTOAPPLY` en su default, el reporte tiene exactamente las mismas claves que hoy.** (Backward-compat probada por `test_plan284_pipeline_off_es_backward_compatible`.)
-- [ ] Ningún archivo de test backend nuevo fue creado (los 3 archivos usados ya están registrados en `run_harness_tests.ps1` **y** `.sh`).
+- [ ] `pytest tests/test_docs_api.py -q` → `0 failed` (los endpoints tocados, incluido `/documenter/stage/approve`).
+- [ ] `pytest tests/test_harness_flags.py -q` → **el mismo número de fallos que el baseline capturado en F0.1**, ni uno más. Los 4-5 rojos ajenos son de fábrica; sumar uno nuevo es un defecto de este plan. **En particular `test_default_known_only_for_curated` tiene que quedar en el mismo estado que el baseline** — si se pone rojo, faltan claves en `_CURATED_DEFAULTS_ON` (ver C4).
+- [ ] `npx vitest run src/docs/documenterModel.test.ts` → `0 failed`, con **≥ 5** tests nuevos (hoy son **14**; el piso es **19**).
+- [ ] `npx tsc --noEmit` → exit 0, sin salida. **Requiere haber hecho F7.0 primero** (extender `DocumenterStatusResponse`), o falla por las 6 claves nuevas.
+- [ ] Los censos por comando de **F1, F2, F3, F5.0, F5, F6 y F4** devuelven exactamente el valor declarado.
+- [ ] **Con las 11 flags en su default, el comportamiento del Documentador es el descrito por este plan; con las 7 booleanas nuevas ON puestas en OFF y `AUTOAPPLY` en su default, el reporte tiene exactamente las mismas claves que hoy.** (Backward-compat probada por `test_plan284_pipeline_off_es_backward_compatible`.)
+- [ ] **El cable de la nota está probado end-to-end**: `test_plan284_nota_viaja_de_run_documenter_al_prompt` en verde. Sin este test, F2 **no está hecha** aunque el resto esté verde (C6).
+- [ ] **`test_docs_api.py` quedó registrado en `run_harness_tests.ps1` Y en `run_harness_tests.sh`** (hoy no está en ninguno). El ratchet es trampa de commit, no sólo de edición.
+- [ ] Ningún archivo de test backend nuevo fue creado (los 4 archivos usados —`test_doc_evidence.py`, `test_documenter_v2_pipeline.py`, `test_documenter_autonomy.py`, `test_docs_api.py`— existen; los 3 primeros ya estaban registrados en ambos scripts y el cuarto se registra en esta implementación).
+- [ ] **Huella de regresión anotada** en `Stacky Agents/docs/sistema/error_fingerprints.json` (C23): id `plan284-citas-decorativas`, patrón "archivo escrito con citas `archivo:línea` inexistentes", plan/commit, fecha y `guard_test = test_plan284_gate_no_escribe_el_archivo_con_citas_falsas`.
 - [ ] Ningún `git add -A`, `git add .`, `git stash`, `git reset` ni `git checkout --` durante la implementación. Commits con pathspec explícito.
 - [ ] Sin `git push`.
 - [ ] La sección de estado de este documento quedó actualizada con el output real de los comandos, pegado.
@@ -1261,10 +1872,10 @@ Un implementador puede declarar este plan terminado **sólo si** todo lo siguien
 |---|---|---|---|
 | 1 | "no se entiende bien" | **F7** (+ F5.4 veredicto) | 4 tests de vitest sobre `buildStagesView`/`buildVerdictView`/`buildRadiographyView` + verificación visual del operador |
 | 2 | "se mezclan los planes de los del proyecto" | **F1** | Censo C1..C4 en True (240 `plan` / 15 `system` al 2026-08-01); el RAG excluye planes; la salud los ignora |
-| 3 | "que me permita darle una NOTA EXTRA" | **F2** | `render_blocks(build_context_for_mode(...))` contiene el texto sentinela; censo AST del consumidor = 1 |
-| 4 | "primero proponer, criticar, mejorar, implementar, verificar" | **F5** | `STAGE_ORDER` de 5; el run se detiene en `awaiting_approval` sin escribir; veredicto en el reporte |
-| 5 | "grafo súper complejo que robustezca lo existente, radiografía" | **F6** | `compute_coverage` sobre el grafo del 268 **sin** motor paralelo (censo = 0) |
-| 6 | "mirar TODOS los tickets, diferenciar basura de valioso" | **F4** | 228 tickets barridos (162 ADO + 63 GitLab + 3 demo); `classify_ticket` con 8 casos de tabla y motivos auditables |
+| 3 | "que me permita darle una NOTA EXTRA" | **F2** | **`test_plan284_nota_viaja_de_run_documenter_al_prompt`**: el centinela aparece en `render_blocks` de los bloques que **realmente recibe el LLM** desde `run_documenter`. El censo AST del consumidor (=1) es complementario, **no** suficiente |
+| 4 | "primero proponer, criticar, mejorar, implementar, verificar" | **F5.0 + F5** | `STAGE_ORDER` de 5; los 3 prompts de etapa escritos; `invoke_raw_stage` devuelve texto crudo; el run se detiene en `awaiting_approval` **sin escribir**; veredicto siempre presente (incl. `PENDIENTE_DE_APROBACION`) |
+| 5 | "grafo súper complejo que robustezca lo existente, radiografía" | **F6 + A2** | `compute_coverage` sobre el grafo del 268 **sin** motor paralelo (A1) **y leyéndolo de verdad** (P1); más el **delta contra el run anterior**, que es lo que lo vuelve radiografía y no foto |
+| 6 | "mirar TODOS los tickets, diferenciar basura de valioso" | **F4** | **228** con `scope="all"` / **65** en el proyecto activo (números medidos, no prometidos); `classify_ticket` con **10** casos de tabla con todos los campos fijados; `_es_sintetico` cubre las **103** filas con id negativo; `ado_state` separa **obsoleto** (cerrado y flaco) de **historia** (cerrado y documentado) |
 | 7 | "muy lento y pausado para no alucinar sobre el código" | **F3** (+ F0.2) | El archivo con citas falsas **no existe en disco**; censo AST de orden write/verify = 0 |
 
 ---

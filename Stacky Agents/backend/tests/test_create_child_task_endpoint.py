@@ -1238,3 +1238,172 @@ def test_equivalent_consumed_live_task_still_idempotent(client, epic_ticket, tmp
     assert data["reason"] == "PENDING_TASK_EQUIVALENT_ALREADY_CONSUMED"
     assert data["task_ado_id"] == 246
     assert fake_ado.create_calls == []
+
+
+# ---------------------------------------------------------------------------
+# F3 — el endpoint deja de exigir cliente ADO a proyectos con tracker no-ADO
+# ---------------------------------------------------------------------------
+#
+# Defecto reproducido en vivo (proyecto RIPLEY / GitLab, ejecución 211):
+#   create_child_task: ADO_CONFIG_MISSING ... El proyecto 'RIPLEY' no usa Azure
+#   DevOps (tracker_type=gitlab).
+#   output_watcher mode_a: auto-create rf=RF-001 falló (HTTP 503)
+# El cuerpo del endpoint YA es provider-aware (api/tickets.py:5219-5245,
+# :5319-5323, :5412-5418, :5431-5434), pero `ado = _ado_client_for_ticket(...)`
+# en api/tickets.py:5082 se ejecutaba SIEMPRE y abortaba con 503 antes de llegar
+# a cualquiera de esas ramas. Las 3 llamadas previas a _ado_client_for_ticket
+# (:4842, :4919, :4943) ya toleran el fallo, así que este era el único bloqueo.
+
+
+class FakeGitLabProvider:
+    """Doble de TrackerProvider con la superficie que consume create_child_task."""
+
+    def __init__(self) -> None:
+        self.created: list[dict] = []
+        self.states: list[tuple[str, str]] = []
+        self.uploads: list[str] = []
+        self.links: list[tuple[str, str]] = []
+
+    def get_item(self, item_id: str) -> dict:
+        return {"id": str(item_id), "iid": str(item_id), "title": "Epic padre",
+                "description": "", "state": "opened"}
+
+    def create_item(self, item) -> dict:
+        self.created.append({"title": getattr(item, "title", None),
+                             "parent_id": getattr(item, "parent_id", None),
+                             "item_type": getattr(item, "item_type", None)})
+        return {"id": 9001}
+
+    def item_url(self, item_id: str) -> str:
+        return f"https://gitlab.local/grupo/proy/-/issues/{item_id}"
+
+    def update_item_state(self, item_id: str, logical_state: str) -> dict:
+        self.states.append((str(item_id), logical_state))
+        return {"ok": True}
+
+    def upload_attachment(self, path, filename: str) -> dict:
+        # Contrato REAL de GitLabTrackerProvider.upload_attachment
+        # (services/gitlab_provider.py:456-466): devuelve un dict {markdown, url},
+        # NO un string. El consumidor hace attach_result.get("id") or
+        # .get("url", "") en api/tickets.py:5446.
+        self.uploads.append(filename)
+        return {"markdown": f"[{filename}](/uploads/abc/{filename})",
+                "url": f"/uploads/abc/{filename}"}
+
+    def link_attachment(self, item_id: str, attachment: dict) -> dict:
+        # El provider real espera el DICT del upload, no un id suelto
+        # (services/gitlab_provider.py:468-478 lee attachment["markdown"]).
+        assert isinstance(attachment, dict), "link_attachment recibe el dict del upload"
+        self.links.append((str(item_id), attachment.get("url", "")))
+        return {"ok": True}
+
+
+def _ado_unavailable(*_a, **_kw):
+    from services.ado_client import AdoConfigError
+    raise AdoConfigError("El proyecto 'PROY' no usa Azure DevOps (tracker_type=gitlab).")
+
+
+def test_f3_tracker_gitlab_crea_la_task_por_provider(client, epic_ticket, tmp_repo):
+    """Tracker no-ADO + sin cliente ADO → la task hija se crea por el provider."""
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-F3A", slug="gitlab-ok")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    provider = FakeGitLabProvider()
+
+    with (
+        patch("api.tickets._ado_client_for_ticket", side_effect=_ado_unavailable),
+        patch("api.tickets._provider_for_ticket", return_value=provider),
+        patch("api.tickets.tracker_is_azure_devops", return_value=False),
+    ):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    data = resp.get_json()
+    assert resp.status_code != 503, f"siguió bloqueado: {data}"
+    assert data.get("error") != "ADO_CONFIG_MISSING"
+    assert data["ok"] is True
+    assert data["task_ado_id"] == 9001
+    # La creación salió por el provider, no por el cliente ADO.
+    assert len(provider.created) == 1
+    assert provider.created[0]["parent_id"] == "149"
+    assert "9001" in (data["task_url"] or "")
+
+
+def test_f3_tracker_ado_sin_cliente_sigue_dando_503(client, epic_ticket, tmp_repo):
+    """REGRESIÓN DURA: tracker ADO + sin cliente → 503 ADO_CONFIG_MISSING igual que hoy.
+
+    Además se asegura que NO se intentó crear nada por el provider: si el
+    endpoint hubiera seguido de largo, habría creado una task por un camino que
+    para un proyecto ADO no está validado.
+    """
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-F3B", slug="ado-bloqueado")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    provider = FakeGitLabProvider()
+
+    with (
+        patch("api.tickets._ado_client_for_ticket", side_effect=_ado_unavailable),
+        patch("api.tickets._provider_for_ticket", return_value=provider),
+        patch("api.tickets.tracker_is_azure_devops", return_value=True),
+    ):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    assert resp.status_code == 503
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert data["error"] == "ADO_CONFIG_MISSING"
+    assert provider.created == []
+    assert provider.uploads == []
+
+
+def test_f3_tracker_no_ado_pero_sin_provider_sigue_dando_503(client, epic_ticket, tmp_repo):
+    """Fail-closed: tracker no-ADO pero provider indisponible → 503, no se sigue a ciegas.
+
+    Cubre GitLab con STACKY_GITLAB_ENABLED=false: sin cliente ADO y sin provider
+    no hay con qué crear la task, así que el endpoint debe fallar ruidoso en vez
+    de avanzar y reventar más adelante con AttributeError sobre `ado=None`.
+    """
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-F3C", slug="sin-provider")
+    rel_path = _rel_path(tmp_repo, pt_path)
+
+    with (
+        patch("api.tickets._ado_client_for_ticket", side_effect=_ado_unavailable),
+        patch("api.tickets._provider_for_ticket", return_value=None),
+        patch("api.tickets.tracker_is_azure_devops", return_value=False),
+    ):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    assert resp.status_code == 503
+    assert resp.get_json()["error"] == "ADO_CONFIG_MISSING"
+
+
+def test_f3_camino_ado_sano_no_toca_el_provider(client, epic_ticket, tmp_repo):
+    """REGRESIÓN: con cliente ADO disponible el flujo es el de siempre.
+
+    Aserto de no-invocación: el provider no debe recibir NINGUNA escritura.
+    """
+    pt_path = _write_pending_task(tmp_repo, epic_id="149", rf_id="RF-F3D", slug="ado-sano")
+    rel_path = _rel_path(tmp_repo, pt_path)
+    fake_ado = FakeAdoClientExt()
+    provider = FakeGitLabProvider()
+
+    with (
+        patch("api.tickets._ado_client_for_ticket", return_value=fake_ado),
+        patch("api.tickets._provider_for_ticket", return_value=None),
+    ):
+        resp = client.post(
+            "/api/tickets/by-ado/149/create-child-task",
+            json={"pending_task_path": rel_path},
+        )
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["task_ado_id"] == 5000
+    assert provider.created == [] and provider.uploads == [] and provider.states == []

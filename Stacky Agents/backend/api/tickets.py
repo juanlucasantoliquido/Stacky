@@ -5078,36 +5078,61 @@ def create_child_task(ado_id: int):
     human_action_required: str | None = None
 
     # Inicializar cliente ADO
+    #
+    # F3 — un proyecto con tracker no-ADO no tiene (ni necesita) cliente ADO: los
+    # call sites de creación de abajo YA tienen rama de provider (Plan 70 F8/F9:
+    # :5219-5245 create/url, :5319-5323 estado, :5412-5418 adjunto, :5431-5434
+    # link) y los helpers que reciben `ado` toleran None por `getattr`. Antes,
+    # esta inicialización eager abortaba con 503 antes de llegar a ninguna de esas
+    # ramas: medido en vivo sobre RIPLEY/GitLab (epic 1115), los 3 RF del agente
+    # funcional murieron con `auto-create rf=RF-00N falló (HTTP 503)`.
+    #
+    # Se mantiene el 503 EXACTO en los dos casos en que seguir sería a ciegas:
+    #   - tracker Azure DevOps (fail-closed: incluye tracker no resoluble)
+    #   - tracker no-ADO pero sin provider (ej. GitLab con la integración apagada)
+    ado = None
     try:
         ado = _ado_client_for_ticket(project_name=project_name)
     except (_AdoConfigError, ProjectContextError) as exc:
-        logger.warning(
-            "create_child_task: ADO_CONFIG_MISSING operation_id=%s ado_id=%s err=%s",
-            operation_id, ado_id, exc,
+        _puede_seguir_sin_ado = (
+            not tracker_is_azure_devops(project_name)
+            and _provider_for_ticket(project_name=project_name) is not None
         )
-        _audit_create_child_task(
-            correlation_id=correlation_id,
-            ado_id=ado_id,
-            user=user,
-            completion_source=completion_source,
-            operator_reason=operator_reason,
-            pt_path=pending_task_path_str,
-            ok=False,
-            actions=[],
-            error=str(exc),
-            operation_id=operation_id,
-            payload_sha256=payload_sha256,
-            repo_root=str(repo_root),
-        )
-        return jsonify({
-            "ok": False,
-            "error": "ADO_CONFIG_MISSING",
-            "message": str(exc),
-            "correlation_id": correlation_id,
-            "operation_id": operation_id,
-            "payload_sha256": payload_sha256,
-            "scan": scan,
-        }), 503
+        if _puede_seguir_sin_ado:
+            logger.info(
+                "create_child_task: sin cliente ADO pero el tracker del proyecto no es "
+                "Azure DevOps y hay provider; se continúa por el provider "
+                "(operation_id=%s ado_id=%s)",
+                operation_id, ado_id,
+            )
+        else:
+            logger.warning(
+                "create_child_task: ADO_CONFIG_MISSING operation_id=%s ado_id=%s err=%s",
+                operation_id, ado_id, exc,
+            )
+            _audit_create_child_task(
+                correlation_id=correlation_id,
+                ado_id=ado_id,
+                user=user,
+                completion_source=completion_source,
+                operator_reason=operator_reason,
+                pt_path=pending_task_path_str,
+                ok=False,
+                actions=[],
+                error=str(exc),
+                operation_id=operation_id,
+                payload_sha256=payload_sha256,
+                repo_root=str(repo_root),
+            )
+            return jsonify({
+                "ok": False,
+                "error": "ADO_CONFIG_MISSING",
+                "message": str(exc),
+                "correlation_id": correlation_id,
+                "operation_id": operation_id,
+                "payload_sha256": payload_sha256,
+                "scan": scan,
+            }), 503
 
     # ── [1d-bis] Preflight de existencia del padre (Inc.3 — épicas 241/242) ───
     # Si el work item padre no existe (carpeta `epic-<ordinal del título EP-NN>`

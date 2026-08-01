@@ -1,5 +1,4 @@
 """gitlab_variables.py — Plan 94. Adapter GitLab del sub-puerto de variables CI."""
-from services.gitlab_provider import GitLabTrackerProvider
 from services.tracker_provider import TrackerApiError
 
 
@@ -10,8 +9,11 @@ class GitLabVariablesProvider:
 
     def __init__(self, project: str | None):
         self._project = project
-        # D3 (Plan 218 F0): el kwarg real es `project=` — project_name= levantaba TypeError.
-        self._provider = GitLabTrackerProvider(project=project)
+        # Plan 282 F2: el provider sale de la FABRICA (unico constructor), que
+        # resuelve el ca_bundle por proyecto. Antes se construia a mano y este
+        # servicio moria contra un GitLab con CA interna.
+        from services.tracker_provider import build_gitlab_provider  # noqa: PLC0415
+        self._provider = build_gitlab_provider(project)
         # C2: _request vive en gitlab_client.py:107 y devuelve TUPLA (body, status)
         self._client = self._provider._client
 

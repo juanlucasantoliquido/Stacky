@@ -6,9 +6,14 @@ class GitLabCILogsProvider:
     name = "gitlab"
 
     def __init__(self, project: Optional[str] = None):
-        from services.gitlab_provider import GitLabTrackerProvider  # noqa: PLC0415
-        # kwarg REAL: project= (gitlab_provider.py:33). NO existe project_name=.
-        self._provider = GitLabTrackerProvider(project=project)
+        # Plan 282 F2: el provider sale de la FABRICA, nunca del constructor
+        # directo. El constructor directo no resuelve el ca_bundle y este
+        # servicio moria con CERTIFICATE_VERIFY_FAILED contra un GitLab con CA
+        # interna. Import dentro de la funcion: tracker_provider importa
+        # gitlab_provider (R5, mismo patron que tracker_provider con
+        # project_context).
+        from services.tracker_provider import build_gitlab_provider  # noqa: PLC0415
+        self._provider = build_gitlab_provider(project)
         self._client = self._provider._client  # GitLabClient (gitlab_provider.py:36)
 
     def list_failed_jobs(self, pipeline_id: str) -> list[dict]:

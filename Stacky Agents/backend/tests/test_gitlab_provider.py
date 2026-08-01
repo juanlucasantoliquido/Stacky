@@ -280,8 +280,28 @@ def test_update_assignee_sets_assignee_ids():
     assert json_body.get("assignee_ids") == [55]
 
 
-def test_unknown_username_clears_assignee():
-    """Si username no resuelve a ID, se limpia la asignación."""
+def test_unknown_username_clears_assignee(monkeypatch):
+    """Plan 282 F3 — ESTE TEST CONGELABA EL BUG. Ahora congela las dos ramas.
+
+    "Si username no resuelve a ID, se limpia la asignación" no era una feature:
+    un typo en el username, o un fallo transitorio de `/users`, DESASIGNABA el
+    issue del operador sin decir nada. El comportamiento nuevo es levantar antes
+    de armar el body; el viejo queda accesible por kill-switch y se verifica acá
+    mismo, para que el defecto siga siendo reproducible.
+    """
+    import config as _config
+    from services.tracker_provider import TrackerApiError
+
+    # (a) comportamiento NUEVO (flag ON, default): lanza y NO manda el PUT.
+    provider, mock_client = _make_provider()
+    mock_client._request.side_effect = [([], {})]  # /users → lista vacía
+    with pytest.raises(TrackerApiError):
+        provider.update_item_assignee("1", "desconocido")
+    assert not [c for c in mock_client._request.call_args_list if c.args[:1] == ("PUT",)]
+
+    # (b) comportamiento VIEJO (flag OFF): se conserva byte-idéntico.
+    monkeypatch.setattr(_config.config, "STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED",
+                        False, raising=False)
     provider, mock_client = _make_provider()
     mock_client._request.side_effect = [
         ([], {}),  # /users?username=desconocido → lista vacía

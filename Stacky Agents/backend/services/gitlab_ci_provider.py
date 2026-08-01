@@ -5,7 +5,6 @@ Delega a GitLabTrackerProvider.infer_pipeline y mapea al contrato CIProvider.
 from __future__ import annotations
 
 from services.ci_provider import ItemRef, ItemPipelineResult, PipelineStageInfo
-from services.gitlab_provider import GitLabTrackerProvider
 
 # Mapa de status CI → progreso numérico
 STATUS_TO_PROGRESS: dict[str, float] = {
@@ -27,8 +26,10 @@ class GitLabCIProvider:
 
     def __init__(self, project: str | None = None) -> None:
         self._project = project
-        # D3 (Plan 218 F0): el kwarg real es `project=` — project_name= levantaba TypeError.
-        self._delegate = GitLabTrackerProvider(project=project)
+        # Plan 282 F2: el delegate sale de la FABRICA (unico constructor), que
+        # resuelve el ca_bundle por proyecto. El constructor directo no lo hacia.
+        from services.tracker_provider import build_gitlab_provider  # noqa: PLC0415
+        self._delegate = build_gitlab_provider(project)
 
     def infer_item_pipeline(self, item_ref: ItemRef) -> ItemPipelineResult:
         try:

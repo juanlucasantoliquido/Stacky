@@ -31,6 +31,23 @@ import config  # importado a nivel módulo para poder parchear en tests
 logger = logging.getLogger(__name__)
 
 
+def _assignee_strict_enabled() -> bool:
+    """Plan 282 F3 — STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED (default True).
+
+    Con OFF vuelve el comportamiento previo: un username que no resuelve VACÍA
+    el campo `assignee_ids` en silencio. Nace ON porque REDUCE la escritura al
+    sistema del operador (deja de emitir un PUT destructivo); una flag que quita
+    una escritura destructiva no puede nacer OFF sin dejar el destrozo encendido
+    de fábrica.
+
+    `config` acá es el MÓDULO (import de arriba, "para poder parchear en
+    tests"); la instancia de flags es `config.config`.
+    """
+    return bool(getattr(
+        config.config, "STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED", True,
+    ))
+
+
 def _unknown_state_guard_enabled() -> bool:
     """Plan 270 F2 — STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED (default True).
 
@@ -160,7 +177,16 @@ class GitLabTrackerProvider:
         }
 
     def _resolve_assignee_id(self, username: str) -> Optional[int]:
-        """Resuelve un username GitLab a su user_id numérico (F6)."""
+        """Resuelve un username GitLab a su user_id numérico (F6).
+
+        Plan 282 F3 — QUEDA BYTE-IDÉNTICO A PROPÓSITO: devuelve `None` ante
+        cualquier fallo. Tiene DOS llamadores más además de
+        `update_item_assignee` (el camino de creación/actualización de item de
+        este mismo archivo y el migrador Mantis→GitLab, que corre en batch y
+        abortaría migraciones enteras por un usuario faltante). Hacer que
+        propague acá sería "arreglar arriba y romper al lado": el cambio va en
+        el helper hermano `_resolve_assignee_id_strict`.
+        """
         try:
             body, _ = self._client._request("GET", "/users", params={"username": username})
             if isinstance(body, list) and body:
@@ -168,6 +194,20 @@ class GitLabTrackerProvider:
         except Exception:
             pass
         return None
+
+    def _resolve_assignee_id_strict(self, username: str) -> int:
+        """Plan 282 F3 — como `_resolve_assignee_id` pero DICE por qué falló.
+
+        Método NUEVO. Reusa el otro (no duplica el GET) y sólo convierte el
+        `None` mudo en un error tipado, para que un typo en el username o un
+        fallo transitorio de `/users` deje de vaciar el campo en silencio.
+        """
+        uid = self._resolve_assignee_id(username)
+        if uid is None:
+            raise TrackerApiError(
+                404, f"usuario GitLab no resuelto: '{username}'", kind="not_found",
+            )
+        return uid
 
     def _link_parent(self, child_iid: str, parent_id: str) -> None:
         """Establece la relación padre-hijo. Plan 277 F3: la etiqueta es el mecanismo
@@ -504,14 +544,24 @@ class GitLabTrackerProvider:
     # ── F6: Identity/assignees ────────────────────────────────────────────────
 
     def update_item_assignee(self, item_id: str, assignee: str) -> dict:
-        """Asigna el issue al username. Si no se encuentra, limpia assignees."""
+        """Asigna el issue al username.
+
+        Plan 282 F3 — se separan los dos casos que antes estaban COLAPSADOS:
+          - `assignee` vacío/None  -> intención EXPLÍCITA de desasignar. Se
+            conserva: manda `assignee_ids: []`.
+          - `assignee` con valor que NO resuelve -> levanta antes de armar el
+            body. Antes mandaba `assignee_ids: []` igual, así que un typo en el
+            username o un fallo transitorio de `/users` DESASIGNABA el issue del
+            operador sin avisar. El docstring viejo ("Si no se encuentra, limpia
+            assignees") documentaba el bug como si fuera la feature.
+        """
         proj_path = self._client._project_path()
-        assignee_id = self._resolve_assignee_id(assignee) if assignee else None
         update_body: dict = {}
-        if assignee_id:
-            update_body["assignee_ids"] = [assignee_id]
+        if assignee and _assignee_strict_enabled():
+            update_body["assignee_ids"] = [self._resolve_assignee_id_strict(assignee)]
         else:
-            update_body["assignee_ids"] = []
+            assignee_id = self._resolve_assignee_id(assignee) if assignee else None
+            update_body["assignee_ids"] = [assignee_id] if assignee_id else []
         body, _ = self._client._request(
             "PUT",
             f"/projects/{proj_path}/issues/{item_id}",

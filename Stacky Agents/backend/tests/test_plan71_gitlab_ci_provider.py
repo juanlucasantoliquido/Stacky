@@ -16,7 +16,15 @@ from unittest.mock import MagicMock, patch
 
 
 def _make_gitlab_delegate(pipelines: list[dict]):
-    """Crea un mock de GitLabTrackerProvider con infer_pipeline que retorna pipelines."""
+    """Crea un mock de GitLabTrackerProvider con infer_pipeline que retorna pipelines.
+
+    Plan 282 F2: el seam de construccion se movio. GitLabCIProvider ya no
+    llama `GitLabTrackerProvider(project=...)` a mano (ese constructor no
+    resolvia el ca_bundle): ahora pide el provider a la fabrica
+    `services.tracker_provider.build_gitlab_provider`, que es el nuevo
+    punto de parcheo. Parchear la clase en gitlab_ci_provider ya no tiene
+    efecto porque el simbolo no vive mas en ese modulo.
+    """
     delegate = MagicMock()
     delegate.infer_pipeline = MagicMock(return_value=pipelines)
     return delegate
@@ -30,7 +38,7 @@ def test_infer_item_pipeline_passes_ref():
     from services.ci_provider import ItemRef
 
     delegate = _make_gitlab_delegate([])
-    with patch("services.gitlab_ci_provider.GitLabTrackerProvider", return_value=delegate):
+    with patch("services.tracker_provider.build_gitlab_provider", return_value=delegate):
         provider = GitLabCIProvider(project="test_proj")
         ref = ItemRef(item_id="55", tracker_type="gitlab", ref="main")
         provider.infer_item_pipeline(ref)
@@ -47,7 +55,7 @@ def test_success_progress_is_1():
 
     pipelines = [{"source": "ci", "status": "success", "ref": "main", "sha": "abc", "web_url": "http://x"}]
     delegate = _make_gitlab_delegate(pipelines)
-    with patch("services.gitlab_ci_provider.GitLabTrackerProvider", return_value=delegate):
+    with patch("services.tracker_provider.build_gitlab_provider", return_value=delegate):
         provider = GitLabCIProvider(project="test_proj")
         ref = ItemRef(item_id="1", tracker_type="gitlab", ref="main")
         result = provider.infer_item_pipeline(ref)
@@ -64,7 +72,7 @@ def test_running_progress_is_05():
 
     pipelines = [{"source": "ci", "status": "running", "ref": "main", "sha": "abc", "web_url": "http://x"}]
     delegate = _make_gitlab_delegate(pipelines)
-    with patch("services.gitlab_ci_provider.GitLabTrackerProvider", return_value=delegate):
+    with patch("services.tracker_provider.build_gitlab_provider", return_value=delegate):
         provider = GitLabCIProvider(project="test_proj")
         ref = ItemRef(item_id="2", tracker_type="gitlab")
         result = provider.infer_item_pipeline(ref)
@@ -81,7 +89,7 @@ def test_llm_source_progress_is_0():
 
     pipelines = [{"source": "llm", "status": "unknown", "ref": ""}]
     delegate = _make_gitlab_delegate(pipelines)
-    with patch("services.gitlab_ci_provider.GitLabTrackerProvider", return_value=delegate):
+    with patch("services.tracker_provider.build_gitlab_provider", return_value=delegate):
         provider = GitLabCIProvider(project="test_proj")
         ref = ItemRef(item_id="3", tracker_type="gitlab")
         result = provider.infer_item_pipeline(ref)
@@ -97,7 +105,7 @@ def test_empty_pipelines_progress_is_0():
     from services.ci_provider import ItemRef
 
     delegate = _make_gitlab_delegate([])
-    with patch("services.gitlab_ci_provider.GitLabTrackerProvider", return_value=delegate):
+    with patch("services.tracker_provider.build_gitlab_provider", return_value=delegate):
         provider = GitLabCIProvider(project="test_proj")
         ref = ItemRef(item_id="4", tracker_type="gitlab")
         result = provider.infer_item_pipeline(ref)
@@ -119,7 +127,7 @@ def test_monitor_pipeline_delegates_to_poll(mocker=None):
     delegate.poll_pipeline = MagicMock(return_value={
         "id": "456", "status": "running", "ref": "main", "sha": "abc", "web_url": "http://x",
     })
-    with patch("services.gitlab_ci_provider.GitLabTrackerProvider", return_value=delegate):
+    with patch("services.tracker_provider.build_gitlab_provider", return_value=delegate):
         provider = GitLabCIProvider(project="test_proj")
 
     result = provider.monitor_pipeline("456")

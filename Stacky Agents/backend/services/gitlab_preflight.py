@@ -32,10 +32,13 @@ class GitLabPreflightProvider:
     name = "gitlab"
 
     def __init__(self, project: str | None = None) -> None:
-        from services.gitlab_provider import GitLabTrackerProvider  # noqa: PLC0415
+        # Plan 282 F2: el delegate sale de la FABRICA (unico constructor), que
+        # resuelve el ca_bundle por proyecto. El constructor directo no lo hacia
+        # y el preflight moria contra un GitLab con CA interna.
+        from services.tracker_provider import build_gitlab_provider  # noqa: PLC0415
 
         self._project = project
-        delegate = GitLabTrackerProvider(project=project)
+        delegate = build_gitlab_provider(project)
         self._client = delegate._client
 
     def lint_yaml(self, yaml_str: str) -> dict:

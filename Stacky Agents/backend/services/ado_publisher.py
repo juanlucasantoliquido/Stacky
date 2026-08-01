@@ -200,6 +200,14 @@ class PublishResult:
     # Fase 1: trazabilidad de la verificacion ADO del comentario publicado.
     comment_id: int | None = None
     marker: str | None = None
+    # Plan 282 F1: clasificacion del fallo, para que el llamador no tenga que
+    # parsear `reason`. Aditivo, con default, al final: no rompe ninguna
+    # construccion existente y NO toca la tabla `agent_html_publish`.
+    #   None                    -> sin fallo clasificado (camino de hoy)
+    #   "publisher_unavailable" -> el tracker del ticket no tiene publicador
+    #   "tracker_error"         -> el tracker rechazo el POST (fallo tipado)
+    #   "exception"             -> cualquier otro fallo del POST
+    error_kind: str | None = None
 
 
 class AttachmentPublishError(RuntimeError):
@@ -407,21 +415,51 @@ def publish_from_execution(
                 _increment_idempotent_replay_counter(execution_id=execution_id, ado_id=ado_id)
                 return result
 
-        # ── 5. Resolver el cliente ADO del proyecto del ticket ────────────────
+        # ── 5. Resolver el cliente del TRACKER del ticket ─────────────────────
+        # Plan 282 F1: el `client_factory` explicito SIGUE GANANDO (lo usan los
+        # tests de hoy). Solo la rama `else` cambia: en vez de construir siempre
+        # un AdoClient, se le pregunta al router de publicacion cual es el
+        # publicador del tracker del ticket. El router devuelve SIEMPRE un objeto
+        # con la forma del cliente ADO, asi que todo lo de abajo (dedupe por sha,
+        # dedupe por marcador, inyeccion del marcador, persistencia) funciona sin
+        # tocarse para GitLab.
+        from services import comment_publish_router as _comment_router
+        from services.tracker_provider import CapabilityUnavailable
+
         try:
             if client_factory is not None:
                 client = client_factory()
+            elif _comment_router.routing_enabled():
+                pub = _comment_router.resolve_comment_publisher(ticket)
+                client = pub.handle
             else:
+                # Kill-switch: camino byte-identico al previo al plan 282.
                 client = _client_for_ticket_project(
                     stacky_project_name=ticket_stacky_project,
                     tracker_project=ticket_tracker_project,
                 )
+        except CapabilityUnavailable as exc:
+            # Modo de fallo INERTE: el tracker del ticket no tiene publicador de
+            # comentarios. No se cae a ADO (publicar en el tracker equivocado es
+            # peor que no publicar) y no escapa la excepcion.
+            result = PublishResult(
+                ok=False, status="failed",
+                reason=f"publicador no disponible: {exc.reason}",
+                ado_id=ado_id, execution_id=execution_id,
+                html_sha256=html_sha, ado_response=None, record_id=None,
+                error_kind="publisher_unavailable",
+            )
+            return _emit_and_persist(
+                result, ticket_id=ticket_id, ado_id=ado_id,
+                html_path=str(output.path), triggered_by=triggered_by,
+            )
         except Exception as exc:  # noqa: BLE001
             result = PublishResult(
                 ok=False, status="failed",
                 reason=f"ADO client build failed: {type(exc).__name__}: {exc}",
                 ado_id=ado_id, execution_id=execution_id,
                 html_sha256=html_sha, ado_response=None, record_id=None,
+                error_kind="exception",
             )
             return _emit_and_persist(
                 result, ticket_id=ticket_id, ado_id=ado_id,
@@ -492,11 +530,22 @@ def publish_from_execution(
                 html_path=str(output.path), triggered_by=triggered_by,
             )
         except Exception as exc:  # noqa: BLE001
+            # Plan 282 F1: un fallo TIPADO del tracker sale diciendo que fue del
+            # tracker; deja de disfrazarse de "ADO post_comment failed" en un
+            # proyecto que no es ADO. El camino ADO queda byte-identico:
+            # AdoClient no levanta TrackerError en ningun camino.
+            _kind = _comment_router.clasificar_error_de_publicacion(exc)
+            _prefijo = (
+                "tracker post_comment failed"
+                if _kind == "tracker_error"
+                else "ADO post_comment failed"
+            )
             result = PublishResult(
                 ok=False, status="failed",
-                reason=f"ADO post_comment failed: {type(exc).__name__}: {exc}",
+                reason=f"{_prefijo}: {type(exc).__name__}: {exc}",
                 ado_id=ado_id, execution_id=execution_id,
                 html_sha256=html_sha, ado_response=None, record_id=None,
+                error_kind=_kind,
             )
             return _emit_and_persist(
                 result, ticket_id=ticket_id, ado_id=ado_id,

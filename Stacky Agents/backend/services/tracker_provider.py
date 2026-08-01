@@ -162,3 +162,65 @@ def get_tracker_provider(project: Optional[str] = None):
     raise TrackerConfigError(
         f"tracker '{ttype}' sin puerto formal (usa su path de sync existente)"
     )
+
+
+# ── Plan 282 F2 — un solo constructor de GitLabTrackerProvider ───────────────
+# Cuatro servicios (gitlab_ci_logs, gitlab_ci_provider, gitlab_preflight,
+# gitlab_variables) construian el provider A MANO con `GitLabTrackerProvider(
+# project=project)`. Ese constructor NO resuelve el `ca_bundle`, asi que contra
+# un GitLab self-hosted con CA interna morian con CERTIFICATE_VERIFY_FAILED
+# mientras la sonda y el listado de tickets funcionaban: una parte del producto
+# anda y otra no, sin explicacion visible. Aca esta el UNICO constructor.
+
+
+def gitlab_factory_only_enabled() -> bool:
+    """STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED (default True).
+
+    Kill-switch de reversibilidad: con OFF, los 4 servicios vuelven al camino
+    byte-identico al previo al plan 282 (sin ca_bundle).
+    """
+    return bool(getattr(
+        config.config, "STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED", True,
+    ))
+
+
+def build_gitlab_provider(project: Optional[str] = None):
+    """Devuelve el GitLabTrackerProvider del proyecto, SIEMPRE con ca_bundle.
+
+    Orden de resolucion:
+      1. Flag OFF -> construccion directa (camino viejo, reversibilidad).
+      2. `get_tracker_provider(project)` -> si devuelve el provider GitLab, ese
+         gana: trae base_url, group, auth_path y ca_bundle POR PROYECTO.
+      3. La fabrica devolvio OTRO proveedor (el proyecto no usa GitLab) ->
+         TrackerConfigError. Error TIPADO del modulo, nunca un AttributeError
+         mas abajo cuando alguien pida `_client._project_path()`.
+      4. La fabrica no pudo resolver el contexto (proyecto sin configurar) ->
+         se construye igual, pero NUNCA sin bundle: cae al global
+         STACKY_GITLAB_CA_BUNDLE. Degradar sin certificado es el bug original.
+    """
+    from services.gitlab_provider import GitLabTrackerProvider
+
+    if not gitlab_factory_only_enabled():
+        return GitLabTrackerProvider(project=project)
+
+    try:
+        proveedor = get_tracker_provider(project)
+    except TrackerConfigError:
+        proveedor = None
+    except Exception:  # noqa: BLE001 — contexto irresoluble: se degrada abajo
+        proveedor = None
+
+    if proveedor is not None:
+        # Sin isinstance: bajo `patch(...)` la clase es un MagicMock y isinstance
+        # levanta TypeError. Se compara el NOMBRE de la clase concreta.
+        if type(proveedor).__name__ == "GitLabTrackerProvider":
+            return proveedor
+        raise TrackerConfigError(
+            f"el proyecto '{project}' no usa GitLab "
+            f"(proveedor resuelto: {type(proveedor).__name__})"
+        )
+
+    return GitLabTrackerProvider(
+        project=project,
+        ca_bundle=(getattr(config.config, "STACKY_GITLAB_CA_BUNDLE", "") or None),
+    )

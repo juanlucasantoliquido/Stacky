@@ -387,6 +387,19 @@ def auto_assign_on_run(ticket_id: int, project_name: str | None = None) -> str |
             resolved_project = ticket.stacky_project_name or project_name
             ticket_obj = ticket  # se usa abajo para build_ado_client (mismo scope)
 
+            # Plan 281 F7 sitio 8 — la identidad del operador se resuelve por el PAT
+            # de Azure DevOps (`resolve_me_unique_name`) y la asignación se escribe
+            # con `update_work_item_assigned_to`. En un tracker no-ADO no hay
+            # equivalente hoy: se devuelve el MISMO valor neutro que ya devuelve su
+            # `except` (None), sin construir un cliente del proveedor equivocado.
+            from services.project_context import tracker_is_azure_devops
+
+            if not tracker_is_azure_devops(resolved_project):
+                logger.debug(
+                    "auto_assign_on_run: %s no usa Azure DevOps — skip", resolved_project
+                )
+                return None
+
             if ado_id is None:
                 logger.warning(
                     "auto_assign_on_run: ticket_id=%s sin ado_id — skip", ticket_id

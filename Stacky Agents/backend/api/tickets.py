@@ -1161,9 +1161,9 @@ def _sync_via_provider_or_ado(project_name: str | None) -> dict:
         if ctx_sync is None and bool(
             getattr(config.config, "STACKY_TRACKER_ROUTING_STRICT_ENABLED", True)
         ):
-            # Plan 281 F3 — ANTES, un contexto irresoluble caía por el `or` a
-            # "azure_devops" (el `getattr` se evalúa ANTES del chequeo de None) y
-            # terminaba en el branch ADO del final de la función, que levanta
+            # Plan 281 F3 — ANTES, un contexto irresoluble caía por el `or` al
+            # tracker por defecto (el `getattr` se evalúa ANTES del chequeo de
+            # None) y terminaba en el branch ADO del final de la función, que levanta
             # AdoConfigError("...no usa Azure DevOps") aunque el proyecto sea
             # GitLab. "No pude resolver" NO es "es Azure DevOps": es un error
             # propio, con su mensaje accionable.
@@ -4931,6 +4931,17 @@ def create_child_task(ado_id: int):
     _stale_status_cache: dict[int, str] = {}
 
     def _equivalent_task_status(task_ado_id) -> str:
+        # Plan 281 F7 sitio 2 (C4/C9) — guard COSMÉTICO para el gate: la función ya
+        # está funcionalmente protegida (su `except Exception` captura la
+        # AdoConfigError y deja `eq_ado = None`, y `_consumed_task_ado_status`
+        # responde "unknown"). El valor neutro DEBE ser "unknown", NUNCA "": el
+        # contrato del consumidor son exactamente tres valores —"exists",
+        # "missing", "unknown"—; un cuarto valor que nadie maneja reabre el caso
+        # ADO-241 (marker `consumed` stale que responde "idempotente" sin crear nada).
+        # `tracker_is_azure_devops` ya está importado a nivel de módulo (:36): se usa
+        # ESE nombre para que los dos sitios de este archivo se parcheen igual.
+        if not tracker_is_azure_devops(project_name):
+            return "unknown"
         try:
             key = int(task_ado_id)
         except (TypeError, ValueError):
@@ -7580,6 +7591,15 @@ def autopublish_epic_from_run(
         if published.rev is not None:
             # Plan 153 F4 — la respuesta del POST de creación ya trajo el rev: sin GET extra.
             _baseline_rev = published.rev
+        elif not tracker_is_azure_devops(project_name):
+            # Plan 281 F7 sitio 3 (C2) — `System.Rev` es un concepto de Azure DevOps.
+            # En un tracker no-ADO no hay baseline que sellar: se deja en None, que es
+            # exactamente lo que ya dejaba el `except` de abajo.
+            # NO se aborta la publicación: el Plan 278 publica épicas en GitLab y este
+            # bloque es sólo el sellado del aprendizaje bidireccional (Plan 60 F1).
+            # Por eso el guard va ACÁ y no en la cabecera de la función: gatear arriba
+            # cancelaría la publicación de épicas GitLab que el 278 acaba de habilitar.
+            _baseline_rev = None
         else:
             try:
                 _rev_client = _ado_client_for_ticket(project_name=project_name)

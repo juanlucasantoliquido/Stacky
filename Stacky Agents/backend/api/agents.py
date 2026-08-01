@@ -1907,6 +1907,16 @@ def _build_ado_enrichment_sections(
     """
     sections: list[str] = []
 
+    # Plan 281 F7 sitio 1 — el enriquecimiento lee comentarios y adjuntos por la API
+    # de Azure DevOps. En un tracker no-ADO no hay nada que traer: se devuelve el
+    # MISMO valor neutro que ya devuelve el `except` de abajo (la lista vacía), en
+    # vez de construir un cliente del proveedor equivocado y loguear un warning que
+    # nombra ADO en un proyecto GitLab.
+    from services.project_context import tracker_is_azure_devops
+
+    if not tracker_is_azure_devops(project_name):
+        return sections
+
     # Cliente ADO — si no se puede instanciar (config faltante), salir limpio.
     try:
         from services.ado_sync import _html_to_text

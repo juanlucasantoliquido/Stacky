@@ -29,7 +29,14 @@ def resolve(ticket: object) -> str:
     Usa la misma lógica que `self_review._resolve_criteria` para ser intercambiable.
     """
     try:
-        from services.project_context import build_ado_client
+        from services.project_context import build_ado_client, tracker_is_azure_devops
+
+        # Plan 281 F7 sitio 4 — los AcceptanceCriteria son un campo de Azure DevOps
+        # (`Microsoft.VSTS.Common.AcceptanceCriteria`). En un tracker no-ADO no hay
+        # nada que leer: se devuelve el MISMO valor neutro que ya devolvía el
+        # `except` de abajo, sin construir un cliente del proveedor equivocado.
+        if not tracker_is_azure_devops(getattr(ticket, "stacky_project_name", None)):
+            return ""
 
         client = build_ado_client(
             project_name=ticket.stacky_project_name,  # type: ignore[attr-defined]

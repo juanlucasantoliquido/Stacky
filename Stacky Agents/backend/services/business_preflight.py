@@ -43,6 +43,7 @@ def _evaluate_functional(
     tracker_project: str | None,
 ) -> BusinessPreflightResult:
     from config import config
+    from services.project_context import tracker_is_azure_devops
 
     # Cargar client-profile con el MISMO loader que usa _inject_client_profile_block
     # (context_enrichment.py:110): load_client_profile → get_project_tracker_type →
@@ -76,6 +77,22 @@ def _evaluate_functional(
     if work_item_type == "Epic" and (not input_states or ado_state in input_states):
         return BusinessPreflightResult(
             ok=True, mode="A", epic_ado_id=ado_id, validated_state=ado_state,
+        )
+
+    # Plan 281 F7 sitio 5 — el Modo B hace cross-check de COMENTARIOS por la API de
+    # Azure DevOps. En un tracker no-ADO no hay de dónde traerlos: se devuelve el
+    # MISMO valor neutro que ya devuelve su `except` de red (ok=True + warning), sin
+    # construir un cliente del proveedor equivocado.
+    # DESVÍO DECLARADO del plan: el guard va acá y no en la cabecera de la función,
+    # porque el Modo A (Epic en estado de entrada válido) NO toca ADO — lee el
+    # client-profile. Gatear arriba se lo llevaría puesto para GitLab, que es
+    # degradar algo que hoy funciona. El censo mide igual: lo que exige es que la
+    # función pregunte por el tracker ANTES de construir el cliente.
+    if not tracker_is_azure_devops(project_name):
+        return BusinessPreflightResult(
+            ok=True,
+            mode=None,
+            warnings=["tracker no-ADO: sin cross-check de comentarios"],
         )
 
     # Modo B — comentario bloqueante en el ÚLTIMO comentario (por fecha).

@@ -110,6 +110,16 @@ def find_similar_tickets(
         Lista de SimilarTicket (vacía si no hay match, error, o keywords
         insuficientes). Nunca propaga excepciones.
     """
+    # Plan 281 F7 sitio 7 — la búsqueda es WIQL, un lenguaje de consulta de Azure
+    # DevOps. En un tracker no-ADO no hay equivalente hoy: se devuelve el MISMO
+    # valor neutro que ya devuelve su `except` (lista vacía) en vez de construir un
+    # cliente ADO para un proyecto que no usa ADO.
+    from services.project_context import tracker_is_azure_devops
+
+    if not tracker_is_azure_devops(project_name):
+        logger.debug("similar_tickets: %s no usa Azure DevOps — sin sugerencias", project_name)
+        return []
+
     keywords = extract_keywords(current_title)
     if not keywords:
         logger.debug("similar_tickets: title %r sin keywords útiles", current_title)

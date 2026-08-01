@@ -234,6 +234,13 @@ class Config:
     STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS = int(os.getenv("STACKY_EGRESS_SENTINEL_LOOKBACK_DAYS", "7"))
     STACKY_EGRESS_SENTINEL_MAX_CHARS = int(os.getenv("STACKY_EGRESS_SENTINEL_MAX_CHARS", "24000"))
 
+    # Plan 22 V2.2 — Smart dispatch enforce: si el payload de /run NO trae runtime
+    # explícito y esto está ON, el launch aplica la recomendación del advisor en vez
+    # del default fijo. Default OFF: el humano siempre gana y v1 queda byte-idéntico.
+    STACKY_RUN_ADVISOR_ENFORCE = os.getenv("STACKY_RUN_ADVISOR_ENFORCE", "false").lower() in (
+        "1", "true", "yes",
+    )
+
     # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
     # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".
     STACKY_PR_REVIEWER_ENABLED = os.getenv("STACKY_PR_REVIEWER_ENABLED", "true").lower() in (

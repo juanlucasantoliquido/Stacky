@@ -337,6 +337,49 @@ def advise_runtime():
 _VALID_RUNTIMES = {"github_copilot", "codex_cli", "claude_code_cli"}
 
 
+def _apply_advisor_enforce(*, agent_type: str | None, project: str | None) -> dict | None:
+    """V2.2 (Plan 22) — Smart dispatch enforce.
+
+    Devuelve el ruteo recomendado por el advisor, o None si no corresponde
+    aplicarlo. Sólo debe llamarse cuando el payload NO trajo runtime explícito:
+    el humano siempre gana.
+
+    Flag OFF → None sin consultar al advisor (v1 byte-idéntico, cero consultas).
+    Falla-abierto: si el advisor explota o recomienda un runtime que el launch no
+    sabe ejecutar, se devuelve None y queda el default de siempre.
+    """
+    try:
+        from config import config as _cfg
+
+        if not getattr(_cfg, "STACKY_RUN_ADVISOR_ENFORCE", False):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+
+    if not agent_type:
+        return None
+
+    try:
+        from services import run_advisor
+
+        adv = run_advisor.advise(agent_type=str(agent_type), project=project)
+        if adv.runtime not in _VALID_RUNTIMES:
+            logger.warning(
+                "V2.2 advisor recomendó runtime desconocido '%s'; se ignora", adv.runtime
+            )
+            return None
+        return {
+            "runtime": adv.runtime,
+            "reason": adv.reason,
+            "confidence": adv.confidence,
+        }
+    except Exception as _adv_exc:  # noqa: BLE001
+        logger.warning(
+            "V2.2 advisor enforce falló (ignorado, sigue el default): %s", _adv_exc
+        )
+        return None
+
+
 @bp.post("/run")
 def run():
     import json as _json
@@ -359,6 +402,21 @@ def run():
             runtime, payload.get("ticket_id"), payload.get("agent_type"),
         )
     project_name = (payload.get("project") or "").strip() or None
+
+    # V2.2 (Plan 22) — Smart dispatch enforce. Sólo cuando el operador NO eligió
+    # runtime: con runtime explícito en el payload esto ni se consulta (el humano
+    # siempre gana). Con la flag OFF es un no-op.
+    advisor_routing: dict | None = None
+    if runtime_defaulted:
+        advisor_routing = _apply_advisor_enforce(
+            agent_type=agent_type, project=project_name
+        )
+        if advisor_routing:
+            runtime = advisor_routing["runtime"]
+            logger.info(
+                "V2.2 advisor enforce ruteó a '%s' (confianza=%s): %s",
+                runtime, advisor_routing["confidence"], advisor_routing["reason"],
+            )
 
     # Validación de runtime ANTES de cualquier procesamiento.
     # Reglas:
@@ -574,6 +632,9 @@ def run():
         "status": "preparing",
         "runtime": runtime,
         "runtime_defaulted": runtime_defaulted,  # Plan 36: True si el cliente no envió runtime
+        # V2.2 (Plan 22): si el advisor ruteó, el operador tiene que VERLO — Stacky
+        # nunca cambia el runtime en silencio. None cuando no hubo enforce.
+        "advisor_routing": advisor_routing,
     }
 
     # V2.4 — Cache/dedup: si hay un run completado idéntico (mismo prompt_sha +

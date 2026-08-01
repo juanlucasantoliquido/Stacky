@@ -146,3 +146,116 @@ def test_advise_endpoint(client):
     assert r.status_code == 200
     data = r.get_json()
     assert "runtime" in data and "reason" in data and "confidence" in data
+
+
+# ── V2.2 (Plan 22) — Smart dispatch ENFORCE: el advisor deja de ser decorativo ──
+#
+# Hasta el 2026-08-01 la flag STACKY_RUN_ADVISOR_ENFORCE estaba declarada como
+# `reserved=True` y su propio reserved_reason lo confesaba: "el enforcement nunca
+# se implementó". El advisor sólo respondía en GET /advise (informativo); el launch
+# ignoraba su recomendación y aplicaba el default fijo "github_copilot".
+# El humano SIEMPRE gana: si el payload trae runtime explícito, esto no corre.
+
+
+def test_v22_guarda_la_flag_dejo_de_estar_reservada():
+    """GUARDA anti-falso-verde: si la flag siguiera `reserved`, el registro estaría
+    mintiendo sobre una capacidad que sí existe. Se afirma en POSITIVO."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    spec = next((f for f in FLAG_REGISTRY if f.key == "STACKY_RUN_ADVISOR_ENFORCE"), None)
+    assert spec is not None, "la flag debe seguir registrada"
+    assert not getattr(spec, "reserved", False), (
+        "V2.2 implementado ⇒ la flag ya no es reservada"
+    )
+    assert not getattr(spec, "reserved_reason", None)
+
+
+def test_v22_default_efectivo_es_off_en_config():
+    """El default EFECTIVO vive en config.py, no en el registry."""
+    from config import config
+
+    assert getattr(config, "STACKY_RUN_ADVISOR_ENFORCE", None) is False
+
+
+def test_v22_enforce_off_no_consulta_al_advisor(monkeypatch):
+    """Flag OFF ⇒ comportamiento v1 byte-idéntico: ni siquiera se consulta."""
+    from api import agents as agents_api
+    import config as cfg
+    from services import run_advisor
+
+    llamadas = []
+    monkeypatch.setattr(run_advisor, "advise", lambda **kw: llamadas.append(kw))
+    monkeypatch.setattr(cfg.config, "STACKY_RUN_ADVISOR_ENFORCE", False, raising=False)
+
+    assert agents_api._apply_advisor_enforce(agent_type="developer", project=None) is None
+    assert llamadas == []
+
+
+def test_v22_enforce_on_rutea_con_la_recomendacion(monkeypatch):
+    """Flag ON + sin runtime explícito ⇒ se usa la recomendación del advisor."""
+    from api import agents as agents_api
+    import config as cfg
+    from services import run_advisor
+
+    class _Adv:
+        runtime = "codex_cli"
+        reason = "codex_cli: 90% éxito sobre 20 runs"
+        confidence = "high"
+
+    monkeypatch.setattr(run_advisor, "advise", lambda **kw: _Adv())
+    monkeypatch.setattr(cfg.config, "STACKY_RUN_ADVISOR_ENFORCE", True, raising=False)
+
+    routing = agents_api._apply_advisor_enforce(agent_type="developer", project=None)
+
+    assert routing is not None
+    assert routing["runtime"] == "codex_cli"
+    assert routing["confidence"] == "high"
+    assert "90%" in routing["reason"]
+
+
+def test_v22_runtime_recomendado_invalido_no_se_aplica(monkeypatch):
+    """Si el advisor devuelve un runtime fuera de _VALID_RUNTIMES, se ignora.
+    Nunca se rutea a un runtime que el launch no sabe ejecutar."""
+    from api import agents as agents_api
+    import config as cfg
+    from services import run_advisor
+
+    class _Adv:
+        runtime = "gemini_cli_inexistente"
+        reason = "x"
+        confidence = "high"
+
+    monkeypatch.setattr(run_advisor, "advise", lambda **kw: _Adv())
+    monkeypatch.setattr(cfg.config, "STACKY_RUN_ADVISOR_ENFORCE", True, raising=False)
+
+    assert agents_api._apply_advisor_enforce(agent_type="developer", project=None) is None
+
+
+def test_v22_advisor_roto_no_tumba_el_launch(monkeypatch):
+    """Fail-open: un advisor que explota deja el default, no rompe el run."""
+    from api import agents as agents_api
+    import config as cfg
+    from services import run_advisor
+
+    def _boom(**kw):
+        raise RuntimeError("db caida")
+
+    monkeypatch.setattr(run_advisor, "advise", _boom)
+    monkeypatch.setattr(cfg.config, "STACKY_RUN_ADVISOR_ENFORCE", True, raising=False)
+
+    assert agents_api._apply_advisor_enforce(agent_type="developer", project=None) is None
+
+
+def test_v22_el_launch_consume_el_enforce():
+    """Gate de CONSUMIDOR DE PRODUCCIÓN: no alcanza con que el helper exista,
+    el endpoint /run tiene que llamarlo. Se lee el fuente real de run() para no
+    depender de un censo por AST (que da cero si la llamada va por alias)."""
+    import inspect
+    from api import agents as agents_api
+
+    fuente = inspect.getsource(agents_api.run)
+    assert "_apply_advisor_enforce" in fuente, (
+        "V2.2 sin cablear: /run no consulta el enforce del advisor."
+    )
+    # y el humano sigue ganando: sólo se consulta si el runtime vino ausente
+    assert "runtime_defaulted" in fuente

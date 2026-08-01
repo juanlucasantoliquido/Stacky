@@ -1362,8 +1362,6 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
-        reserved=True,
-        reserved_reason="Plan 22 V2.2 (smart dispatch enforce) declarada anticipadamente; el enforcement nunca se implementó.",
     ),
     FlagSpec(
         # Plan 83 F1 — descartado: sin consumidor real en código (grep fuera de

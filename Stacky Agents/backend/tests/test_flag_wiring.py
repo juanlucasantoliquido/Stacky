@@ -15,7 +15,10 @@ FRONTEND_SRC = BACKEND_ROOT.parent / "frontend" / "src"        # .../frontend/sr
 
 # Lista CONGELADA (Plan 85). Cambiarla es una decisión consciente con code review.
 RESERVED_KEYS = frozenset({
-    "STACKY_RUN_ADVISOR_ENFORCE",
+    # STACKY_RUN_ADVISOR_ENFORCE — SALE de la lista el 2026-08-01: el plan 22 V2.2
+    # (mitad 1, enforce) la cableó en api/agents.py::run vía _apply_advisor_enforce,
+    # así que ya no es una flag muerta. Su cobertura ahora vive en
+    # tests/test_run_advisor.py (7 casos v22).
     "STACKY_BUDGET_PER_TICKET_USD",
     "STACKY_BRIEF_MODEL_SELECT_ENABLED",
     "STACKY_SPECULATIVE_MODE",

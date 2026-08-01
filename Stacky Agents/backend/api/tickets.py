@@ -33,6 +33,7 @@ from services.project_context import (
     ProjectContextError,
     build_ado_client,
     resolve_project_context,
+    ruteo_estricto_por_tracker,  # Plan 281 F7 — kill-switch de rollback de los guards
     tracker_is_azure_devops,  # F2 — el gate del provider es tracker-aware
 )
 from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
@@ -4940,7 +4941,7 @@ def create_child_task(ado_id: int):
         # ADO-241 (marker `consumed` stale que responde "idempotente" sin crear nada).
         # `tracker_is_azure_devops` ya está importado a nivel de módulo (:36): se usa
         # ESE nombre para que los dos sitios de este archivo se parcheen igual.
-        if not tracker_is_azure_devops(project_name):
+        if not tracker_is_azure_devops(project_name) and ruteo_estricto_por_tracker():
             return "unknown"
         try:
             key = int(task_ado_id)
@@ -7591,7 +7592,7 @@ def autopublish_epic_from_run(
         if published.rev is not None:
             # Plan 153 F4 — la respuesta del POST de creación ya trajo el rev: sin GET extra.
             _baseline_rev = published.rev
-        elif not tracker_is_azure_devops(project_name):
+        elif not tracker_is_azure_devops(project_name) and ruteo_estricto_por_tracker():
             # Plan 281 F7 sitio 3 (C2) — `System.Rev` es un concepto de Azure DevOps.
             # En un tracker no-ADO no hay baseline que sellar: se deja en None, que es
             # exactamente lo que ya dejaba el `except` de abajo.

@@ -114,9 +114,12 @@ def find_similar_tickets(
     # DevOps. En un tracker no-ADO no hay equivalente hoy: se devuelve el MISMO
     # valor neutro que ya devuelve su `except` (lista vacía) en vez de construir un
     # cliente ADO para un proyecto que no usa ADO.
-    from services.project_context import tracker_is_azure_devops
+    from services.project_context import (
+        ruteo_estricto_por_tracker,
+        tracker_is_azure_devops,
+    )
 
-    if not tracker_is_azure_devops(project_name):
+    if not tracker_is_azure_devops(project_name) and ruteo_estricto_por_tracker():
         logger.debug("similar_tickets: %s no usa Azure DevOps — sin sugerencias", project_name)
         return []
 

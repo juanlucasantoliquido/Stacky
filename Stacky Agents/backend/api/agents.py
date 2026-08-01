@@ -1912,9 +1912,12 @@ def _build_ado_enrichment_sections(
     # MISMO valor neutro que ya devuelve el `except` de abajo (la lista vacía), en
     # vez de construir un cliente del proveedor equivocado y loguear un warning que
     # nombra ADO en un proyecto GitLab.
-    from services.project_context import tracker_is_azure_devops
+    from services.project_context import (
+        ruteo_estricto_por_tracker,
+        tracker_is_azure_devops,
+    )
 
-    if not tracker_is_azure_devops(project_name):
+    if not tracker_is_azure_devops(project_name) and ruteo_estricto_por_tracker():
         return sections
 
     # Cliente ADO — si no se puede instanciar (config faltante), salir limpio.

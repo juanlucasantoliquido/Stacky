@@ -43,7 +43,10 @@ def _evaluate_functional(
     tracker_project: str | None,
 ) -> BusinessPreflightResult:
     from config import config
-    from services.project_context import tracker_is_azure_devops
+    from services.project_context import (
+        ruteo_estricto_por_tracker,
+        tracker_is_azure_devops,
+    )
 
     # Cargar client-profile con el MISMO loader que usa _inject_client_profile_block
     # (context_enrichment.py:110): load_client_profile → get_project_tracker_type →
@@ -88,7 +91,7 @@ def _evaluate_functional(
     # client-profile. Gatear arriba se lo llevaría puesto para GitLab, que es
     # degradar algo que hoy funciona. El censo mide igual: lo que exige es que la
     # función pregunte por el tracker ANTES de construir el cliente.
-    if not tracker_is_azure_devops(project_name):
+    if not tracker_is_azure_devops(project_name) and ruteo_estricto_por_tracker():
         return BusinessPreflightResult(
             ok=True,
             mode=None,

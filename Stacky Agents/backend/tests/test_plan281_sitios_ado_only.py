@@ -512,3 +512,50 @@ class TestSitio3AutopublishEpic:
         assert espia.n == 1
         assert r.baseline_rev == 7
         assert r.ado_id == 4242
+
+
+# ── El kill-switch de rollback, corrido CONTRA su promesa ────────────────────
+#
+# F7 declara que con STACKY_TRACKER_ROUTING_STRICT_ENABLED apagada "los guards no
+# cortan y el comportamiento vuelve a ser el de hoy". Eso es una PROMESA: sin
+# estos dos casos sería un verde sin verificar. Ambos usan el sitio 7 como testigo
+# (el guard vive en `services/`, que es donde están 5 de los 8).
+
+
+def test_flag_apagada_revierte_el_guard(monkeypatch):
+    """Con la flag OFF, un proyecto GitLab vuelve a construir el cliente ADO."""
+    import config as config_module
+    import services.project_context as pc
+    import services.similar_tickets as st
+
+    _tracker(monkeypatch, False, st)
+    monkeypatch.setattr(
+        config_module.config, "STACKY_TRACKER_ROUTING_STRICT_ENABLED", False
+    )
+
+    class _Cli:
+        def fetch_open_work_items(self, wiql=None):
+            return []
+
+    espia = _EspiaAdo(doble=_Cli())
+    monkeypatch.setattr(pc, "build_ado_client", espia)
+
+    from services.similar_tickets import find_similar_tickets
+
+    find_similar_tickets(
+        current_ado_id=1115,
+        current_title="Migrar el motor de reglas a la nueva arquitectura",
+        project="g/p",
+        project_name="RIPLEY",
+    )
+    assert espia.n == 1, "la flag apagada NO revirtió el guard: sigue cortando"
+
+
+def test_flag_encendida_es_el_default_efectivo():
+    """El default que vale es el string del `os.getenv` de config.py, no el
+    comentario de la FlagSpec. Se lee el valor EFECTIVO, sin parchear nada."""
+    import config as config_module
+    from services.project_context import ruteo_estricto_por_tracker
+
+    assert config_module.config.STACKY_TRACKER_ROUTING_STRICT_ENABLED is True
+    assert ruteo_estricto_por_tracker() is True

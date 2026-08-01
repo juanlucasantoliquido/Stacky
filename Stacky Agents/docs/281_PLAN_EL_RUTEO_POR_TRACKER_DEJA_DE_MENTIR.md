@@ -1,9 +1,59 @@
 # Plan 281 — El ruteo por tracker deja de mentir
 
-**Estado:** MEJORADO v2 (v1 -> v2)
+**Estado:** **IMPLEMENTADO F0..F9** (2026-08-01) — v2 MEJORADO (v1 -> v2)
 **Veredicto de la crítica v1:** **RECHAZADO** (4 BLOQUEANTES) ⇒ corregido en esta versión
 **Fecha:** 2026-08-01
 **Rama sugerida:** `docs/plan-281`
+**Rama real:** `docs/plan-279` (el árbol ya estaba ahí, con una sesión paralela viva)
+
+> ### Registro de implementación — 2026-08-01
+>
+> Commits (sin push): `dedc2d0b` F0..F6 · `9f20adf0` F7 · `4c57f918` F8+F9.
+>
+> **Conteos REALES medidos**, contra las predicciones del plan:
+>
+> | Fase | Predicción | Medido | |
+> |---|---|---|---|
+> | F0 | `6 passed` + foto vieja `10/4/18/8/4` | `6 passed`, foto **exacta al primer intento** | ✔ |
+> | F1 | `1 passed, 3 failed` | `1 passed, 3 failed` | ✔ |
+> | F2 | back `2 passed, 2 failed`; front `previo+2` | `2 passed, 2 failed`; vitest **31 → 33** | ✔ |
+> | F3 | `5 passed` | `5 passed` | ✔ |
+> | F4 | `8 passed`, ciegos 4→3 | `8 passed`, ciegos 4→3 | ✔ |
+> | F5 | `11 passed`, ciegos 3→2 | `11 passed`, ciegos 3→2 | ✔ |
+> | F6 | `13 passed`, ciegos 2→1, routing `[]` | `13 passed`, ciegos 2→1, routing `[]` | ✔ |
+> | F7 | `16 passed`, censo `0 2 1` | **`18 passed`**, censo `0 2 1` | ✔ +2 |
+> | F8 | `6 passed` | `6 passed`, calibración verde al primer intento | ✔ |
+> | F9.1 | `11 passed` | `11 passed` | ✔ |
+>
+> **Desvíos declarados** (ninguno cambia un criterio binario):
+> 1. **F7 sitio 5** — el guard va antes del **Modo B**, no en la cabecera: el Modo A
+>    (Epic en estado de entrada válido) **no toca ADO**, y gatearlo arriba lo degradaría
+>    para GitLab. El censo mide igual.
+> 2. **F9.2 lugar 4** — `deployment/harness_defaults.env` **no se editó a mano**: su
+>    generador toma un *snapshot del `.env` de un deploy VIVO*, no un dump del registry.
+>    Ninguna flag del 276/277/278 está ahí y no hay test de paridad. Regenerarlo contra
+>    el deploy es tarea del operador.
+> 3. **R9 del plan es incorrecto**: `_resolve_criteria` tiene **DOS** callers, no uno
+>    (`self_review.review_artifact` y `acceptance_contract._get_criteria_text`). El
+>    segundo cae a `getattr(ticket,"acceptance_criteria","")`, pero `models.py` **no
+>    tiene esa columna**: el fallback es inerte y el valor neutro `""` es seguro.
+> 4. Tras F4, `app.py::_startup_sync` no sólo deja de ser ciego: **sube a `con_seam`**
+>    (resuelve el provider). El caso migrado en F9.1 lo asserta así.
+> 5. **F7 son 18 casos, no 16.** El plan promete que con la flag apagada "los guards no
+>    cortan", pero **no testeaba esa promesa** — habría quedado como verde sin verificar.
+>    Se agregan 2 casos que la corren contra su promesa (flag OFF ⇒ el guard revierte y
+>    se vuelve a construir el cliente; y el default EFECTIVO se lee sin parchear nada).
+>    Para que el rollback sea real, los 8 guards quedaron gateados por la flag mediante
+>    un único helper, `project_context.ruteo_estricto_por_tracker()`: ocho copias del
+>    `getattr` serían ocho oportunidades de errarle al estilo de lectura, y ese archivo
+>    está excluido del censo, así que no altera los conteos.
+>
+> **Rojos ajenos preexistentes, PROBADOS contra el commit padre `32a9b719`:**
+> `test_plan218_coupling_ratchet` (3 failed; ya 42/109/21 vs baseline 36/82/19 — el
+> aporte neto de este plan a ese censo es **−2**) y `test_autopublish_rescue`
+> (4 failed / 7 passed idéntico; revienta en `published.rev`, código del Plan 153 F4).
+>
+> **Pendiente:** sólo el smoke manual de §F9.4 (exige backend levantado y token GitLab).
 **Depende de:** 218 (censo de acoplamiento), 276 (GitLab self-hosted), 277 (jerarquía), 278 (publicador de épica)
 **Convive con:** el fix SIN COMMITEAR del guard anti-doble-publicación de épica (ver §0)
 

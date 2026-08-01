@@ -75,6 +75,30 @@ def tracker_is_azure_devops(project_name: str | None) -> bool:
         return True
 
 
+def ruteo_estricto_por_tracker() -> bool:
+    """Plan 281 — ¿está encendido el ruteo estricto por tipo de tracker?
+
+    Kill-switch de rollback de los guards del Plan 281 F7: apagada la flag, los
+    ocho sitios vuelven a construir el cliente de Azure DevOps como hoy (y a
+    degradar por su `except`), en vez de cortar antes con el valor neutro.
+
+    Vive acá, al lado del resolvedor canónico, para que la flag se lea en UN solo
+    lugar: ocho copias del `getattr` son ocho oportunidades de equivocarse con el
+    estilo de lectura. Se lee del OBJETO config (la instancia) y NUNCA con
+    `os.getenv`: `tests/test_flags_env_read_meta.py` falla si una flag registrada
+    se lee del entorno fuera de su allowlist congelada.
+
+    Fail-open a True: si `config` no se puede importar, el comportamiento nuevo
+    (que es el correcto) es el que queda.
+    """
+    try:
+        from config import config as _cfg
+
+        return bool(getattr(_cfg, "STACKY_TRACKER_ROUTING_STRICT_ENABLED", True))
+    except Exception:  # noqa: BLE001
+        return True
+
+
 class ProjectContextError(RuntimeError):
     pass
 

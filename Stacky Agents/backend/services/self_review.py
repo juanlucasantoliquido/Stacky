@@ -41,7 +41,11 @@ def _extract_json(text: str) -> dict:
 
 
 def _resolve_criteria(ticket: Ticket) -> str:
-    from services.project_context import build_ado_client, tracker_is_azure_devops
+    from services.project_context import (
+        build_ado_client,
+        ruteo_estricto_por_tracker,
+        tracker_is_azure_devops,
+    )
 
     # Plan 281 F7 sitio 6 — esta función NO tiene `except` (C5): hoy propaga la
     # AdoConfigError a `review_artifact`, que la llama FUERA de su `try`. Con un
@@ -49,7 +53,10 @@ def _resolve_criteria(ticket: Ticket) -> str:
     # hace que `review_artifact` devuelva skipped_reason="no_acceptance_criteria",
     # que es la degradación honesta. El otro caller
     # (`acceptance_contract._get_criteria_text`) ya trata "" como "sin criterios".
-    if not tracker_is_azure_devops(getattr(ticket, "stacky_project_name", None)):
+    if (
+        not tracker_is_azure_devops(getattr(ticket, "stacky_project_name", None))
+        and ruteo_estricto_por_tracker()
+    ):
         return ""
 
     client = build_ado_client(

@@ -2,47 +2,87 @@
 
 **Estado:** PROPUESTO v1
 **Fecha:** 2026-08-01
-**Rama sugerida:** `docs/plan-282`
-**Depende de:** 276 (TLS + sync + grafo), 277 (jerarquía), 278 (publicador de épica), 270/271 (cierre y estado)
-**Frontera con el plan 281 (sesión paralela):** el 281 cubre EXCLUSIVAMENTE el error literal
-`El proyecto 'X' no usa Azure DevOps (tracker_type=gitlab)` en la vista de ticket-grafo, su censo por AST
-y el contrato de ruteo de ESOS sitios. **Este plan NO toca esa firma ni ese censo.** Donde este plan
-necesita que un sitio ADO-only rutee, lo hace en un módulo distinto y lo declara como dependencia blanda.
+**Rama:** `docs/plan-279` (rama de trabajo vigente; **no** se abre rama nueva — el worktree es único y
+hay sesiones paralelas escribiendo el 280 y el 281 en este mismo árbol)
+**Depende de:** 276 (TLS + sync + grafo), 277 (jerarquía), 278 (publicador de épica), 270/271 (cierre y
+estado), **280 (dependencia DURA de F1, ver abajo)**
+
+### Frontera con los planes hermanos (escritos en paralelo, LEER ANTES DE IMPLEMENTAR)
+
+Los tres planes atacan el mismo incidente de campo —la corrida de RIPLEY/GitLab del 2026-08-01, execs
+211/212— desde tres capas distintas. **Las fronteras se verificaron leyendo los dos documentos, no
+asumiendo.**
+
+| Plan | Su capa | Qué NO hace |
+|---|---|---|
+| **280** — El desenlace mira el trabajo entregado | **Decidir** el estado terminal: `has_delivered_work`, `classify_outcome_reason`, 4 motores → 1 | No toca a qué tracker se publica |
+| **281** — El ruteo por tracker deja de mentir | **Enrutar** el cliente: erradicar los 8 sitios ADO-only, gate por AST, la firma `no usa Azure DevOps` | No toca `ado_publisher.py` (verificado: `grep ado_publisher\|post_comment` en el 281 → **0 hits**) |
+| **282** — este | **Entregar y mostrar**: que el resultado llegue al issue de GitLab y que la pantalla hable el idioma del tracker | No decide estados ni erradica sitios ADO-only |
+
+**Cesión explícita al plan 280.** La versión inicial de este plan tenía una fase F1 que agregaba un guard
+de idempotencia a `_mark_terminal` (`claude_code_cli_runner.py:3105`, `codex_cli_runner.py:1975`) para que
+el runner no pisara el `completed` del `output_watcher`. **Se retiró.** El plan 280 resuelve el mismo
+síntoma más arriba y con más evidencia (44 ejecuciones y 93.447 caracteres de trabajo bajo estado `error`,
+contra las 2 corridas que medía este plan): al hacer que la regla 8 mire el trabajo entregado, la
+ejecución nunca llega a `_mark_terminal("error")`. Dos planes tocando los mismos dos runners para el mismo
+síntoma es trabajo duplicado y conflicto de merge garantizado. **F1 de este plan (publicación) declara al
+280 como dependencia dura:** sin el 280, la ejecución queda en `error` y el gate
+`agent_completion_internal.py:233-234` (`final_status != "completed"` → `skipped`) impide publicar. Este
+plan **no** vuelve a implementar esa lógica ni la parchea por su cuenta.
+
+**Pase entrante del plan 281 §7 — aceptado en parte, y lo rechazado se dice.** El 281 deriva a este plan:
+- *"Deep links de GitLab, `base_url` con namespace pegado, y demás features a medio portar"* →
+  **ACEPTADO como diagnóstico, DIFERIDO como trabajo** (§6.8): la normalización silenciosa y la
+  validación del backend ya contienen el caso; falta solo el hint en la UI.
+- *"Construir el equivalente GitLab de los 7 sitios que F7 degrada a valor neutro"* (criterios de
+  aceptación, self-review, similar tickets, auto-assign, business preflight, enriquecimiento de contexto,
+  estado equivalente de tarea) → **RECHAZADO por priorización, ver §6.14.** Son 7 features nuevas, no
+  arreglos de paridad. Aceptarlas volvería este plan inimplementable y contradice el encargo explícito de
+  acotar el alcance a lo que se cierra bien.
+- *"El breaker `ado_sync` con key de proyecto GitLab"* y *"la cadencia de polling"* → **RECHAZADO**, §6.15.
 
 ---
 
 ## 1. Objetivo
 
-Stacky nació ADO-first. GitLab se agregó después y quedó a mitad de camino: **el trabajo se produce pero
-se reporta mal, y la pantalla habla un idioma que no es el del tracker del operador.** Este plan cierra
-la brecha de FLUIDEZ en tres frentes medidos en vivo sobre RIPLEY/GitLab (53 issues abiertos / 1009 totales):
+Stacky nació ADO-first. GitLab se agregó después y quedó a mitad de camino: **el trabajo se produce, pero
+no llega al tracker y la pantalla habla un idioma que no es el del operador.** Este plan cierra la brecha
+de FLUIDEZ en dos frentes medidos en vivo sobre RIPLEY/GitLab (53 issues abiertos / 1009 totales):
 
-1. **El cierre miente.** Las ejecuciones 211 y 212 terminaron en `error` con el trabajo ENTERO hecho.
-   Causa medida: el `output_watcher` cierra la corrida como `completed` y **el runner la pisa después**
-   con `error`, porque `_mark_terminal` no tiene guard de idempotencia — mientras que
-   `manifest_watcher.py:259-261` **sí lo tiene**. La asimetría es el defecto.
-2. **El trabajo no llega al tracker.** El análisis técnico se generó, se validó y **no se publicó**:
+1. **El trabajo no llega al tracker.** El análisis técnico se generó, se validó y **no se publicó**:
    el publicador de comentarios (`services/ado_publisher.py`) es ADO-only y muere en
    `services/project_context.py:340-342`, aunque `services/gitlab_provider.py:440` ya implementa
-   `post_comment`. Evidencia dura: tabla `agent_html_publish`, filas 56 y 57, `status='failed'`.
-3. **La UI habla ADO.** La pestaña dice "Tickets ADO" mientras el título de la propia página dice
+   `post_comment`. Evidencia dura: tabla `agent_html_publish`, filas 56 y 57, `status='failed'`, con el
+   `comment.html` válido en disco (12.163 y 22.448 bytes). Contraste en la misma tabla: filas 50-55,
+   proyecto RSPACIFICO (ADO), `status='ok'`.
+2. **La UI habla ADO.** La pestaña dice "Tickets ADO" mientras el título de la propia página dice
    "Tickets GitLab"; cada tarjeta rotula `ADO-1234`; el filtro "Solo abiertos" es **ciego** en GitLab; y
    "Copiar link ADO" pega una URL a `dev.azure.com/UbimiaPacifico/Strategist_Pacifico` — **la organización
    de otro cliente**.
 
+Y por debajo de los dos, tres silencios que rompen la confianza sin decir nada: cuatro servicios GitLab
+que **pierden el CA bundle** y mueren contra el certificado interno del operador; un `update_item_assignee`
+que **borra al asignado** cuando el username no resuelve; y tres tabs ADO-only ofrecidos en el menú de un
+proyecto GitLab que terminan en un cartel de "solo disponible para Azure DevOps".
+
 Al terminar este plan, un operador GitLab ve su vocabulario, sus links funcionan, sus filtros filtran, y
-cuando el agente termina el trabajo la herramienta **dice la verdad y publica**.
+cuando el agente termina el trabajo **el resultado aparece en su issue**.
 
 ### KPI / impacto esperado (todos binarios y medibles)
 
 | # | KPI | Hoy (medido) | Meta |
 |---|-----|--------------|------|
-| K1 | Ejecuciones que terminan `error` teniendo output válido y `completion_source='output_watcher'` | 2 de 2 en la corrida del 2026-08-01 (execs 211, 212) | **0** |
-| K2 | Filas `agent_html_publish.status='failed'` con causa "no usa Azure DevOps" en proyecto GitLab | 2 (ids 56, 57) | **0** |
-| K3 | Rótulos visibles con "ADO"/"Azure DevOps" **no ruteados por tracker** en `frontend/src` | 96 (censo F0) | **≤ 20** (los legítimos: selector de tracker, migrador, preview de pipeline ADO) |
-| K4 | Constructores de `GitLabTrackerProvider` que **bypassean la fábrica** y quedan sin `ca_bundle` | 4 | **0** |
-| K5 | Sitios que construyen una URL de tracker con org/proyecto ADO hardcodeados | 1 (`utils/trackerUrls.ts:11`), con 4 consumidores | **0** |
-| K6 | Tabs ADO-only alcanzables desde un proyecto GitLab que terminan en callejón sin salida | 3 (PM, Sprint Board, User Stats) | **0** |
+| K1 | Filas `agent_html_publish.status='failed'` con causa "no usa Azure DevOps" en un proyecto GitLab | 2 (ids 56, 57) | **0** |
+| K2 | Rótulos visibles con "ADO"/"Azure DevOps" **no ruteados por tracker** en `frontend/src` | 96 (censo F0) | **≤ 20** (los legítimos: selector de tracker, migrador, preview de pipeline ADO) |
+| K3 | Constructores de `GitLabTrackerProvider` que **bypassean la fábrica** y quedan sin `ca_bundle` | 4 | **0** |
+| K4 | Sitios que construyen una URL de tracker con org/proyecto ADO hardcodeados | 1 (`utils/trackerUrls.ts:11`), con 4 consumidores | **0** |
+| K5 | Tabs ADO-only alcanzables desde un proyecto GitLab que terminan en callejón sin salida | 3 (PM, Sprint Board, User Stats) | **0** |
+| K6 | Caminos de escritura a GitLab que **destruyen datos en silencio** ante un fallo de resolución | 1 (`update_item_assignee` vacía `assignee_ids`) | **0** |
+
+**Nota sobre K1:** su medición exige que la ejecución llegue a `completed`, cosa que hoy depende del plan
+280. Por eso el gate de F1 mide el **publicador aislado** (con el estado forzado en el test) y el smoke
+manual mide la cadena completa. Un KPI que no se puede medir sin otro plan **no se declara verde**: sale
+`exit 5`.
 
 ---
 
@@ -74,21 +114,21 @@ producción, y el requerimiento textual es "necesito que el uso de la herramient
   `frontend/src/services/uiGuards.ts:78` (`sealedWorkItemId`) consumido desde
   `frontend/src/components/EpicFromBriefModal.tsx:223`. No lo toques.
 - **El publicador de ÉPICA sí rutea** por provider desde `api/tickets.py:7176`. El que NO rutea es el de
-  **comentarios**, que es otro módulo (F2).
+  **comentarios**, que es otro módulo (F1).
 
 ---
 
 ## 3. Principios y guardarraíles (obligatorios en cada fase)
 
 - **3 runtimes con paridad.** Todo lo de este plan vive en el chokepoint de cierre, en el publicador o en
-  el frontend — capas **runtime-agnósticas**. Ningún ítem toca un runner específico salvo F1, que toca
-  los DOS runners CLI **con el mismo diff** y se verifica parametrizado por runtime.
+  el frontend — capas **runtime-agnósticas**. **Ningún ítem de este plan toca un runner específico**: la
+  decisión del estado terminal quedó cedida al plan 280. Cada fase declara igual su impacto por runtime.
 - **Cero trabajo extra para el operador.** Todas las flags de este plan nacen **default ON**. Ninguna cae
-  en la categoría (A) —no enciende loops, daemons, polling ni prefetch— ni en la (B): F2 **no agrega una
+  en la categoría (A) —no enciende loops, daemons, polling ni prefetch— ni en la (B): F1 **no agrega una
   escritura nueva**, corrige el destino de una escritura que el operador ya autorizó explícitamente con el
   checkbox "Publicar comentario" (`frontend/src/components/FinishWorkButton.tsx:225`) y que **hoy falla**;
-  F7 **reduce** la escritura (deja de borrar el asignado). Justificación escrita por flag en cada fase.
-- **Human-in-the-loop.** Nada se publica ni se cierra solo que no se publicara o cerrara ya hoy. F8
+  F3 **reduce** la escritura (deja de borrar el asignado). Justificación escrita por flag en cada fase.
+- **Human-in-the-loop.** Nada se publica ni se cierra solo que no se publicara o cerrara ya hoy. F7
   **oculta** entradas que llevan a callejones sin salida; no decide nada por el operador.
 - **Mono-operador, sin auth.** Ningún ítem introduce roles ni permisos.
 - **No degradar.** Todos los cambios son aditivos y con fallback al comportamiento actual. Los helpers
@@ -127,12 +167,12 @@ from pathlib import Path
 BACKEND = Path(__file__).resolve().parents[1]
 
 def test_f0_censo_constructores_gitlab_que_bypassean_la_fabrica():
-    """K4: cuenta los módulos que llaman GitLabTrackerProvider(...) DIRECTO en vez
+    """K3: cuenta los módulos que llaman GitLabTrackerProvider(...) DIRECTO en vez
     de pasar por get_tracker_provider(). Esos nacen sin ca_bundle y mueren contra
     un GitLab con CA interna.
 
     ANTES del arreglo: exactamente 4 (gitlab_ci_logs, gitlab_ci_provider,
-    gitlab_preflight, gitlab_variables). DESPUÉS de F6: 0.
+    gitlab_preflight, gitlab_variables). DESPUÉS de F2: 0.
     Se excluye services/tracker_provider.py — ESE es el que tiene derecho.
     """
     ofensores = []
@@ -145,41 +185,42 @@ def test_f0_censo_constructores_gitlab_que_bypassean_la_fabrica():
                and nodo.func.id == "GitLabTrackerProvider":
                 ofensores.append(f"{py.name}:{nodo.lineno}")
     # F0 (rojo esperado): assert len(ofensores) == 4
-    # F6 (verde):
+    # F2 (verde):
     assert ofensores == [], f"bypassean la fabrica: {ofensores}"
 
 
-def test_f0_mark_terminal_tiene_guard_de_estado_activo():
-    """K1: los dos runners CLI deben consultar el status actual antes de pisarlo,
-    igual que manifest_watcher.py:259-261.
+def test_f0_el_publicador_de_comentarios_es_ado_only():
+    """K1: hoy services/ado_publisher.py resuelve el cliente sin preguntar el
+    tracker, y por eso muere en project_context.py:340-342 en todo proyecto GitLab.
 
-    GUARDA ANTI-FALSO-VERDE: este test PRIMERO prueba que sabe detectar la ausencia
-    (con un fuente sintetico sin guard), y recien despues mira los archivos reales.
-    Un assert de ausencia que nunca vio un positivo no prueba nada.
+    GUARDA ANTI-FALSO-VERDE: el detector se prueba PRIMERO contra un fuente
+    sintetico que si tiene el ruteo, y contra otro que no. Un assert de ausencia
+    que nunca vio un positivo no prueba nada.
     """
-    fuente_sin_guard = "def _mark_terminal(execution_id, status):\n    row.status = status\n"
-    assert not _tiene_guard(fuente_sin_guard), "el detector no detecta: test invalido"
+    con_ruteo = "def p():\n    pub = resolve_comment_publisher(tracker_type)\n"
+    sin_ruteo = "def p():\n    client = _client_for_ticket_project(x)\n"
+    assert _rutea_por_tracker(con_ruteo), "el detector da falso negativo: test invalido"
+    assert not _rutea_por_tracker(sin_ruteo), "el detector no detecta: test invalido"
 
-    fuente_con_guard = (
-        "def _mark_terminal(execution_id, status):\n"
-        "    if row.status not in ACTIVE_STATUSES:\n        return\n"
-        "    row.status = status\n"
-    )
-    assert _tiene_guard(fuente_con_guard), "el detector da falso negativo: test invalido"
-
-    for nombre in ("claude_code_cli_runner.py", "codex_cli_runner.py"):
-        texto = (BACKEND / "services" / nombre).read_text(encoding="utf-8")
-        assert _tiene_guard(texto), f"{nombre}: _mark_terminal pisa un estado terminal"
+    texto = (BACKEND / "services" / "ado_publisher.py").read_text(encoding="utf-8")
+    # F0 (rojo esperado): assert not _rutea_por_tracker(texto)
+    # F1 (verde):
+    assert _rutea_por_tracker(texto), "ado_publisher no consulta el router de tracker"
 
 
-def _tiene_guard(fuente: str) -> bool:
-    """True si alguna funcion llamada _mark_terminal contiene una comparacion
-    contra ACTIVE_STATUSES antes de asignar row.status."""
+def _rutea_por_tracker(fuente: str) -> bool:
+    """True si el fuente REFERENCIA resolve_comment_publisher.
+
+    Se censa por REFERENCIA (ast.Name/ast.Attribute), no por ast.Call con
+    func.id: si manana la llamada se hace por alias o por atributo de modulo,
+    un censo de llamadas daria CERO y premiaria el bug.
+    """
     arbol = ast.parse(fuente)
     for nodo in ast.walk(arbol):
-        if isinstance(nodo, ast.FunctionDef) and nodo.name == "_mark_terminal":
-            cuerpo = ast.dump(nodo)
-            return "ACTIVE_STATUSES" in cuerpo
+        if isinstance(nodo, ast.Name) and nodo.id == "resolve_comment_publisher":
+            return True
+        if isinstance(nodo, ast.Attribute) and nodo.attr == "resolve_comment_publisher":
+            return True
     return False
 ```
 
@@ -213,17 +254,17 @@ function rotulosAdoNoRuteados(texto: string): number {
     .filter((l) => /["'`>][^"'`]*\b(ADO|Azure DevOps)\b/.test(l)).length;
 }
 
-describe("Plan 282 F0 — censo de rotulos ADO no ruteados (K3)", () => {
+describe("Plan 282 F0 — censo de rotulos ADO no ruteados (K2)", () => {
   it("el detector detecta cuando SI hay (guarda anti-falso-verde)", () => {
     expect(rotulosAdoNoRuteados(`const x = "Tickets ADO";`)).toBe(1);
     expect(rotulosAdoNoRuteados(`// comentario sobre ADO`)).toBe(0);
   });
 
-  it("K3: el total del arbol queda bajo el techo", () => {
+  it("K2: el total del arbol queda bajo el techo", () => {
     const total = archivosFuente(SRC).reduce(
       (acc, f) => acc + rotulosAdoNoRuteados(readFileSync(f, "utf-8")), 0);
     // F0 (rojo esperado): expect(total).toBe(96)
-    // F3..F8 (verde):
+    // F4..F7 (verde):
     expect(total).toBeLessThanOrEqual(20);
   });
 });
@@ -256,110 +297,12 @@ la ausencia de guard. Eso prueba que el censo ve el defecto. Recién entonces se
 
 ---
 
-### F1 — El cierre deja de mentir: guard de idempotencia en los dos runners
-
-**Objetivo:** que un estado terminal ya escrito por el `output_watcher` **no sea pisado** por el runner.
-
-**Valor:** cierra K1. Es la diferencia entre "la herramienta hizo el trabajo y me dice que falló" y "la
-herramienta hizo el trabajo y me lo dice". Es el ítem de mayor impacto en la confianza del operador.
-
-**Diagnóstico exacto (medido, no inferido):**
-```
-output_watcher cierra   → agent_executions.status = 'completed', completion_source='output_watcher'
-   +15,0 s
-runner rc=1 sin `result`→ _mark_terminal(status='error')  ← PISA, sin mirar el status actual
-resultado               → ticket 'completed' + ejecucion 'error' sobre el MISMO trabajo
-```
-El guard correcto **ya existe** y es el modelo a copiar: `services/manifest_watcher.py:259-261`.
-
-**Archivos a editar (los DOS, con el MISMO diff):**
-- `Stacky Agents/backend/services/claude_code_cli_runner.py` — función `_mark_terminal`, la asignación
-  `row.status = status` está en **:3105**.
-- `Stacky Agents/backend/services/codex_cli_runner.py` — misma función, asignación en **:1975**.
-
-**Diff ilustrativo (idéntico en ambos, ajustando solo la indentación del archivo):**
-
-```python
-    with session_scope() as session:
-        row = session.get(AgentExecution, execution_id)
-        if row is None:
-            return
-+       # Plan 282 F1 — NO pisar un estado terminal ya escrito por otro cerrador.
-+       # Simetrico a manifest_watcher.py:259-261. Sin esto, el output_watcher
-+       # cerraba 'completed' y el runner lo degradaba a 'error' 15 s despues,
-+       # con el trabajo entero hecho (medido: execs 211 y 212, RIPLEY/GitLab).
-+       # El error NO se pierde: se anota en metadata para diagnostico.
-+       if (config.config.STACKY_RUN_TERMINAL_GUARD_ENABLED
-+               and row.status not in ACTIVE_STATUSES):
-+           logger.info(
-+               "mark_terminal: exec=%s ya terminal (%s); se ignora la degradacion a %s",
-+               execution_id, row.status, status,
-+           )
-+           _anotar_degradacion_ignorada(session, row, intentado=status, error=error)
-+           return
-        row.status = status
-        row.output = output
-```
-
-**Símbolos exactos a crear:**
-- Constante `ACTIVE_STATUSES` — **NO redefinirla**: importar desde `services.agent_completion` (`:43`),
-  que ya es `frozenset({"preparing", "running", "queued"})`. Este repo ya tiene 4 definiciones duplicadas
-  y `services/run_signals.py:20` diverge (le falta `"queued"`). No agregues una quinta.
-- Función nueva `_anotar_degradacion_ignorada(session, row, *, intentado: str, error: str | None) -> None`
-  en **`Stacky Agents/backend/services/agent_completion.py`** (módulo compartido, no en cada runner).
-  Escribe en `row.metadata_dict` las claves `terminal_guard_ignored_status` (str) y
-  `terminal_guard_ignored_error` (str | None). No cambia `row.status`.
-
-**Test PRIMERO:** `Stacky Agents/backend/tests/test_plan282_cierre_no_miente.py`
-
-Casos exactos:
-1. `test_watcher_cierra_completed_y_runner_no_lo_degrada` — inserta una `AgentExecution` en `completed`,
-   llama `_mark_terminal(status="error")`, asserta que quedó `completed`.
-2. `test_la_degradacion_ignorada_queda_anotada_en_metadata` — mismo escenario, asserta
-   `metadata["terminal_guard_ignored_status"] == "error"`. **El error no se pierde, se archiva.**
-3. `test_runner_si_cierra_cuando_la_ejecucion_sigue_activa` — estado `running`, `_mark_terminal("error")`
-   → queda `error`. **Congela que el guard no rompe el camino normal.**
-4. `test_paridad_claude_y_codex` — `@pytest.mark.parametrize("modulo", ["claude_code_cli_runner",
-   "codex_cli_runner"])`, corre los 3 casos anteriores contra ambos. **Paridad de los 3 runtimes:**
-   Copilot Pro no tiene runner CLI propio, cierra por `manifest_watcher`, que **ya tiene el guard** —
-   el test lo afirma explícitamente con un 5º caso que importa `manifest_watcher.ACTIVE_STATUSES` y
-   verifica que sea el mismo objeto que el de `agent_completion`.
-5. `test_flag_off_restaura_el_comportamiento_viejo` — con `STACKY_RUN_TERMINAL_GUARD_ENABLED=False`,
-   el runner SÍ pisa. Congela la reversibilidad.
-
-**Comando:**
-```bash
-cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
-./venv/Scripts/python.exe -m pytest tests/test_plan282_cierre_no_miente.py -v
-```
-**Criterio BINARIO:** `5 passed` (o el conteo exacto que arroje el parametrize; el DoD exige que el
-número se escriba en el doc al implementar, no un "todos verdes"). Y `pytest --collect-only -q` sobre ese
-archivo debe reportar **≥ 5 seleccionados** — un `-k` sin match da exit 0 y no es evidencia.
-
-**Flag:** `STACKY_RUN_TERMINAL_GUARD_ENABLED`, **default ON**.
-Justificación del ON: es un guard de **no-escritura** (deja de pisar un valor). No enciende ningún loop
-(no es categoría A) y no agrega ninguna escritura al sistema del operador — **quita** una (no es B).
-
-**Impacto por runtime:**
-- **Claude Code CLI:** cierra por `_mark_terminal`; el guard aplica. Fallback: flag OFF = comportamiento actual.
-- **Codex CLI:** idéntico, mismo diff.
-- **GitHub Copilot Pro:** cierra por `manifest_watcher`, que ya tiene el guard desde antes. Sin cambio de
-  código; el test 4 congela que la constante es la misma para que no diverjan.
-
-**Trabajo del operador:** ninguno.
-
-**Lo que F1 NO hace (a propósito):** no toca el debounce de `output_watcher.py:66-67` (2 s / 30 s) ni el
-`stall watchdog`. Bajar el debounce cambia el timing de TODAS las corridas, ADO incluidas, y el defecto
-medido no es el debounce: es el pisado. Ver §6.
-
----
-
-### F2 — El comentario del agente se publica en GitLab
+### F1 — El comentario del agente se publica en GitLab
 
 **Objetivo:** que el HTML que el agente ya generó y validó llegue al issue de GitLab, igual que llega al
 work item de ADO.
 
-**Valor:** cierra K2. Hoy el operador GitLab **nunca** recibe el resultado en su tracker: queda un
+**Valor:** cierra K1. Hoy el operador GitLab **nunca** recibe el resultado en su tracker: queda un
 `comment.html` en disco y una fila `failed` en la bitácora. Es el "produce el trabajo pero reporta mal"
 en su forma más cara.
 
@@ -439,11 +382,115 @@ Los 3 runtimes lo atraviesan igual. Sin fallback por runtime porque no hay diver
 
 ---
 
-### F3 — Un solo diccionario de rótulos, consumido por toda la app
+### F2 — Los servicios GitLab dejan de bypassear la fábrica (y de perder el CA bundle)
+
+**Objetivo:** que ningún módulo construya `GitLabTrackerProvider` a mano.
+
+**Valor:** cierra K3. Contra un GitLab self-hosted con CA interna —**el caso del operador**— estos 4
+servicios mueren con `CERTIFICATE_VERIFY_FAILED` mientras la sonda y el listado de tickets funcionan. Es
+la peor forma de "no fluido": una parte del producto anda y otra no, sin explicación visible.
+
+**Evidencia (los 4 ofensores):**
+```
+services/gitlab_ci_logs.py:11      GitLabTrackerProvider(project=project)   ← sin ca_bundle
+services/gitlab_ci_provider.py:31  GitLabTrackerProvider(project=project)   ← sin ca_bundle
+services/gitlab_preflight.py:38    GitLabTrackerProvider(project=project)   ← sin ca_bundle
+services/gitlab_variables.py:14    GitLabTrackerProvider(project=project)   ← sin ca_bundle
+```
+La fábrica correcta ya resuelve el bundle en **ambas** ramas: `services/tracker_provider.py:144-148`
+(per-project) y `:153-156` (legacy). El plan 276 F8.1 ya arregló la rama legacy y dejó escrito que era
+"el único camino del repo que construía este provider sin certificado". **Faltaban estos 4.**
+
+**Cambio exacto en los 4 archivos:** reemplazar la construcción directa por
+`services.tracker_provider.get_tracker_provider(project)`, y validar que lo devuelto sea un
+`GitLabTrackerProvider` (si el proyecto no es GitLab, estos servicios no aplican: devolver el error
+tipado del módulo, no un `AttributeError`).
+
+**Cuidado con el import circular:** `tracker_provider.py` importa `gitlab_provider`. Los 4 servicios
+deben importar `get_tracker_provider` **dentro de la función**, no a nivel de módulo — es el patrón que
+`tracker_provider.py:141` ya usa para `project_context`.
+
+**Test PRIMERO:** `Stacky Agents/backend/tests/test_plan282_fabrica_unica.py`
+1. El censo AST de F0 da **0** ofensores (reusar la función, no reescribirla).
+2. Para cada uno de los 4 servicios: con un proyecto GitLab que tiene `ca_bundle` configurado, el cliente
+   resultante **tiene** ese bundle. Monkeypatchear `get_tracker_provider` y assertar el paso del valor.
+3. `test_servicio_en_proyecto_ado_devuelve_error_tipado` — no `AttributeError`.
+4. Guarda: con la flag OFF, el camino viejo sigue disponible (reversibilidad).
+
+**Comando:**
+```bash
+cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
+./venv/Scripts/python.exe -m pytest tests/test_plan282_fabrica_unica.py -v
+```
+**Criterio BINARIO:** todos verdes y el censo F0 de constructores en **0**.
+
+**ADVERTENCIA:** `services/gitlab_client.py:143-145` documenta que **no** hay que ensuciar
+`REQUESTS_CA_BUNDLE` global (rompe la verificación de ADO/Jira/Mantis/LLM en el mismo backend). El único
+sitio que lo hace hoy es `tools/migrar_mantis_gitlab/destination_writer.py:238`, que está **fuera de
+alcance** de este plan (§6). No "arregles" los 4 servicios exportando esa variable.
+
+**Flag:** `STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED`, **default ON**. No agrega escrituras ni loops:
+cambia de dónde sale un objeto de configuración.
+**Impacto por runtime:** ninguno (capa de servicios).
+**Trabajo del operador:** ninguno.
+
+---
+
+### F3 — El asignado deja de borrarse en silencio
+
+**Objetivo:** que un username GitLab que no resuelve **falle diciéndolo**, en vez de vaciar el campo.
+
+**Valor:** cierra K6. Es el silencio más caro de la matriz de paridad. Hoy `update_item_assignee`
+(`services/gitlab_provider.py:506-518`) hace:
+```python
+assignee_id = self._resolve_assignee_id(assignee) if assignee else None
+if assignee_id: update_body["assignee_ids"] = [assignee_id]
+else:           update_body["assignee_ids"] = []   # ← BORRA al asignado actual
+```
+`_resolve_assignee_id` devuelve `None` ante cualquier fallo (`:519-...`). Resultado: un typo en el
+username, o un fallo transitorio de `/users`, **desasigna el issue del operador sin avisar**. En ADO el
+camino equivalente propaga el error.
+
+**Cambio exacto:** distinguir los dos casos, que hoy están colapsados.
+- `assignee` vacío/`None` → intención explícita de desasignar → `assignee_ids: []`. **Se conserva.**
+- `assignee` con valor **que no resuelve** → **lanzar `TrackerApiError`** con el username en el mensaje.
+  Nunca mandar `[]`.
+
+Actualizar el docstring: hoy dice "Si no se encuentra, limpia assignees", que documenta el bug como si
+fuera la feature.
+
+**Test PRIMERO:** `Stacky Agents/backend/tests/test_plan282_assignee_no_borra.py`
+1. `test_username_valido_asigna` — camino feliz.
+2. `test_username_vacio_desasigna_a_proposito` — `assignee=""` → `assignee_ids: []`. **Congela la
+   intención legítima.**
+3. `test_username_que_no_resuelve_lanza_y_no_manda_body` — asserta que se lanzó `TrackerApiError` **y**
+   que `_request` **no fue llamado con `assignee_ids: []`**. Las dos cosas: sin el segundo assert, el test
+   pasa aunque el borrado siga ocurriendo antes de lanzar.
+4. `test_fallo_transitorio_de_users_no_desasigna` — `/users` lanza → propaga, no vacía.
+5. `test_ado_no_cambia` — congela el camino ADO.
+
+**Comando:**
+```bash
+cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
+./venv/Scripts/python.exe -m pytest tests/test_plan282_assignee_no_borra.py -v
+```
+**Criterio BINARIO:** 5 verdes.
+
+**Flag:** `STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED`, **default ON**.
+Justificación del ON: **reduce** la escritura al sistema del operador (deja de emitir un PUT destructivo).
+Una flag que quita una escritura destructiva no puede nacer OFF sin dejar el destrozo encendido de fábrica.
+
+**Impacto por runtime:** ninguno.
+**Trabajo del operador:** ninguno. Cambio de comportamiento visible: donde antes el issue quedaba
+silenciosamente sin asignar, ahora aparece un error con el username que no se pudo resolver.
+
+---
+
+### F4 — Un solo diccionario de rótulos, consumido por toda la app
 
 **Objetivo:** que ningún rótulo visible diga "ADO" cuando el tracker del proyecto no es ADO.
 
-**Valor:** cierra K3. Es el frente de fluidez más grande en superficie: 96 rótulos, y el #1 del ranking
+**Valor:** cierra K2. Es el frente de fluidez más grande en superficie: 96 rótulos, y el #1 del ranking
 —`shellNav.ts:18` + `App.tsx:455`— está en pantalla el 100% del tiempo **contradiciendo el título de la
 propia página**, que desde el 276 ya dice "Tickets GitLab".
 
@@ -531,7 +578,7 @@ npx tsc --noEmit
 
 **ADVERTENCIA para el implementador — dos trampas reales de este repo:**
 - `TicketGraphView.jsx` es **`.jsx`, no `.tsx`**: `tsc --noEmit` **NO lo cubre**. Su única verificación es
-  el smoke manual. Tocalo con cuidado y anotalo en el smoke de F9.
+  el smoke manual. Tocalo con cuidado y anotalo en el smoke de F8.
 - Los rótulos de `commandPaletteData.ts` están **congelados por un test ajeno**:
   `frontend/src/services/__tests__/commandPaletteDevopsActions.test.ts:109-110`. Ese test hay que
   **actualizarlo en el mismo commit**, no ignorarlo. Si lo dejás rojo, el ratchet frontend te frena.
@@ -543,11 +590,11 @@ excepción.
 
 ---
 
-### F4 — El link deja de apuntar al tracker de otro cliente
+### F5 — El link deja de apuntar al tracker de otro cliente
 
 **Objetivo:** eliminar la URL de ADO con org y proyecto hardcodeados.
 
-**Valor:** cierra K5. Esto **no es cosmética**: "Abrir en ADO" y "Copiar link ADO" del menú contextual, en
+**Valor:** cierra K4. Esto **no es cosmética**: "Abrir en ADO" y "Copiar link ADO" del menú contextual, en
 un proyecto GitLab, mandan al operador a `dev.azure.com/UbimiaPacifico/Strategist_Pacifico` — la
 organización de **otro cliente**. Es un link roto que además filtra el nombre de un tercero.
 
@@ -590,11 +637,11 @@ Los 4 consumidores deben manejar `null` **ocultando la acción**, no renderizand
 **Flag:** `STACKY_TRACKER_URLS_ROUTED_ENABLED`, **default ON**. Solo lectura.
 **Impacto por runtime:** ninguno.
 **Trabajo del operador:** ninguno. **Nota:** si un proyecto ADO no tiene `organization` en su config, la
-acción "Abrir en ADO" desaparece en vez de mandar a una org ajena. Es una mejora, y F9 lo verifica.
+acción "Abrir en ADO" desaparece en vez de mandar a una org ajena. Es una mejora, y F8 lo verifica.
 
 ---
 
-### F5 — El filtro "Solo abiertos" deja de ser ciego en GitLab
+### F6 — El filtro "Solo abiertos" deja de ser ciego en GitLab
 
 **Objetivo:** que el filtro y el color de estado funcionen con el vocabulario del tracker activo.
 
@@ -641,116 +688,12 @@ export function colorDeEstado(estado: string | null | undefined, tracker: string
 
 ---
 
-### F6 — Los servicios GitLab dejan de bypassear la fábrica (y de perder el CA bundle)
-
-**Objetivo:** que ningún módulo construya `GitLabTrackerProvider` a mano.
-
-**Valor:** cierra K4. Contra un GitLab self-hosted con CA interna —**el caso del operador**— estos 4
-servicios mueren con `CERTIFICATE_VERIFY_FAILED` mientras la sonda y el listado de tickets funcionan. Es
-la peor forma de "no fluido": una parte del producto anda y otra no, sin explicación visible.
-
-**Evidencia (los 4 ofensores):**
-```
-services/gitlab_ci_logs.py:11      GitLabTrackerProvider(project=project)   ← sin ca_bundle
-services/gitlab_ci_provider.py:31  GitLabTrackerProvider(project=project)   ← sin ca_bundle
-services/gitlab_preflight.py:38    GitLabTrackerProvider(project=project)   ← sin ca_bundle
-services/gitlab_variables.py:14    GitLabTrackerProvider(project=project)   ← sin ca_bundle
-```
-La fábrica correcta ya resuelve el bundle en **ambas** ramas: `services/tracker_provider.py:144-148`
-(per-project) y `:153-156` (legacy). El plan 276 F8.1 ya arregló la rama legacy y dejó escrito que era
-"el único camino del repo que construía este provider sin certificado". **Faltaban estos 4.**
-
-**Cambio exacto en los 4 archivos:** reemplazar la construcción directa por
-`services.tracker_provider.get_tracker_provider(project)`, y validar que lo devuelto sea un
-`GitLabTrackerProvider` (si el proyecto no es GitLab, estos servicios no aplican: devolver el error
-tipado del módulo, no un `AttributeError`).
-
-**Cuidado con el import circular:** `tracker_provider.py` importa `gitlab_provider`. Los 4 servicios
-deben importar `get_tracker_provider` **dentro de la función**, no a nivel de módulo — es el patrón que
-`tracker_provider.py:141` ya usa para `project_context`.
-
-**Test PRIMERO:** `Stacky Agents/backend/tests/test_plan282_fabrica_unica.py`
-1. El censo AST de F0 da **0** ofensores (reusar la función, no reescribirla).
-2. Para cada uno de los 4 servicios: con un proyecto GitLab que tiene `ca_bundle` configurado, el cliente
-   resultante **tiene** ese bundle. Monkeypatchear `get_tracker_provider` y assertar el paso del valor.
-3. `test_servicio_en_proyecto_ado_devuelve_error_tipado` — no `AttributeError`.
-4. Guarda: con la flag OFF, el camino viejo sigue disponible (reversibilidad).
-
-**Comando:**
-```bash
-cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
-./venv/Scripts/python.exe -m pytest tests/test_plan282_fabrica_unica.py -v
-```
-**Criterio BINARIO:** todos verdes y el censo F0 de constructores en **0**.
-
-**ADVERTENCIA:** `services/gitlab_client.py:143-145` documenta que **no** hay que ensuciar
-`REQUESTS_CA_BUNDLE` global (rompe la verificación de ADO/Jira/Mantis/LLM en el mismo backend). El único
-sitio que lo hace hoy es `tools/migrar_mantis_gitlab/destination_writer.py:238`, que está **fuera de
-alcance** de este plan (§6). No "arregles" los 4 servicios exportando esa variable.
-
-**Flag:** `STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED`, **default ON**. No agrega escrituras ni loops:
-cambia de dónde sale un objeto de configuración.
-**Impacto por runtime:** ninguno (capa de servicios).
-**Trabajo del operador:** ninguno.
-
----
-
-### F7 — El asignado deja de borrarse en silencio
-
-**Objetivo:** que un username GitLab que no resuelve **falle diciéndolo**, en vez de vaciar el campo.
-
-**Valor:** es el silencio más caro de la matriz de paridad. Hoy `update_item_assignee`
-(`services/gitlab_provider.py:506-518`) hace:
-```python
-assignee_id = self._resolve_assignee_id(assignee) if assignee else None
-if assignee_id: update_body["assignee_ids"] = [assignee_id]
-else:           update_body["assignee_ids"] = []   # ← BORRA al asignado actual
-```
-`_resolve_assignee_id` devuelve `None` ante cualquier fallo (`:519-...`). Resultado: un typo en el
-username, o un fallo transitorio de `/users`, **desasigna el issue del operador sin avisar**. En ADO el
-camino equivalente propaga el error.
-
-**Cambio exacto:** distinguir los dos casos, que hoy están colapsados.
-- `assignee` vacío/`None` → intención explícita de desasignar → `assignee_ids: []`. **Se conserva.**
-- `assignee` con valor **que no resuelve** → **lanzar `TrackerApiError`** con el username en el mensaje.
-  Nunca mandar `[]`.
-
-Actualizar el docstring: hoy dice "Si no se encuentra, limpia assignees", que documenta el bug como si
-fuera la feature.
-
-**Test PRIMERO:** `Stacky Agents/backend/tests/test_plan282_assignee_no_borra.py`
-1. `test_username_valido_asigna` — camino feliz.
-2. `test_username_vacio_desasigna_a_proposito` — `assignee=""` → `assignee_ids: []`. **Congela la
-   intención legítima.**
-3. `test_username_que_no_resuelve_lanza_y_no_manda_body` — asserta que se lanzó `TrackerApiError` **y**
-   que `_request` **no fue llamado con `assignee_ids: []`**. Las dos cosas: sin el segundo assert, el test
-   pasa aunque el borrado siga ocurriendo antes de lanzar.
-4. `test_fallo_transitorio_de_users_no_desasigna` — `/users` lanza → propaga, no vacía.
-5. `test_ado_no_cambia` — congela el camino ADO.
-
-**Comando:**
-```bash
-cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
-./venv/Scripts/python.exe -m pytest tests/test_plan282_assignee_no_borra.py -v
-```
-**Criterio BINARIO:** 5 verdes.
-
-**Flag:** `STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED`, **default ON**.
-Justificación del ON: **reduce** la escritura al sistema del operador (deja de emitir un PUT destructivo).
-Una flag que quita una escritura destructiva no puede nacer OFF sin dejar el destrozo encendido de fábrica.
-
-**Impacto por runtime:** ninguno.
-**Trabajo del operador:** ninguno. Cambio de comportamiento visible: donde antes el issue quedaba
-silenciosamente sin asignar, ahora aparece un error con el username que no se pudo resolver.
-
----
-
-### F8 — Las pantallas ADO-only dejan de ser callejones sin salida
+### F7 — Las pantallas ADO-only dejan de ser callejones sin salida
 
 **Objetivo:** que un proyecto GitLab no vea entradas de menú que, al abrirlas, dicen "solo disponible
 para proyectos Azure DevOps".
 
-**Valor:** cierra K6. Hoy el tab **PM** se muestra por `sections.pm` (`App.tsx:382`) sin mirar el tracker,
+**Valor:** cierra K5. Hoy el tab **PM** se muestra por `sections.pm` (`App.tsx:382`) sin mirar el tracker,
 se presenta como *"Fase 1 MVP · sin IA · azure_devops únicamente"* (`PMCommandCenter.tsx:995`), ofrece
 **"↻ Sync ADO"** (`:1004`), y al pulsarlo el backend responde *"PM Intelligence Suite v1 solo está
 disponible para proyectos Azure DevOps"* (`backend/api/pm.py:71`). Es un callejón sin salida ofrecido en
@@ -792,7 +735,7 @@ directo y no explica nada.
    ADO-only, este test lo obliga a declararlo acá.
 
 **Comando:** `npx vitest run src/lib/__tests__/tabsPorTracker.test.ts --testTimeout=60000` + `tsc --noEmit`
-**Criterio BINARIO:** 6 verdes, `tsc` 0, y en el smoke de F9 los 3 tabs aparecen deshabilitados con
+**Criterio BINARIO:** 6 verdes, `tsc` 0, y en el smoke de F8 los 3 tabs aparecen deshabilitados con
 tooltip en un proyecto GitLab.
 
 **Flag:** `STACKY_ADO_ONLY_TABS_GATED_ENABLED`, **default ON**. Presentación pura.
@@ -801,11 +744,11 @@ tooltip en un proyecto GitLab.
 
 ---
 
-### F9 — Gate de cierre, registro de flags y smoke manual
+### F8 — Gate de cierre, registro de flags y smoke manual
 
-**Objetivo:** dejar el plan verificable de una sola corrida y las 8 flags visibles en la UI del arnés.
+**Objetivo:** dejar el plan verificable de una sola corrida y las **7 flags nuevas** visibles en la UI del arnés.
 
-**F9.1 — Registro de las 8 flags nuevas.** Cada flag es un **bloque atómico**; si falta una pata, la flag
+**F8.1 — Registro de las 7 flags nuevas.** Cada flag es un **bloque atómico**; si falta una pata, la flag
 queda registrada pero muerta y **el gate igual pasa**. Los lugares, con el patrón exacto que ya usa
 `STACKY_GITLAB_DEEP_LINKS_ENABLED`:
 
@@ -822,14 +765,14 @@ queda registrada pero muerta y **el gate igual pasa**. Los lugares, con el patr�
 Y `test_harness_flags_help.py` tiene **4 fallos ajenos preexistentes**: el criterio de aceptación es
 **delta cero**, no "verde absoluto" — contá los fallos antes y después y exigí el mismo número.
 
-**F9.2 — Gate ejecutable con exit code.** Crear
+**F8.2 — Gate ejecutable con exit code.** Crear
 `Stacky Agents/backend/scripts/gate_plan282.py`, que corre y devuelve:
 - `exit 0` — los 6 KPI en meta.
 - `exit 2` — algún KPI fuera de meta (imprime cuál y su valor).
 - `exit 5` — **no se pudo medir** (falta backend levantado, o no hay proyecto GitLab configurado). Un
   gate que no puede medir **no debe reportar verde**.
 
-**F9.3 — Smoke manual (requiere backend levantado + token GitLab del operador).** Pasos numerados, con el
+**F8.3 — Smoke manual (requiere backend levantado + token GitLab del operador).** Pasos numerados, con el
 resultado esperado de cada uno. Esto **no** se automatiza: requiere credenciales reales.
 1. Abrir un proyecto GitLab. La pestaña dice **"Tickets GitLab"** en las dos shells (v1 y v2).
 2. Las tarjetas rotulan **`#1115`**, no `ADO-1115`.
@@ -839,12 +782,12 @@ resultado esperado de cada uno. Esto **no** se automatiza: requiere credenciales
    claves lógicas, no `Done/Closed/Resolved`.
 6. Correr un agente hasta el final: la ejecución queda **`completed`** (no `error`) y el comentario
    **aparece en el issue de GitLab**.
-7. Reintentar la publicación: **no** aparece un segundo comentario (idempotencia de F2).
+7. Reintentar la publicación: **no** aparece un segundo comentario (idempotencia de F1).
 8. Los tabs PM / Sprint Board / User Stats están **deshabilitados con tooltip**, y su deep link directo
    sigue aterrizando.
 9. Abrir el mismo flujo en un proyecto **ADO**: todo se comporta **exactamente como antes**.
 
-**Criterio BINARIO de F9:** `gate_plan282.py` sale **0**; `run_harness_tests` con los 6 archivos nuevos
+**Criterio BINARIO de F8:** `gate_plan282.py` sale **0**; `run_harness_tests` con los 6 archivos nuevos
 registrados no introduce ningún rojo nuevo (delta cero contra el commit base); `tsc --noEmit` sale 0; y
 los 9 pasos del smoke se marcan uno por uno en el propio doc del plan al implementar.
 
@@ -854,17 +797,18 @@ los 9 pasos del smoke se marcan uno por uno en el propio doc del plan al impleme
 
 | # | Riesgo | Mitigación |
 |---|---|---|
-| R1 | **F1 esconde errores reales**: si el runner falla de verdad después de que el watcher cerró, el operador no se entera | El error **no se descarta**: se anota en `metadata` (`terminal_guard_ignored_status/_error`). F1 caso 2 lo congela. Además el `stall watchdog` (600 s) sigue intacto y sí degrada corridas colgadas |
-| R2 | **F2 duplica comentarios** en el issue del operador | `comment_exists(item_id, marker)` obligatorio antes de publicar; F2 caso 3 lo congela. Precedente directo: la épica duplicada de esta semana nació de publicar sin chequear |
-| R3 | **F3 rompe tests ajenos** — `commandPaletteDevopsActions.test.ts:109-110` congela los rótulos viejos | Está declarado en la fase: se actualiza **en el mismo commit**. No es un rojo ajeno, es parte del cambio |
-| R4 | **F3 toca 25 sitios**: riesgo de romper el render | Los helpers son funciones puras testeadas antes de cablearse; `tsc --noEmit` cubre todo salvo `TicketGraphView.jsx` (`.jsx`, no tipado) — por eso está en el smoke manual paso 2 |
-| R5 | **F6 import circular** `tracker_provider` ↔ `gitlab_provider` | Import **dentro de la función**, patrón ya usado en `tracker_provider.py:141` |
-| R6 | **F7 rompe un flujo que dependía del borrado silencioso** | F7 caso 2 conserva el desasignar explícito (`assignee=""`). Solo cambia el caso "no resuelve", que hoy es un bug |
-| R7 | **F8 mata deep links** (defecto conocido: los gates de tab nacen `false`) | Por eso **deshabilitar con tooltip**, no ocultar. Caso 4: sin proyecto, falla **abierto**. Smoke paso 8 verifica que el deep link aterriza |
-| R8 | **El working tree tiene 7 archivos sin commitear**, 4 de ellos del dominio de este plan | F0 debe correrse **antes** de tocar nada y anotar el `git stash list`/`git status` de partida en el doc. **PROHIBIDO** `git stash`, `reset`, `checkout --`: ese diff es el fix vivo de la épica duplicada |
-| R9 | **Sesión paralela** escribiendo los planes 280 y 281 | Este plan no toca `Stacky Agents/docs/280_*` ni `281_*`. La frontera con el 281 está declarada en el encabezado. Antes de commitear: `git worktree list` y `git log` |
-| R10 | **Todo test de DB es flaky** por `SQLITE_LOCKED` | Los tests de F1/F2 usan la sesión de test del repo, no la DB viva. **Nunca** correr pytest sin `DATABASE_URL`: un pytest suelto escribe en la base real del operador (182 MB) |
+| R1 | **F1 depende del plan 280.** Sin él la ejecución queda `error`, el gate `agent_completion_internal.py:233-234` saltea el publish, y K1 **no se puede medir en vivo** | El test de F1 fuerza `final_status="completed"` y prueba el publicador **aislado**: el router se verifica sin depender del 280. El KPI en vivo se mide en el smoke (F8.3 paso 6) y, si el 280 no está, `gate_plan282.py` sale **exit 5** (no medible), nunca 0. **Un gate que no puede medir no reporta verde** |
+| R2 | **F1 duplica comentarios** en el issue del operador | `comment_exists(item_id, marker)` obligatorio antes de publicar; F1 caso 3 lo congela. Precedente directo: la épica duplicada de esta semana nació de publicar sin chequear |
+| R3 | **F4 rompe tests ajenos** — `commandPaletteDevopsActions.test.ts:109-110` congela los rótulos viejos | Está declarado en la fase: se actualiza **en el mismo commit**. No es un rojo ajeno, es parte del cambio |
+| R4 | **F4 toca 25 sitios**: riesgo de romper el render | Los helpers son funciones puras testeadas antes de cablearse; `tsc --noEmit` cubre todo salvo `TicketGraphView.jsx` (`.jsx`, no tipado) — por eso está en el smoke manual paso 2 |
+| R5 | **F2 import circular** `tracker_provider` ↔ `gitlab_provider` | Import **dentro de la función**, patrón ya usado en `tracker_provider.py:141` |
+| R6 | **F3 rompe un flujo que dependía del borrado silencioso** | F3 caso 2 conserva el desasignar explícito (`assignee=""`). Solo cambia el caso "no resuelve", que hoy es un bug |
+| R7 | **F7 mata deep links** (defecto conocido: los gates de tab nacen `false`) | Por eso **deshabilitar con tooltip**, no ocultar. Caso 4: sin proyecto, falla **abierto**. Smoke paso 8 verifica que el deep link aterriza |
+| R8 | **El working tree tiene archivos sin commitear** de otras sesiones, varios del dominio de este plan (`api/tickets.py`, `uiGuards.ts`, `EpicFromBriefModal.tsx`, y **los dos ratchets** `run_harness_tests.sh`/`.ps1`) | F0 se corre **antes** de tocar nada y anota el `git status` de partida en el doc. **PROHIBIDO** `git stash`, `reset`, `checkout --`, `amend`, `rebase`: ese diff es el fix vivo de la épica duplicada. Los ratchets ya están modificados por otra sesión — agregá tus líneas **sin** revertir las suyas |
+| R9 | **Tres sesiones paralelas** sobre el MISMO worktree (`N:` ↔ `C:\desarrollo` son el mismo dir por junction) escribiendo 280, 281 y este | **No abrir rama nueva** (mueve el HEAD de las otras sesiones). Commitear con `git commit -m "..." -- "<ruta>"` para no barrer ajenos. Antes de commitear: `git worktree list` + `git log`. **Colisión detectada:** existen DOS archivos `280_*` (ver §6.16) |
+| R10 | **Todo test de DB es flaky** por `SQLITE_LOCKED` | Los tests de F1 usan la sesión de test del repo, no la DB viva. **Nunca** correr pytest sin `DATABASE_URL`: un pytest suelto escribe en la base real del operador (193 MB) |
 | R11 | **El censo de F0 cuenta comentarios** y da falsos positivos (el código está en español) | El filtro descarta líneas de comentario **y** el test tiene una guarda que prueba que el detector detecta antes de assertar ausencia |
+| R12 | **El censo de F0 por AST da CERO si la llamada va por alias** y premia el bug | `_rutea_por_tracker` censa por **REFERENCIA** (`ast.Name` y `ast.Attribute`), no por `ast.Call`. Y el criterio de F0 exige **reproducir primero la foto vieja** (4 / 96) antes de activar los asserts verdes |
 
 ---
 
@@ -872,7 +816,7 @@ los 9 pasos del smoke se marcan uno por uno en el propio doc del plan al impleme
 
 **Cubierto por el plan 281 (sesión paralela):** el error literal `no usa Azure DevOps` en ticket-grafo, su
 intermitencia, el censo por AST de sitios ADO-only con esa firma, y el contrato de ruteo de esos sitios.
-**Dependencia blanda:** si el 281 unifica `project_context.py:340-342`, F2 se simplifica pero no cambia de
+**Dependencia blanda:** si el 281 unifica `project_context.py:340-342`, F1 se simplifica pero no cambia de
 contrato.
 
 **Ya implementado, no re-planificar:** la idempotencia de `epics/from-brief` (working tree,
@@ -923,7 +867,29 @@ contrato.
 12. **Sync automático, webhooks, techo de 4.000 issues, Jira y Mantis** — fuera por los planes previos.
 13. **El plan 272 nunca escrito**: 270 y 271 le delegaron la unificación de los 6 escritores de estado, el
     `_origin_guard` del motor B y el vocabulario GitLab de `_state_map_for_gitlab`. Sigue huérfano. Este
-    plan **consume** las 4 claves lógicas (F3), no las amplía.
+    plan **consume** las 4 claves lógicas (F4), no las amplía.
+14. **RECHAZO EXPLÍCITO del pase del plan 281 §7** — *"construir el equivalente GitLab de los 7 sitios que
+    F7 degrada a valor neutro"*: criterios de aceptación (`services/acceptance_criteria.py:25`),
+    self-review (`services/self_review.py:43`), similar tickets (`services/similar_tickets.py:91`),
+    auto-assign (`services/ticket_assigner.py:356`), business preflight
+    (`services/business_preflight.py:37`), enriquecimiento de contexto (`api/agents.py:1798`) y estado
+    equivalente de tarea (`api/tickets.py:4912`). **Razón del rechazo:** son **7 features nuevas de
+    GitLab**, no arreglos de paridad de algo que ya existe. Sumadas al alcance actual, este plan pasaría
+    de 9 fases quirúrgicas a ~16 y dejaría de ser implementable por un modelo menor — que es exactamente
+    lo que el encargo prohíbe. Además, el propio 281 las degrada a un valor neutro **honesto**: hoy esos
+    7 sitios ya devuelven ese mismo valor por su `except`, así que el 281 no empeora nada y este plan no
+    tiene urgencia que justifique tomarlas. **Candidatos naturales al plan siguiente**, en orden de valor:
+    similar tickets y auto-assign (los dos que el operador nota) antes que los cinco restantes.
+15. **RECHAZO del pase del 281 §7 sobre `ado_sync` y polling** — el breaker `"ado_sync"` usado con key de
+    proyecto GitLab (`api/tickets.py:6430`) y la cadencia de `GET /api/tickets` que late a ~8 s por
+    colisión de `queryKey` entre `TicketBoard.tsx:987-993` y `useRunningStatus.ts:51-61`. Son problemas
+    de **performance y naming**, no de paridad ni de fluidez percibida. Van a un plan de rendimiento.
+16. **COLISIÓN DE NUMERACIÓN DETECTADA — no la resuelve este plan, pero queda anotada.** Al momento de
+    escribir existen **dos archivos con el número 280**:
+    `docs/280_PLAN_EL_DESENLACE_MIRA_EL_TRABAJO_ENTREGADO_UN_SOLO_VEREDICTO.md` (tracked, modificado) y
+    `docs/280_PLAN_CALENDARIO_DE_REUNIONES_TEAMS_MINUTAS_Y_PENDIENTES_ACCIONABLES.md` (untracked). Son dos
+    planes distintos de dos sesiones distintas. **Requiere decisión del operador**: uno de los dos debe
+    renumerarse. Este plan tomó el 282 pinneado y **no renumera nada por su cuenta**.
 
 ---
 
@@ -950,31 +916,51 @@ contrato.
 
 ## 8. Orden de implementación
 
-1. **F0** — los dos censos, en su versión "rojo esperado". **No avanzar sin ver los números 4 / 96.**
-2. **F1** — guard de idempotencia. Es el de mayor impacto y el más aislado.
-3. **F2** — router de publicación de comentarios. Depende de que F1 deje la ejecución en `completed`.
-4. **F6** — fábrica única. Backend, independiente de F3-F5; hacerlo antes del bloque de frontend.
-5. **F7** — assignee estricto. Backend, independiente.
-6. **F3** — rótulos. Es el más largo (25 sitios): entrar con el helper ya testeado.
-7. **F4** — URLs. Depende de F3 (comparte consumidores en `entityActions`/`copyFormats`).
-8. **F5** — estados y filtros.
-9. **F8** — tabs gateados.
-10. **F9** — flags, gate, smoke.
+Las fases ya están escritas en el orden en que se implementan. Bloque backend primero (F1-F3), bloque
+frontend después (F4-F7), cierre al final (F8).
+
+1. **F0** — los dos censos, en su versión "rojo esperado". **No avanzar sin ver los números 4 / 96 y sin
+   que el detector de `ado_publisher` reporte "no rutea".** Si algún número no reproduce, el censo está
+   mal escrito: arreglalo antes de seguir, no ajustes el número esperado.
+2. **F1** — router de publicación de comentarios. **Es el de mayor valor del plan.** Se puede implementar
+   y testear sin el plan 280; solo su KPI en vivo lo necesita (R1).
+3. **F2** — fábrica única. Backend, independiente de todo lo demás.
+4. **F3** — assignee estricto. Backend, independiente.
+5. **F4** — rótulos. El más largo (25 sitios): entrar con el helper **ya testeado**, y actualizar
+   `commandPaletteDevopsActions.test.ts:109-110` en el mismo commit.
+6. **F5** — URLs. Depende de F4 (comparte consumidores en `entityActions` y `copyFormats`).
+7. **F6** — estados y filtros.
+8. **F7** — tabs gateados.
+9. **F8** — flags, gate y smoke.
+
+**Corte válido si hay que parar antes de terminar:** F0 → F1 → F8.1/F8.2 entrega el frente de mayor valor
+(el trabajo llega al issue de GitLab) de forma cerrada y verificable. F2-F7 son aditivas e independientes
+entre sí; ninguna deja el sistema a medio camino si no se hace.
 
 ## 9. Definición de Hecho (DoD)
 
-- [ ] Los 6 KPI (K1-K6) en meta, medidos por `backend/scripts/gate_plan282.py` con **exit 0**.
-- [ ] Los 6 archivos de test nuevos existen, pasan, y su conteo exacto de casos está **escrito en este
-      doc** (no "todos verdes"). `--collect-only -q` confirma el número de seleccionados en cada uno.
+- [ ] Los 6 KPI (K1-K6) en meta, medidos por `backend/scripts/gate_plan282.py` con **exit 0** — o
+      **exit 5** documentado si K1 no se puede medir en vivo por falta del plan 280 (R1). Nunca exit 0
+      con un KPI sin medir.
+- [ ] Los **9 archivos de test** nuevos (4 backend + 5 frontend) existen, pasan, y el conteo exacto de
+      casos de cada uno está **escrito en este doc** (no "todos verdes"). `--collect-only -q` confirma el
+      número de seleccionados en los 4 de backend.
 - [ ] Los tests backend nuevos están registrados en **`run_harness_tests.sh` Y `run_harness_tests.ps1`**.
 - [ ] `run_harness_tests` no introduce ningún rojo nuevo: **delta cero** contra el commit base, contado
       antes y después (el repo tiene rojos ajenos preexistentes; "verde absoluto" no es el criterio).
 - [ ] `npx tsc --noEmit` sale **0**.
-- [ ] Las 8 flags nuevas tienen sus **6 patas** y aparecen en el panel de Configuración → Arnés.
+- [ ] Las **7 flags nuevas** (`STACKY_COMMENT_PUBLISH_ROUTED_ENABLED`,
+      `STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED`, `STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED`,
+      `STACKY_TRACKER_LABELS_GLOBAL_ENABLED`, `STACKY_TRACKER_URLS_ROUTED_ENABLED`,
+      `STACKY_TICKET_STATE_FILTER_ROUTED_ENABLED`, `STACKY_ADO_ONLY_TABS_GATED_ENABLED`) tienen sus
+      **6 patas**, **todas nacen ON**, y aparecen en el panel de Configuración → Arnés.
 - [ ] `test_harness_flags_help.py` mantiene su conteo de fallos **preexistente**, sin sumar ninguno.
-- [ ] Los 9 pasos del smoke manual (F9.3) marcados uno por uno, incluido el **paso 9** (un proyecto ADO se
+- [ ] Los 9 pasos del smoke manual (F8.3) marcados uno por uno, incluido el **paso 9** (un proyecto ADO se
       comporta exactamente como antes).
 - [ ] Ningún archivo de `Stacky Agents/docs/280_*` ni `281_*` fue tocado.
-- [ ] Los 7 archivos modificados sin commitear al inicio siguen intactos o fueron commiteados por su
-      dueño: **no** se ejecutó `git stash`, `reset`, `checkout --`, `amend` ni `rebase`.
+- [ ] Los archivos modificados por otras sesiones al inicio siguen intactos o fueron commiteados por su
+      dueño: **no** se ejecutó `git stash`, `reset`, `checkout --`, `amend` ni `rebase`. En particular,
+      las líneas que otra sesión ya agregó a `run_harness_tests.sh` y `.ps1` **siguen ahí**.
+- [ ] Ninguna fase de este plan modificó `services/claude_code_cli_runner.py`, `codex_cli_runner.py` ni
+      `services/run_outcome.py`: **esa capa es del plan 280** y tocarla es un conflicto de merge.
 - [ ] Sin `git push` (el push es siempre manual).

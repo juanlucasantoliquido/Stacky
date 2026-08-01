@@ -13,6 +13,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+# El draft es un fragmento "apto para merge con el perfil base del proyecto"
+# (ver draft_profile_from_docs), así que la versión de schema que declara TIENE
+# que ser la del destino. Se importa la constante en vez de hardcodear un
+# entero: un literal acá diverge en silencio y validate_client_profile rechaza
+# todo perfil con schema_version mayor al soportado.
+from services.client_profile import SCHEMA_VERSION
+
 
 # Patterns para detectar directorios de doc técnica / funcional.
 _TECH_PATTERNS = re.compile(r"^(t[eé]cnica?|technical)$", re.IGNORECASE)
@@ -91,7 +98,7 @@ def draft_profile_from_docs(docs_root: Path) -> dict[str, Any]:
     Devuelve un dict parcial apto para merge con el perfil base del proyecto.
     """
     profile: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": SCHEMA_VERSION,
         "docs_indexes": {},
         "process_catalog": [],
         "_autoprofile_source": str(docs_root),

@@ -11,6 +11,16 @@ Tests:
 5. test_no_invention_with_no_process_headings
 6. test_detects_functional_online
 7. test_endpoint_returns_404_when_flag_off
+
+Colisión de schema (defecto vivo, ajeno al plan 42): el draft emitía
+schema_version=2 mientras services/client_profile.SCHEMA_VERSION sigue en 1, y
+validate_client_profile rechaza toda versión mayor a la soportada. Como el
+draft es "parcial apto para merge con el perfil base" (docstring del módulo),
+ese 2 viajaba al client_profile y save_client_profile lo rechazaba con 400.
+
+8. test_draft_profile_valida_contra_client_profile   (ida y vuelta)
+9. test_draft_profile_declara_el_schema_de_client_profile
+10. test_validador_sigue_rechazando_schema_futuro    (guarda del rechazo legítimo)
 """
 from __future__ import annotations
 
@@ -120,3 +130,75 @@ def test_endpoint_returns_404_when_flag_off(monkeypatch):
     assert resp.status_code == 404
     data = resp.get_json()
     assert data["error"] == "feature_disabled"
+
+
+# ---------------------------------------------------------------------------
+# Colisión de schema_version entre el autoprofiler y el client_profile.
+# IDA Y VUELTA: el perfil se GENERA con el autoprofiler y se valida con el
+# validador real. Fabricar el dict a mano probaría la suposición, no el bug.
+# ---------------------------------------------------------------------------
+
+def _fixture_docs_root(tmp_path):
+    """Árbol de docs realista: técnica con índice y un heading de proceso."""
+    tech = tmp_path / "tecnica"
+    tech.mkdir()
+    (tech / "INDEX_TECNICO.md").write_text(
+        "# Índice Técnico\n\n## Cierre batch nocturno\n", encoding="utf-8"
+    )
+    func = tmp_path / "funcional"
+    func.mkdir()
+    (func / "INDEX_ONLINE.md").write_text("# Índice Online\n", encoding="utf-8")
+    return tmp_path
+
+
+def test_draft_profile_valida_contra_client_profile(tmp_path):
+    """El draft generado por el autoprofiler DEBE pasar validate_client_profile.
+
+    Con schema_version=2 hardcodeado, el validador cortaba en
+    `schema_version N más nuevo que el soportado` y save_client_profile
+    devolvía 400 al mergearlo al perfil del proyecto.
+    """
+    from services.client_profile import validate_client_profile
+    from services.project_autoprofile import draft_profile_from_docs
+
+    draft = draft_profile_from_docs(_fixture_docs_root(tmp_path))
+
+    # GUARDA POSITIVA: el draft declara la versión de schema. Sin este assert,
+    # borrar la clave haría pasar la validación por AUSENCIA y no por acuerdo.
+    assert "schema_version" in draft, (
+        "el draft dejó de declarar schema_version: la validación de abajo "
+        "pasaría por ausencia, no porque los schemas coincidan"
+    )
+    assert isinstance(draft["schema_version"], int)
+
+    result = validate_client_profile(draft)
+    assert result.ok, f"el draft del autoprofiler no valida: {result.errors}"
+    assert not result.errors
+
+
+def test_draft_profile_declara_el_schema_de_client_profile(tmp_path):
+    """El draft declara EXACTAMENTE el schema de client_profile, no un literal.
+
+    Se asierta contra la constante importada (no contra el número 1) para que
+    el día que client_profile suba de versión, este test agarre la divergencia
+    en lugar de congelarla.
+    """
+    from services.client_profile import SCHEMA_VERSION
+    from services.project_autoprofile import draft_profile_from_docs
+
+    draft = draft_profile_from_docs(_fixture_docs_root(tmp_path))
+    assert draft["schema_version"] == SCHEMA_VERSION
+
+
+def test_validador_sigue_rechazando_schema_futuro(tmp_path):
+    """El arreglo NO puede ser aflojar el validador: una versión realmente
+    futura se sigue rechazando."""
+    from services.client_profile import SCHEMA_VERSION, validate_client_profile
+    from services.project_autoprofile import draft_profile_from_docs
+
+    draft = draft_profile_from_docs(_fixture_docs_root(tmp_path))
+    draft["schema_version"] = SCHEMA_VERSION + 1
+
+    result = validate_client_profile(draft)
+    assert not result.ok
+    assert any("más nuevo que el soportado" in e for e in result.errors), result.errors

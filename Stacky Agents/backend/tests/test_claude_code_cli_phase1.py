@@ -483,3 +483,88 @@ def test_spawn_with_fallback_no_fallback_configured_single_attempt(monkeypatch):
     )
     assert model == "claude-sonnet-5"
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Plan 27 I2.2 — estabilidad del prefijo cacheable del proveedor
+#
+# El marcado `cache_control` NO es alcanzable desde Stacky: el envelope
+# stream-json de stdin (`_user_message_line`) no tiene ese campo, y
+# `cache_control` es un campo de la Messages API que construye el CLI, no del
+# input del CLI. Lo único del PREFIJO cacheable que Stacky sí controla es el
+# system prompt que viaja por `--append-system-prompt-file`
+# (`_build_system_prompt`). Estos casos congelan que ese bloque sea byte-estable
+# entre runs: un timestamp o un id por-run ahí invalida el caché del proveedor
+# en CADA ejecución y hunde `cache_read_tokens` a cero, en silencio y sin error.
+# ---------------------------------------------------------------------------
+
+def _agente_stub():
+    from services import vscode_agents
+
+    return vscode_agents.VsCodeAgent(
+        name="Dev",
+        filename="dev.agent.md",
+        description="agente de prueba",
+        system_prompt="cuerpo del agente",
+    )
+
+
+def test_system_prompt_del_cli_es_byte_estable_entre_runs():
+    from services import claude_code_cli_runner as r
+
+    ag = _agente_stub()
+    kw = {
+        "invocation_block": "",
+        "project_knowledge": "",
+        "mcp_enabled": False,
+        "skills_section": "",
+        "agent_type": "developer",
+    }
+    primero = r._build_system_prompt(ag, **kw)
+    segundo = r._build_system_prompt(ag, **kw)
+
+    # Guarda POSITIVA: el prompt se construyó de verdad con el agente pedido.
+    # Sin esto, una función que devolviera "" pasaría la igualdad por accidente.
+    assert "dev.agent.md" in primero and "Dev" in primero
+    assert len(primero) > 200
+
+    assert primero == segundo
+
+
+def test_system_prompt_del_cli_no_interpola_valores_por_run():
+    import re
+
+    from services import claude_code_cli_runner as r
+
+    invalidadores = (
+        (re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}"), "timestamp ISO"),
+        (re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"), "uuid"),
+        (re.compile(r"\b\d{10,}\b"), "epoch o id numérico largo"),
+    )
+    prompt = r._build_system_prompt(_agente_stub(), agent_type="developer")
+
+    # Guarda POSITIVA: hay contenido real que escanear.
+    assert "dev.agent.md" in prompt and len(prompt) > 200
+
+    for patron, etiqueta in invalidadores:
+        hallazgo = patron.search(prompt)
+        assert hallazgo is None, (
+            f"el system prompt del CLI trae un {etiqueta} "
+            f"({hallazgo.group(0) if hallazgo else ''!r}): invalida el prefijo "
+            "cacheable del proveedor en cada run"
+        )
+
+
+def test_envelope_stdin_del_cli_no_admite_cache_control():
+    """Congela el motivo del DIFERIDO de I2.2: no hay superficie para marcar caché."""
+    from services import claude_code_cli_runner as r
+
+    payload = json.loads(r._user_message_line("hola"))
+
+    # Guarda POSITIVA: el envelope es exactamente el que creemos.
+    assert payload["type"] == "user" and payload["message"]["role"] == "user"
+    bloque = payload["message"]["content"][0]
+    assert bloque["type"] == "text" and bloque["text"] == "hola"
+
+    # El campo no existe en el contrato de stdin: marcarlo sería inventarlo.
+    assert "cache_control" not in bloque

@@ -1075,6 +1075,30 @@
           "Plan 277: el ticket 41 (tracker=gitlab, ado_id=52) declara al padre 52 y esa cadena cierra un ciclo; se deja suelto para no tumbar el grafo."
         ]
       }
+    },
+    {
+      "id": "plan279-sesion-de-copiloto-atascada",
+      "title": "La sesion del copiloto de pipelines se murio y el operador quedo sin saber por que",
+      "class": "ux-dead-end",
+      "status": "by_design",
+      "log_pattern": "pipeline_copilot.*session_advance.*destino.{0,4}failed",
+      "log_guarded": true,
+      "killed_by": "plan 279 F9",
+      "killed_commit": null,
+      "date_resolved": "2026-08-01",
+      "guard_test": "tests/test_plan279_e2e.py",
+      "self_test": {
+        "matches": [
+          "2026-08-01 10:00:00 INFO pipeline_copilot session_advance conversation_id=12 origen=draft destino=failed action_id=devops.pipeline_new.commit",
+          "INFO pipeline_copilot session_advance {\"conversation_id\": 12, \"origen\": \"confirm\", \"destino\": \"failed\", \"action_id\": \"devops.pipeline_new.commit\"}"
+        ],
+        "clean": [
+          "2026-08-01 10:00:00 INFO pipeline_copilot session_advance conversation_id=12 origen=intake destino=discovery action_id=",
+          "2026-08-01 10:00:01 INFO pipeline_copilot session_advance conversation_id=12 origen=confirm destino=committed action_id=devops.pipeline_new.commit"
+        ]
+      },
+      "evidence": "backend/api/pipeline_copilot.py::_log_transicion emite la linea con SOLO conversation_id, origen, destino y action_id (constantes del catalogo, cero datos del operador); backend/services/pipeline_session.py::TRANSITIONS declara que 'failed' es alcanzable desde los 6 estados no terminales; el destino 'failed' es TERMINAL (TRANSITIONS['failed'] == ()), asi que la sesion no vuelve sola",
+      "note": "status=guarded: 'failed' es un destino LEGAL, no un bug — pero es terminal, y sin esta linea el sintoma ('el copiloto dejo de responder') no dejaba ningun rastro buscable. Causas ordenadas por probabilidad: (1) una accion de ESCRITURA fallo y D9 detiene la sesion a proposito (solo lo idempotente se reintenta); (2) STACKY_PIPELINE_GENERATOR_ENABLED apagada, con lo que draft y commit mueren en un 404 del generador — el GET de la sesion lo declara en unavailable_reason; (3) el operador cancelo. CERO PII: la rama, el proyecto, el texto del operador y el undo_hint NO se registran (test_la_transicion_deja_una_linea_de_log_sin_pii lo congela)."
     }
   ]
 }

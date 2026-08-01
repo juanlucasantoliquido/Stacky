@@ -87,6 +87,7 @@ from .parity import parity_bp  # Plan 218 F8 — matriz de paridad ADO ↔ GitLa
 # stub, del que es dueño exclusivo.
 from .setup_guide import bp as setup_guide_bp  # Plan 259 — guía de configuración verificable
 from .devops_actions import bp as devops_actions_bp  # Plan 267 — catálogo de acciones DevOps
+from .pipeline_copilot import bp as pipeline_copilot_bp  # Plan 279 — sesión del copiloto de pipelines
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -120,6 +121,7 @@ api_bp.register_blueprint(harness_flags_bp)
 # nuevos) y le saca este archivo compartido del camino a P2 y P3.
 api_bp.register_blueprint(setup_guide_bp)  # Plan 259 (paquete P2)
 api_bp.register_blueprint(devops_actions_bp)  # Plan 267 (paquete P3)
+api_bp.register_blueprint(pipeline_copilot_bp)  # Plan 279 — url_prefix="/pipeline-copilot" → /api/pipeline-copilot/...
 api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(reports_bp)
 api_bp.register_blueprint(diag_bp)

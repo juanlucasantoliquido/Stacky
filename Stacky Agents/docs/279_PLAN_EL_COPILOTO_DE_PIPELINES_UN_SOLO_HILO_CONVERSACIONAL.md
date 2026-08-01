@@ -1,7 +1,75 @@
 # Plan 279 — El copiloto de pipelines: un solo hilo conversacional
 
-**Estado:** v2 (MEJORADO — criticado). Veredicto v1: **RECHAZADO** (4 bloqueantes). v2 los resuelve.
+**Estado:** v2 — **IMPLEMENTADO (F0..F9, las 10 fases)**, 2026-08-01. Veredicto v1: **RECHAZADO** (4 bloqueantes). v2 los resuelve.
 **Rama:** `docs/plan-279`
+
+## ESTADO DE IMPLEMENTACIÓN (2026-08-01)
+
+Medido con `backend/venv` (py3.11.9) y `DATABASE_URL="sqlite:///:memory:"`. **Ningún test se declaró verde sin correrlo.**
+
+| Fase | Estado | Comando | Resultado REAL |
+|---|---|---|---|
+| **F0** censo | **IMPLEMENTADA** | `pytest tests/test_plan279_baseline.py -q` | **4 passed** (nació roja: 4 failed antes de F3, como el plan predice) |
+| **F1** 2 flags | **IMPLEMENTADA** | `pytest tests/test_harness_flags.py tests/test_harness_flags_requires.py tests/test_flag_wiring.py -q` | **70 passed** (56 + 9 + 5) |
+| **F2** máquina de estados | **IMPLEMENTADA** | `pytest tests/test_pipeline_session.py -q` | **11 passed** |
+| **F3** 6 acciones + 6 bindings | **IMPLEMENTADA** | `pytest tests/test_devops_action_ratchet.py tests/test_devops_action_catalog.py tests/test_devops_action_matcher.py -q` | **50 passed, 0 failed** (ver DESVÍO 1) |
+| **F4** prompt del contrato | **IMPLEMENTADA** | `pytest tests/test_pipeline_copilot_prompt.py -q` | **7 passed** |
+| **F5** endpoint de sesión | **IMPLEMENTADA** | `pytest tests/test_pipeline_copilot_api.py -q` | **10 passed** |
+| **F6** turno del agente (K1) | **IMPLEMENTADA** | `pytest tests/test_plan279_agent_turn.py -q` | **8 passed** (ver DESVÍO 2) |
+| **F7** secretos por referencia (K3) | **IMPLEMENTADA** | `pytest tests/test_pipeline_copilot_secrets.py -q` | **6 passed** |
+| **F8** sección `copiloto-pipelines` | **IMPLEMENTADA** | `vitest run .../pipelineCopilotModel.test.ts` + `tsc --noEmit` | **8 passed**, **tsc 0 errores** |
+| **F9** ratchets + E2E | **IMPLEMENTADA** | `pytest tests/test_plan279_e2e.py -q` | **6 passed** |
+
+**Comando final del plan (§6.F9): `121 passed, 0 failed` — el número exacto del DoD.**
+Frontend: `devopsActionCatalogRatchet.test.ts` **7 passed** (pisos en 29/29/21), `pipelineCopilotModel.test.ts` **8 passed**, `npx tsc --noEmit` **0 errores**.
+`test_harness_ratchet_meta.py` + `test_plan259_ratchet_script_parity.py`: **16 passed** (los 7 archivos nuevos en `.sh` **y** `.ps1`).
+
+### Desvíos respecto de la letra del plan (los 3, declarados)
+
+1. **F3 dio `50 passed, 0 failed`, no el `49 passed, 1 failed` que el plan declaraba.**
+   El plan predijo **un** rojo esperado (`test_health_key_existe_en_health_payload`). Medido: eran **dos** —
+   también `test_devops_action_catalog.py::test_section_id_conocida_o_none`, que exige
+   `section_id ∈ DEVOPS_SECTION_IDS` y que §6.F3 no menciona. Los dos rojos se cierran con la **misma**
+   edición de 3 lugares que la propia **TRAMPA nº6** declara indivisible (`.tsx` + `DEVOPS_SECTION_IDS` +
+   `_health_payload`), así que ese bloque de F8 se adelantó a F3. F8 no perdió nada: su mitad de modelo,
+   componente, `<select>` y tests se hizo igual en su turno.
+
+2. **F6: el plan no dice de dónde sale `session_dict` en `start_conversation()`.**
+   Una conversación recién creada no tiene `pipeline_session` (la `description` solo se sella con
+   `server_alias`), así que el bloque habría sido código muerto. Resuelto con el **mismo patrón opt-in que
+   `server_alias`**: `start_conversation()` acepta un `pipeline_session` OPCIONAL en el body y lo sella en el
+   mismo JSON. **Ausente ⇒ byte-compat total** (congelado por F6 caso 2, que compara carácter por carácter).
+
+3. **§9 dice «Endpoints backend nuevos: 0» pero F5 crea 4 rutas.**
+   Se implementó según §9 punto 3, que es el que no se contradice: lo prohibido son endpoints de **ejecución**
+   (§7.4 del plan 267). Las 4 rutas de F5 son de **estado** y F5 caso 8 lo gatea por `ast` (cero imports de
+   `pipeline_generator`, cero llamadas a `commit_route`).
+
+### Rojos AJENOS y PREEXISTENTES (medidos, no heredados de este plan)
+
+Ninguno lo causa el plan 279; los 3 primeros se probaron contra `HEAD` y los diffs de este plan son **aditivos (0 borrados)**.
+
+| Suite | Rojos | Causa (ajena) |
+|---|---|---|
+| `test_harness_flags_help.py` | 4 | 81 flags ajenas sin `PlainHelp`; un `on_effect` >240 del plan 239; un `off_effect` que no arranca con `"Si "`; jerga en 6 keys ajenas. **Las 2 flags del 279 pasan las 4 reglas** (verificado una por una). |
+| `test_error_fingerprints_catalog.py` + `_scan.py` | 5 | En `HEAD` ya había **19** huellas sin `self_test` y **1** con `status:"guarded"` (`AUD-REGLA-INERTE`). **La huella del 279 trae `self_test` verificado contra su propia regex y `status:"by_design"`.** |
+| `test_flags_env_read_meta.py` | 1 | `services/validation_playbook.py` lee env con default local. |
+| `test_plan120_flags.py` | 1 | El propio docstring del test dice *"ROJO PREEXISTENTE Y AJENO"*: `harness_defaults.env` es un snapshot parcial. |
+| Ratchets de deuda del frontend | 6 | 24 archivos ajenos (dbcompare, docs, PlansBoard, TicketBoard, ui/Dialog…). **Ningún archivo del 279 figura** (la única regresión propia —un `<input>` crudo— se corrigió). |
+
+### Pendiente REAL (no automatizable en esta corrida)
+
+Los **2 smokes manuales** del DoD. Exigen backend levantado + token de un tracker real, así que **no** se
+declaran verdes: (a) crear una pipeline por el hilo en un proyecto ADO y en uno GitLab hasta `confirm` sin
+activar la flag de commit, verificando que el `undo_hint` nombra `azure-pipelines.yml` y `.gitlab-ci.yml`
+respectivamente; (b) elegir «GitHub Copilot (modo determinista)» en el selector y confirmar el camino
+determinista en vivo. Lo automatizable de ambos SÍ está cubierto (F2 caso 11, F9 casos 2 y 6).
+
+Además, `PipelineCopilotSection.tsx` queda como **cascarón**: `DevOpsSectionContext` no propaga el
+`conversation_id` del hilo, así que la sección explica cómo abrir uno en vez de fingir estado. Cablearlo
+exige tocar el contrato del shell, que este plan no incluye en su alcance.
+
+---
 **Origen:** pedido del operador (2026-08-01): rediseñar la creación y gestión de pipelines como experiencia *agentic-first*.
 **Tipo:** orquestación de capacidades existentes. **NO** reimplementa generación, lint, diff, auditoría, preflight ni matriz de entornos.
 **Juez v2: subagente independiente, misma corrida, contexto limpio**

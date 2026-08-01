@@ -1,0 +1,103 @@
+/* Plan 279 F8 — Copiloto de pipelines. Solo tokens del tema: CERO hex. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pasos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.paso {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pasoActivo {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.pasoTerminal {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.pasoFallido {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.titulo {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ayuda {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.deshacer {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.deshacerTitulo {
+  font-weight: 600;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.error {
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--danger);
+  font-size: 13px;
+}
+
+.aviso {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.variables {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}

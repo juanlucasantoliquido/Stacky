@@ -32,6 +32,7 @@ import {
   DevOpsServers,
   DevOpsSolutionPublisher,
   DevOpsVariables,
+  PipelineGenerator,
   PipelineInventory,
   PrReview,
 } from '../api/endpoints';
@@ -42,6 +43,42 @@ import type { DevOpsActionMeta } from './devopsActionTypes';
 type Params = Record<string, string>;
 
 const val = (p: Params, k: string): string => String(p?.[k] ?? '').trim();
+
+// ---------------------------------------------------------------------------
+// Plan 279 — helpers del copiloto de pipelines.
+//
+// `draft_ref` (lo UNICO que el catalogo declara) es una REFERENCIA: la sesion
+// del backend guarda referencias, jamas el YAML entero (D4, MAX_SESSION_BYTES).
+// El contenido del borrador lo tiene la seccion del copiloto en memoria y lo
+// pasa como params EXTRA, exactamente como `confirm_text` en
+// devops.deployment.execute: son datos operativos que la seccion ya tiene y que
+// NO se le piden al operador desde el asistente, asi que no van al catalogo.
+//
+// Los tres son PUROS y TOLERANTES: si la seccion no los cargo, degradan a un
+// valor vacio en vez de explotar, y el endpoint responde el 400 que corresponde.
+// ---------------------------------------------------------------------------
+
+/** Proveedor del borrador. Cerrado a los 2 del plan; 'ado' por defecto. */
+function draftProvider(p: Params): 'ado' | 'gitlab' {
+  return val(p, 'provider') === 'gitlab' ? 'gitlab' : 'ado';
+}
+
+/** YAML renderizado del borrador, tal como lo tiene la seccion. */
+function draftYaml(p: Params): string {
+  return val(p, 'draft_yaml');
+}
+
+/** Spec del borrador. La seccion la manda serializada; si no parsea, {}. */
+function draftSpec(p: Params): object {
+  const crudo = val(p, 'draft_spec');
+  if (!crudo) return {};
+  try {
+    const parsed: unknown = JSON.parse(crudo);
+    return parsed && typeof parsed === 'object' ? (parsed as object) : {};
+  } catch {
+    return {};
+  }
+}
 
 /** (b)/(c) — lleva a la seccion con los parametros cargados y lo declara. */
 function goToPanel(
@@ -200,6 +237,59 @@ export const DEVOPS_ACTION_BINDINGS: Record<string, DevOpsActionBinding> = {
         val(p, 'solution_path').split(',').map((s) => s.trim()).filter(Boolean),
         val(p, 'unified') === 'true'
       )
+  ),
+
+  // ---- Plan 279 — Copiloto de pipelines: las 6 EJECUTAN (clase a) ----
+  //
+  // Las 6 tienen ruta HTTP REAL, asi que NINGUNA usa goToPanel(): el copiloto es
+  // un solo hilo, mandar al operador a otra pestania seria exactamente el
+  // peregrinaje que el plan elimina.
+  //
+  // `draft_ref` es una REFERENCIA al borrador (la sesion no guarda el YAML
+  // entero, D4). Quien la resuelve a spec/YAML es la seccion del copiloto, que
+  // lo tiene en memoria; el binding recibe ya resuelto lo que el endpoint pide.
+  'devops.pipeline_new.draft': callEndpoint(
+    'devops.pipeline_new.draft',
+    'Borrador de pipeline generado',
+    (p) => PipelineGenerator.preview(draftSpec(p))
+  ),
+  'devops.pipeline_new.lint': callEndpoint(
+    'devops.pipeline_new.lint',
+    'Borrador revisado',
+    (p) => DevOps.pipelineLintValidate(draftProvider(p), draftYaml(p))
+  ),
+  'devops.pipeline_new.explain': callEndpoint(
+    'devops.pipeline_new.explain',
+    'Borrador explicado',
+    (p) => DevOps.pipelineLintExplain(draftProvider(p), draftYaml(p))
+  ),
+  'devops.pipeline_new.preflight': callEndpoint(
+    'devops.pipeline_new.preflight',
+    'Chequeos previos corridos',
+    (p) => DevOps.preflightCheck(val(p, 'project'), draftSpec(p), draftProvider(p))
+  ),
+  // Solo NOMBRES: DevOpsVariables.list nunca devuelve valores (endpoints.ts
+  // declara CIVariableSummary sin `value`, y api/devops_variables.py:45 tampoco
+  // los sirve). Es el handle del que habla el plan, no el secreto.
+  'devops.pipeline_new.secrets': callEndpoint(
+    'devops.pipeline_new.secrets',
+    'Variables que faltan listadas',
+    (p) => DevOpsVariables.list(val(p, 'project'))
+  ),
+  // La UNICA escritura del plan. `confirm: true` es el HITL que
+  // api/pipeline_generator.py:59 ya exige; la tarjeta de confirmacion del
+  // operador ocurre ANTES, en runDevOpsAction.
+  'devops.pipeline_new.commit': callEndpoint(
+    'devops.pipeline_new.commit',
+    'Pipeline creada en el repositorio',
+    (p) =>
+      PipelineGenerator.commit({
+        ...draftSpec(p),
+        project: val(p, 'project'),
+        target: draftProvider(p),
+        branch: val(p, 'branch'),
+        confirm: true,
+      })
   ),
 
   // -------------------------- (b) NAVEGAN — 2 --------------------------

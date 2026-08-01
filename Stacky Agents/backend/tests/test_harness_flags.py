@@ -976,6 +976,11 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_SETUP_GUIDE_VERIFY_ENABLED",           # Plan 259 — "Verificar ahora" (5 GET read-only)
     "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",        # Plan 267 — solo LISTA lo que ya existe
     "STACKY_DEVOPS_ACTION_NL_ENABLED",             # Plan 267 — reconocimiento determinista, no escribe
+    # Plan 279 — copiloto de pipelines. SOLO la de lectura entra acá: la hermana
+    # STACKY_PIPELINE_COPILOT_COMMIT_ENABLED nace OFF (escribe en el repositorio
+    # REAL del operador) y por eso su FlagSpec no declara `default=`. Este assert
+    # es de igualdad de conjuntos: agregarla acá dejaría el test en rojo.
+    "STACKY_PIPELINE_COPILOT_ENABLED",             # Plan 279 — lee, planea, simula y explica
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED",          # Plan 268 — explorador read-only del grafo
     "STACKY_RUN_VERDICT_ENABLED",                  # Plan 269 — veredicto; no cambia estados
     "STACKY_RUN_EVIDENCE_COLLECTORS_ENABLED",      # Plan 269 — solo lee evidencia ya producida

@@ -1305,7 +1305,10 @@ export const Agents = {
     stage?: "preflight" | "running";
     intent?: IntentBriefDTO;
     auto_approvable?: boolean;
-  }>("/api/agents/run-brief", payload),
+  }>("/api/agents/run-brief", payload,
+    /* plan 273 F6 (omision del barrido): el pre-vuelo corre SINCRONICO dentro del
+       request (api/agents.py:737-745) con presupuesto 300s (copilot_bridge.py:524);
+       a 20s el POST se abortaba siempre. */ { timeoutMs: 0 }),
 };
 
 export const AntiPatterns = {
@@ -4245,6 +4248,46 @@ export interface DevOpsBootstrapResponse {
   servers: { servers: ServerSummary[]; keyring_available: boolean } | null;
 }
 
+/**
+ * Plan 279 [C4] — DTOs de las 2 rutas de lint que YA existen en el backend
+ * (`api/devops.py:228` y `:260`) y que hasta ahora no tenían cliente tipado.
+ * Espejo estructural de `services/pipeline_lint.py` (LintReport `:43` /
+ * ExecutionPlan `:841`), declarado acá para no invertir capas importando tipos
+ * de `components/devops/pipelineLint.ts` dentro de la capa de API.
+ */
+export interface PipelineLintFindingDTO {
+  code: string;
+  severity: "error" | "warning" | "info";
+  message: string;
+  line: number | null;
+  node: string | null;
+  fix: { description: string; new_yaml: string } | null;
+}
+
+export interface PipelineLintReportDTO {
+  ok: boolean;
+  findings: PipelineLintFindingDTO[];
+  counts: { error: number; warning: number; info: number };
+  engine_version: string;
+  duration_ms: number;
+  fixes_omitted: boolean;
+}
+
+export interface PipelinePlanNodeDTO {
+  kind: string;
+  name: string;
+  steps: string[];
+  resolved_vars: Record<string, unknown>;
+  warnings: string[];
+  estimated_seconds: number | null;
+}
+
+export interface PipelineExecutionPlanDTO {
+  phases: PipelinePlanNodeDTO[][];
+  provider: string;
+  ok: boolean;
+}
+
 export const DevOps = {
   /** GET /api/devops/bootstrap — Plan 98 F4. Hidratación del panel en 1 round-trip.
    *  404 si STACKY_DEVOPS_BOOTSTRAP_ENABLED está OFF (guard en api/devops.py:118). */
@@ -4372,6 +4415,34 @@ export const DevOps = {
       { project, spec, target },
     ),
   /**
+   * POST /api/devops/pipeline-lint/validate — Plan 186, cliente tipado agregado
+   * por el Plan 279 [C4]. La RUTA BACKEND YA EXISTE (api/devops.py:228): esto es
+   * cliente, no servidor, así que NO viola el §7.4 del plan 267 (que prohíbe
+   * endpoints backend nuevos). Hasta ahora el único llamador era
+   * PipelineLintPanel.tsx:96 con un rawPost y la URL escrita a mano; el binding
+   * del copiloto necesita una función, no una URL suelta. SOLO-LECTURA.
+   */
+  pipelineLintValidate: (
+    source: "ado" | "gitlab",
+    yaml: string,
+    knownVariables?: string[],
+  ) =>
+    api.post<PipelineLintReportDTO>("/api/devops/pipeline-lint/validate", {
+      source,
+      yaml,
+      ...(knownVariables ? { known_variables: knownVariables } : {}),
+    }),
+  /**
+   * POST /api/devops/pipeline-lint/explain — Plan 186, cliente tipado agregado
+   * por el Plan 279 [C4]. Misma justificación que pipelineLintValidate: la ruta
+   * backend ya existe (api/devops.py:260). SOLO-LECTURA, sin red en el servicio.
+   */
+  pipelineLintExplain: (source: "ado" | "gitlab", yaml: string) =>
+    api.post<{ plan: PipelineExecutionPlanDTO }>("/api/devops/pipeline-lint/explain", {
+      source,
+      yaml,
+    }),
+  /**
    * POST /api/devops/doctor/diagnose — Plan 96. Jobs fallidos + clasificación
    * en llano. SOLO-LECTURA (no persiste logs, no re-lanza, no cancela).
    */
@@ -4416,10 +4487,16 @@ export const DevOpsAgentApi = {
   start: (body: {
     project: string;
     message: string;
-    runtime?: "claude_code_cli" | "codex_cli";
+    /** Plan 279 F6/F8 [C3] — `github_copilot` no tiene turno CLI: el backend
+     *  responde 200 con `mode: "deterministic"` en vez del 400 de antes. Sin
+     *  este tipo el operador no puede ni mandarlo. */
+    runtime?: "claude_code_cli" | "codex_cli" | "github_copilot";
     model?: string;
     effort?: string;
     server_alias?: string; // Plan 108 F3/F4 — ancla el turno al servidor seleccionado
+    /** Plan 279 F6 — sella la conversación como sesión del copiloto de pipelines.
+     *  AUSENTE ⇒ byte-compat total con hoy (el mensaje no se envuelve). */
+    pipeline_session?: Record<string, unknown>;
   }) =>
     api.post<{
       ok: boolean;
@@ -4427,6 +4504,10 @@ export const DevOpsAgentApi = {
       execution_id: number;
       runtime: string;
       server_alias?: string | null;
+      /** Plan 279 F6 — "deterministic" cuando el runtime no tiene turno CLI. */
+      mode?: string;
+      detail?: string;
+      propose_url?: string;
     }>("/api/devops/agent/conversations", body),
   message: (conversationId: number, message: string) =>
     api.post<{ ok: boolean; mode: "stdin" | "resume" | "new_run"; execution_id: number }>(
@@ -4874,6 +4955,53 @@ export const PipelineGenerator = {
    * El spec va en el body ROOT junto a confirm/target/branch/project.
    */
   commit: (body: object) => api.post<object>("/api/pipeline-generator/commit", body),
+};
+
+/** Plan 279 F5 — sesión del copiloto de pipelines. Espejo de PipelineSession
+ *  (backend services/pipeline_session.py). SOLO estado: estos endpoints NO
+ *  ejecutan ninguna acción (lo gatea test_pipeline_copilot_api.py caso 8). */
+export interface PipelineCopilotSessionDTO {
+  state: string;
+  provider: string;
+  stack: string;
+  project: string;
+  branch: string;
+  draft_ref: string;
+  missing_variables: string[];
+  open_questions: string[];
+  last_action_id: string;
+  retries: number;
+  failure_reason: string;
+  version: string;
+}
+
+export const PipelineCopilot = {
+  /** GET /api/pipeline-copilot/session/<id> — 404 si la flag está OFF. */
+  session: (conversationId: number) =>
+    api.get<{
+      ok: boolean;
+      session: PipelineCopilotSessionDTO;
+      /** [C6] ids que no se pueden ofrecer porque falta una flag PREEXISTENTE. */
+      unavailable_actions: string[];
+      /** Nombre de la flag que falta, o "" si no falta ninguna. */
+      unavailable_reason: string;
+    }>(`/api/pipeline-copilot/session/${conversationId}`),
+  /** POST .../advance — mueve el estado. 409 si la transición es ilegal. */
+  advance: (conversationId: number, body: { to: string; fields?: Record<string, unknown> }) =>
+    api.post<{ ok: boolean; session: PipelineCopilotSessionDTO }>(
+      `/api/pipeline-copilot/session/${conversationId}/advance`,
+      body,
+    ),
+  /** GET .../question — la única pregunta que falta, o "". */
+  question: (conversationId: number) =>
+    api.get<{ ok: boolean; question: string }>(
+      `/api/pipeline-copilot/session/${conversationId}/question`,
+    ),
+  /** GET .../undo-hint — cómo deshacer la escritura que se está por confirmar. */
+  undoHint: (conversationId: number) =>
+    api.get<{ ok: boolean; undo_hint: string }>(
+      `/api/pipeline-copilot/session/${conversationId}/undo-hint`,
+    ),
 };
 
 /** Plan 106 — Modelo local (Ollama/LM Studio/vLLM). */

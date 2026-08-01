@@ -114,6 +114,12 @@ def _health_payload() -> dict:
         "agent_action_run_enabled": bool(
             getattr(cfg, "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED", False)
         ),  # Plan 267 — ejecutar desde una propuesta lo que ESCRIBE (default OFF)
+        "pipeline_copilot_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_COPILOT_ENABLED", False)
+        ),  # Plan 279 — copiloto conversacional de pipelines (solo lectura)
+        "pipeline_copilot_commit_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED", False)
+        ),  # Plan 279 — crear la pipeline en el repo REAL (default OFF)
     }
 
 

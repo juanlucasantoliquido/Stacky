@@ -980,6 +980,16 @@ HARNESS_TEST_FILES=(
   tests/test_devops_action_matcher.py
   tests/test_devops_action_ratchet.py
   tests/test_plan267_help.py
+
+  # Plan 279 - El copiloto de pipelines: un solo hilo conversacional
+  tests/test_plan279_baseline.py
+  tests/test_pipeline_session.py
+  tests/test_pipeline_copilot_prompt.py
+  tests/test_pipeline_copilot_api.py
+  tests/test_pipeline_copilot_secrets.py
+  tests/test_plan279_agent_turn.py
+  tests/test_plan279_e2e.py
+
   tests/test_plan266_summary_shape.py
   tests/test_plan266_flag_cableado.py
   tests/test_plan266_harness_runner_paridad.py

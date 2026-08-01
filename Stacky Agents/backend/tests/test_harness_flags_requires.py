@@ -325,6 +325,11 @@ _REQUIRES_MAP_FROZEN = {
     # (es una ESTRELLA, no una cadena: las dos apuntan a la misma madre).
     "STACKY_DEVOPS_ACTION_NL_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
     "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    # Plan 279: el copiloto y su commit cuelgan del MISMO catalogo (estrella, no
+    # cadena). Profundidad 1 verificada: STACKY_DEVOPS_ACTION_CATALOG_ENABLED no
+    # declara `requires`.
+    "STACKY_PIPELINE_COPILOT_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED": "STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
     # Plan 268: el explorador solo tiene sentido si el grafo documental existe.
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",
     # Plan 266: la forma garantizada del summary cuelga del master del Comparador

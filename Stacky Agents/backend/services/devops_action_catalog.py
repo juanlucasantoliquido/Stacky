@@ -48,6 +48,7 @@ DEVOPS_SECTION_IDS = (
     "variables", "remote-console", "pr-review", "despliegues", "taller-compilacion",
     "publicador-soluciones", "inventario-pipelines", "pipeline-audit",
     "editar-pipeline", "matriz-entornos", "paquete-entrega",
+    "copiloto-pipelines",   # Plan 279 — seccion 18: el copiloto de pipelines
 )
 
 
@@ -144,7 +145,7 @@ PRJ_OPT = ActionParam(name="project", type="string", label="Proyecto", required=
 # volveria los ratchets inertes (dos listas vacias iguales = falso verde).
 # --------------------------------------------------------------------------
 DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
-    # ---------------------------- 16 de LECTURA ----------------------------
+    # ---------------------------- 21 de LECTURA ----------------------------
     DevOpsAction(
         id="devops.overview.refresh",
         label="Actualizar resumen",
@@ -408,7 +409,127 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
         params=(PRJ,),
         phrases=("listar incidencias", "ver las incidencias", "que incidencias hay"),
     ),
-    # ---------------------------- 7 de ESCRITURA ---------------------------
+    # ── Plan 279 — Copiloto de pipelines: el ciclo de creacion, 5 de LECTURA ──
+    # Las 5 envuelven rutas HTTP que YA existen; ningun endpoint backend nuevo.
+    # `label` y `phrases` son LITERALES del plan 279 F3 [C5]: el gate de colision
+    # read/write (test_devops_action_ratchet.py:111) evalua (*phrases, label), y
+    # se verifico con _content_tokens+normalize_text reales: 0 choques.
+    DevOpsAction(
+        id="devops.pipeline_new.draft",
+        label="Armar borrador de pipeline",
+        summary="Genera un borrador de pipeline a partir de lo que necesitas. No escribe nada.",
+        section_id="copiloto-pipelines",
+        nav_path="/devops/copiloto-pipelines",
+        effect="read",
+        impact="none",
+        targets_environment=False,
+        health_key="pipeline_copilot_enabled",
+        flag_key="STACKY_PIPELINE_COPILOT_ENABLED",
+        reach=canonical_reach("read"),
+        params=(
+            PRJ,
+            ActionParam(name="need", type="string", label="Que necesitas",
+                        required=True),
+        ),
+        phrases=(
+            "borrador de pipeline nueva",
+            "armar el borrador de una pipeline",
+            "disenar una pipeline nueva",
+        ),
+    ),
+    DevOpsAction(
+        id="devops.pipeline_new.lint",
+        label="Revisar borrador de pipeline",
+        summary="Corre el lint sobre el borrador y devuelve los hallazgos con su linea.",
+        section_id="copiloto-pipelines",
+        nav_path="/devops/copiloto-pipelines",
+        effect="read",
+        impact="none",
+        targets_environment=False,
+        health_key="pipeline_copilot_enabled",
+        flag_key="STACKY_PIPELINE_COPILOT_ENABLED",
+        reach=canonical_reach("read"),
+        params=(
+            PRJ,
+            ActionParam(name="draft_ref", type="string", label="Borrador",
+                        required=True),
+        ),
+        phrases=(
+            "revisar el borrador de pipeline",
+            "validar el yaml del borrador",
+            "que errores tiene el borrador",
+        ),
+    ),
+    DevOpsAction(
+        id="devops.pipeline_new.explain",
+        label="Explicar borrador de pipeline",
+        summary="Describe en castellano que etapas y pasos va a correr el borrador.",
+        section_id="copiloto-pipelines",
+        nav_path="/devops/copiloto-pipelines",
+        effect="read",
+        impact="none",
+        targets_environment=False,
+        health_key="pipeline_copilot_enabled",
+        flag_key="STACKY_PIPELINE_COPILOT_ENABLED",
+        reach=canonical_reach("read"),
+        params=(
+            PRJ,
+            ActionParam(name="draft_ref", type="string", label="Borrador",
+                        required=True),
+        ),
+        phrases=(
+            "explicar el borrador de pipeline",
+            "que va a hacer el borrador",
+            "explicame los pasos del borrador",
+        ),
+    ),
+    DevOpsAction(
+        id="devops.pipeline_new.preflight",
+        label="Chequeos previos del borrador",
+        summary="Semaforo estatico del borrador: placeholders y variables sin definir.",
+        section_id="copiloto-pipelines",
+        nav_path="/devops/copiloto-pipelines",
+        effect="read",
+        impact="none",
+        targets_environment=False,
+        health_key="pipeline_copilot_enabled",
+        flag_key="STACKY_PIPELINE_COPILOT_ENABLED",
+        reach=canonical_reach("read"),
+        params=(
+            PRJ,
+            ActionParam(name="draft_ref", type="string", label="Borrador",
+                        required=True),
+        ),
+        phrases=(
+            "preflight del borrador de pipeline",
+            "semaforo del borrador",
+            "chequeos previos del borrador",
+        ),
+    ),
+    DevOpsAction(
+        id="devops.pipeline_new.secrets",
+        label="Variables que faltan para el borrador",
+        summary="Lista por NOMBRE las variables y secretos que el borrador necesita y el proyecto no define.",
+        section_id="copiloto-pipelines",
+        nav_path="/devops/copiloto-pipelines",
+        effect="read",
+        impact="none",
+        targets_environment=False,
+        health_key="pipeline_copilot_enabled",
+        flag_key="STACKY_PIPELINE_COPILOT_ENABLED",
+        reach=canonical_reach("read"),
+        params=(
+            PRJ,
+            ActionParam(name="draft_ref", type="string", label="Borrador",
+                        required=True),
+        ),
+        phrases=(
+            "que variables le faltan al borrador",
+            "secretos que necesita el borrador",
+            "credenciales que faltan para la pipeline",
+        ),
+    ),
+    # ---------------------------- 8 de ESCRITURA ---------------------------
     DevOpsAction(
         id="devops.pipeline.trigger",
         label="Disparar pipeline",
@@ -580,6 +701,35 @@ DEVOPS_ACTION_CATALOG: tuple[DevOpsAction, ...] = (
                         required=True),
         ),
         phrases=("compilar la solucion", "correr la compilacion", "buildear el proyecto"),
+    ),
+    # ── Plan 279 — Copiloto de pipelines: la UNICA escritura del plan ─────────
+    # Escribe el archivo de pipeline en el repositorio REAL del operador, asi que
+    # su flag nace OFF (excepcion dura (B)). El binding llama a
+    # POST /api/pipeline-generator/commit, que ya exige confirm=True (HITL).
+    DevOpsAction(
+        id="devops.pipeline_new.commit",
+        label="Crear la pipeline en el repositorio",
+        summary="Escribe el archivo de pipeline en la rama elegida del repositorio real. Pide confirmacion.",
+        section_id="copiloto-pipelines",
+        nav_path="/devops/copiloto-pipelines",
+        effect="write",
+        impact="high",
+        targets_environment=False,
+        health_key="pipeline_copilot_commit_enabled",
+        flag_key="STACKY_PIPELINE_COPILOT_COMMIT_ENABLED",
+        reach=canonical_reach("write"),
+        params=(
+            PRJ,
+            ActionParam(name="draft_ref", type="string", label="Borrador",
+                        required=True),
+            ActionParam(name="branch", type="string", label="Rama",
+                        required=True),
+        ),
+        phrases=(
+            "crear la pipeline nueva en el repositorio",
+            "publicar el borrador de pipeline",
+            "guardar la pipeline nueva en el repo",
+        ),
     ),
 )
 

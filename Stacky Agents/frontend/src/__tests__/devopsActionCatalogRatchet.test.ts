@@ -52,19 +52,22 @@ describe('Plan 267 F8 — paridad catalogo <-> bindings', () => {
     expect(fs.existsSync(CATALOG_PY), `no existe ${CATALOG_PY}`).toBe(true);
   });
 
-  it('5. hay al menos 23 ids (una regex que deja de matchear daria 2 listas vacias IGUALES)', () => {
-    expect(catalogIds().length).toBeGreaterThanOrEqual(23);
+  // Plan 279 [C7] — los TRES pisos se aprietan de 23/23/12 a 29/29/21. Un
+  // ratchet que nunca se aprieta es inerte: el plan suma 6 acciones (5 read + 1
+  // write), asi que el catalogo pasa a 29 y las lecturas ejecutables de 16 a 21.
+  it('5. hay al menos 29 ids (una regex que deja de matchear daria 2 listas vacias IGUALES)', () => {
+    expect(catalogIds().length).toBeGreaterThanOrEqual(29);
   });
 
-  it('6. la paleta ofrece al menos 12 LECTURAS ejecutables (KPI-2)', () => {
+  it('6. la paleta ofrece al menos 21 LECTURAS ejecutables (KPI-2)', () => {
     const entradas = catalogEntries();
     // Sin este piso, una regex rota daria 0 y el test 3 pasaria igual.
-    expect(entradas.length).toBeGreaterThanOrEqual(23);
+    expect(entradas.length).toBeGreaterThanOrEqual(29);
     // reach=canonical_reach("read") es la UNICA tupla que contiene palette-run.
     const lecturasEjecutables = entradas.filter(
       (e) => e.effect === 'read' && e.reach === 'read'
     );
-    expect(lecturasEjecutables.length).toBeGreaterThanOrEqual(12);
+    expect(lecturasEjecutables.length).toBeGreaterThanOrEqual(21);
   });
 
   it('7. ningun write tiene palette-run (KPI-9, espejo del test 11 del backend)', () => {

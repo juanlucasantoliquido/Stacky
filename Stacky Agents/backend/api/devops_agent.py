@@ -21,6 +21,38 @@ def _flag_off() -> bool:
     return not getattr(_config.config, "STACKY_DEVOPS_AGENT_ENABLED", False)
 
 
+def _copilot_on() -> bool:
+    """Plan 279 F6 — master del copiloto de pipelines. Con la flag OFF este
+    modulo se comporta EXACTAMENTE como antes del plan 279."""
+    return bool(getattr(_config.config, "STACKY_PIPELINE_COPILOT_ENABLED", False))
+
+
+def _envolver_con_copiloto(session_dict, message: str, conversation_id: int) -> str:
+    """Plan 279 F6 — envuelve el mensaje con el contrato del copiloto SOLO si la
+    conversacion tiene sesion de pipeline. Sin sesion => byte-compat total.
+
+    NUNCA lanza: si el contrato no se puede construir, el turno sigue con el
+    mensaje crudo (degradar a texto libre es lo que ya pasaba antes del plan).
+    """
+    if not _copilot_on() or not session_dict:
+        return message
+    try:
+        from services.pipeline_copilot_prompt import build_copilot_prompt
+        from services.pipeline_session import session_from_dict
+
+        return build_copilot_prompt(
+            session_from_dict(session_dict),
+            request.host_url.rstrip("/"),
+            message,
+            conversation_id,
+            commit_enabled=bool(
+                getattr(_config.config, "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED", False)
+            ),
+        )
+    except Exception:  # pragma: no cover - defensa: el contrato no rompe el turno
+        return message
+
+
 def _current_user() -> str:
     # Mismo header sin validar que usa el resto de la app (mono-operador).
     # C2 (v2): importar del ORIGEN canónico api._helpers (api/_helpers.py:4).
@@ -57,6 +89,23 @@ def _validate_remote_target(server_alias: str):
     return None
 
 
+def _sellar_description(server_alias, copilot_session) -> str | None:
+    """Plan 279 F6 — JSON de `Ticket.description` para una conversación nueva.
+
+    Devuelve None si no hay NADA que sellar (byte-compat exacto con el
+    comportamiento previo al plan 279). Si hay anclaje remoto y/o sesión de
+    copiloto, conviven en el MISMO JSON, que es lo que D4 exige.
+    """
+    if not server_alias and not copilot_session:
+        return None
+    meta: dict = {"kind": "devops_chat", "server_alias": server_alias}
+    if copilot_session is not None:
+        from services.pipeline_session import session_from_dict, session_to_dict
+
+        meta["pipeline_session"] = session_to_dict(session_from_dict(copilot_session))
+    return json.dumps(meta)
+
+
 @bp.post("/conversations")
 def start_conversation():
     if _flag_off():
@@ -68,6 +117,20 @@ def start_conversation():
         return jsonify({"ok": False, "error": "project y message son obligatorios"}), 400
     runtime = (body.get("runtime") or "claude_code_cli").strip()
     if runtime not in _CLI_RUNTIMES:
+        # Plan 279 F6 — paridad de los 3 runtimes SIN borrar el gate. Borrarlo
+        # dejaria un run con Copilot terminando `completed` sin conversacion y
+        # sin error: exactamente el falso verde que este 400 existe para evitar.
+        # Lo que se agrega es una SALIDA HONESTA cuando el copiloto esta ON.
+        if _copilot_on():
+            # Paridad plan 279: sin turno CLI, el piso determinista alcanza para
+            # proponer y previsualizar (services/devops_action_matcher.py:1-5).
+            return jsonify({
+                "ok": True,
+                "mode": "deterministic",
+                "detail": ("Con GitHub Copilot el copiloto de pipelines usa el motor "
+                           "determinista: proponé con POST /api/devops/actions/propose."),
+                "propose_url": "/api/devops/actions/propose",
+            }), 200
         return jsonify({
             "ok": False,
             "error": "devops_chat_requires_cli_runtime",
@@ -84,6 +147,15 @@ def start_conversation():
         err = _validate_remote_target(server_alias)
         if err:
             return err
+
+    # Plan 279 F6 — sesion de copiloto opt-in, MISMO patron que server_alias:
+    # ausente ⇒ byte-compat total (el mensaje no se envuelve y la description
+    # queda como antes). Presente ⇒ la conversacion nace sellada como sesion de
+    # pipeline y su PRIMER turno ya viaja con el contrato.
+    copilot_session = (
+        body.get("pipeline_session")
+        if isinstance(body.get("pipeline_session"), dict) else None
+    )
 
     # Cap de modelo SIN Opus (guardarraíl 11).
     from services import llm_router as _llm_router
@@ -115,10 +187,9 @@ def start_conversation():
             work_item_type="Task",
             ado_state="Active",
             # Plan 108 F3 — sellar la conversación al servidor (si hay anclaje).
-            description=(
-                json.dumps({"kind": "devops_chat", "server_alias": server_alias})
-                if server_alias else None
-            ),
+            # Plan 279 F6 — y/o sellarla como sesión del copiloto de pipelines.
+            # Sin ninguno de los dos, `description` queda en None como siempre.
+            description=_sellar_description(server_alias, copilot_session),
         )
         session.add(ticket)
         session.flush()  # asigna ticket.id
@@ -133,6 +204,11 @@ def start_conversation():
             server_alias, request.host_url.rstrip("/"), message, conversation_id,
             write_enabled=False,
         )
+
+    # Plan 279 F6 — el envoltorio del copiloto va DESPUES del de consola remota,
+    # para que una conversación anclada a un servidor conserve su contrato (el de
+    # consola es el más restrictivo y tiene que quedar adentro). R10.
+    message = _envolver_con_copiloto(copilot_session, message, conversation_id)
 
     execution_id, launch_error = _launch_turn(
         conversation_id=conversation_id,
@@ -172,7 +248,14 @@ def send_message(conversation_id: int):
             return jsonify({"ok": False, "error": "conversation_not_found"}), 404
         project = ticket.stacky_project_name or ticket.project
         # Plan 108 F3 — server_alias sellado en la conversación (si la tiene).
-        server_alias = _chat_meta(ticket).get("server_alias")
+        _meta = _chat_meta(ticket)
+        server_alias = _meta.get("server_alias")
+        # Plan 279 F6 — sesión del copiloto sellada en la conversación (D4). El
+        # mismo parser tolerante sirve para las dos claves: conviven en un JSON.
+        copilot_session = (
+            _meta.get("pipeline_session")
+            if isinstance(_meta.get("pipeline_session"), dict) else None
+        )
         last = (
             session.query(AgentExecution)
             .filter(AgentExecution.ticket_id == conversation_id)
@@ -220,6 +303,10 @@ def send_message(conversation_id: int):
             server_alias, request.host_url.rstrip("/"), message, conversation_id,
             write_enabled=False,
         )
+
+    # Plan 279 F6 — mismo orden que en start_conversation: el copiloto envuelve
+    # DESPUES, dejando el contrato de consola (el más restrictivo) adentro. R10.
+    message = _envolver_con_copiloto(copilot_session, message, conversation_id)
 
     execution_id, launch_error = _launch_turn(
         conversation_id=conversation_id,

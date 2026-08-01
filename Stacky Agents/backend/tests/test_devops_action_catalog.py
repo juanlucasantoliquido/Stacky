@@ -174,7 +174,11 @@ def test_palette_actions_excluye_ejecucion_de_escritura():
     health = _all_health_on()
     ofrecidas = palette_actions(health)
     escrituras = {a.id for a in ofrecidas if a.effect == "write"}
-    assert len(escrituras) == 7, sorted(escrituras)
+    # Plan 279 [C1]: el ratchet se APRIETA de 7 a 8 (nace devops.pipeline_new.commit).
+    # PROHIBIDO borrarlo, comentarlo o relajarlo a `>=`: es el guard que impide que
+    # nazca una escritura fuera del conteo. tests/test_plan279_baseline.py caso 3
+    # vigila que esta linea siga diciendo exactamente `== 8`.
+    assert len(escrituras) == 8, sorted(escrituras)
     ejecutables = [a for a in ofrecidas if "palette-run" in a.reach]
     assert [a.id for a in ejecutables if a.effect == "write"] == []
 

@@ -25,7 +25,10 @@ export interface DevOpsAgentSectionProps {
   ctx: DevOpsSectionContext;
 }
 
-type CliRuntime = 'claude_code_cli' | 'codex_cli';
+// Plan 279 F8 [C3] — `github_copilot` se suma al tipo. Sin esto el operador no
+// puede NI ELEGIRLO, y la salida determinista que F6 agrega en el backend queda
+// inalcanzable desde el producto (un gate que pasa sin probar nada).
+type CliRuntime = 'claude_code_cli' | 'codex_cli' | 'github_copilot';
 
 export const DevOpsAgentSection: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
   // Defensa trivial (C6 v3): early-return silencioso si por algún motivo se montó
@@ -147,6 +150,10 @@ const DevOpsAgentSectionBody: React.FC<DevOpsAgentSectionProps> = ({ ctx }) => {
           <select value={runtime} onChange={(e) => setRuntime(e.target.value as CliRuntime)} style={{ padding: '8px' }}>
             <option value="claude_code_cli">Claude Code (recomendado)</option>
             <option value="codex_cli">Codex</option>
+            {/* Plan 279 F8 [C3] — GitHub Copilot no tiene turno CLI: el backend responde
+                200 con mode:"deterministic" y el operador conserva la capacidad completa
+                via matcher determinista + tarjeta de accion. Degradacion DECLARADA. */}
+            <option value="github_copilot">GitHub Copilot (modo determinista)</option>
           </select>
         </div>
         <textarea

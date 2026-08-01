@@ -137,6 +137,8 @@ import { PipelineEditNlPanel } from '../components/devops/PipelineEditNlPanel';
 import { PipelineEnvMatrixPanel } from '../components/devops/PipelineEnvMatrixPanel';
 // Importar PipelineHandoffPanel (Plan 252 F5)
 import { PipelineHandoffPanel } from '../components/devops/PipelineHandoffPanel';
+// Importar PipelineCopilotSection (Plan 279 F8)
+import { PipelineCopilotSection } from '../components/devops/PipelineCopilotSection';
 // Plan 103 — monitor vivo del ultimo pipeline (sondeo con backoff + guard de pestana)
 import { useDevopsPipelineMonitor } from '../components/devops/useDevopsPipelineMonitor';
 
@@ -326,6 +328,18 @@ export const DEVOPS_SECTIONS: DevOpsSection[] = [
     gateFlagKey: 'STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED',
     gateMessage: 'La seccion Paquete de entrega necesita la flag STACKY_PIPELINE_HANDOFF_BUNDLE_ENABLED (Configuracion → Arnes, categoria DevOps).',
     render: (ctx) => <PipelineHandoffPanel ctx={ctx} />,
+  },
+  // Plan 279 — Copiloto de pipelines: un solo hilo conversacional.
+  {
+    id: 'copiloto-pipelines',
+    label: 'Copiloto de pipelines',
+    group: 'construir',
+    icon: '🧭',
+    summary: 'Describí lo que necesitás y el copiloto arma, valida y explica la pipeline.',
+    healthKey: 'pipeline_copilot_enabled',
+    gateFlagKey: 'STACKY_PIPELINE_COPILOT_ENABLED',
+    gateMessage: 'El copiloto de pipelines necesita la flag STACKY_PIPELINE_COPILOT_ENABLED (Configuración → Arnés, categoría DevOps).',
+    render: (ctx) => <PipelineCopilotSection ctx={ctx} />,
   },
 ];
 

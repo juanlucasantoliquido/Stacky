@@ -2135,6 +2135,19 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagas: el asistente igual te muestra la tarjeta completa con todo lo que haria, y un boton que te lleva a la pantalla para hacerlo vos.",
         example="Le pedis «hace el despliegue en produccion»: apagada, te muestra que haria y te lleva a la pantalla; activada, lo hace despues de tu confirmacion.",
     ),
+    # ── Plan 279 — Copiloto de pipelines: un solo hilo conversacional ─────
+    "STACKY_PIPELINE_COPILOT_ENABLED": PlainHelp(
+        what="Te deja crear una pipeline describiendola en castellano en un solo lugar: el copiloto arma el borrador, lo revisa, explica que va a correr y te dice que variables faltan.",
+        on_effect="Si la activas: aparece la seccion 'Copiloto de pipelines' y hacés todo el recorrido sin ir saltando entre cuatro pestanias.",
+        off_effect="Si la apagas: el panel de DevOps queda igual que hoy y seguis armando la pipeline pestania por pestania.",
+        example="Escribis «necesito una pipeline de Python que corra los tests» y te va guiando hasta el borrador revisado, sin tocar tu repositorio.",
+    ),
+    "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED": PlainHelp(
+        what="Decide si el copiloto puede crear el archivo de la pipeline en tu repositorio de verdad, o si solo puede mostrarte el borrador.",
+        on_effect="Si la activas: despues de que confirmes, el copiloto escribe el archivo en la rama que elegiste, y antes te muestra exactamente como deshacerlo.",
+        off_effect="Si la apagas: el copiloto llega hasta el borrador revisado y te lleva a la pantalla para crearlo vos mismo.",
+        example="Es la diferencia entre que te dejen el plano listo y que ademas te levanten la pared: lo segundo se pide aparte.",
+    ),
     # ── Plan 268 — Explorador del grafo documental ────────────────────────
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": PlainHelp(
         what="Agrega herramientas para explorar el mapa de documentos: filtros, buscador que salta al resultado, foco en los vecinos de una nota y vista previa.",

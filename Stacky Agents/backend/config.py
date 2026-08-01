@@ -2416,6 +2416,19 @@ class Config:
         "STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # ── Plan 279 — Copiloto de pipelines: un solo hilo conversacional ─────────
+    # La primera nace ON: solo lee, planea, simula y explica; no escribe en
+    # ningun sistema real, no corre en reposo y no le saca decisiones al
+    # operador. La segunda nace OFF (excepcion dura (B)): ESCRIBE el archivo de
+    # pipeline en el repositorio REAL. Ese default OFF vive SOLO aca; su FlagSpec
+    # NO declara default= (ver services/harness_flags.py).
+    STACKY_PIPELINE_COPILOT_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_COPILOT_ENABLED", "true"
+    ).strip().lower() == "true"
+    STACKY_PIPELINE_COPILOT_COMMIT_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED", "false"
+    ).strip().lower() == "true"
+
     # ── Plan 268 — Explorador del grafo documental (default ON, editable UI) ───
     STACKY_DOCS_GRAPH_EXPLORER_ENABLED: bool = os.getenv(
         "STACKY_DOCS_GRAPH_EXPLORER_ENABLED", "true"

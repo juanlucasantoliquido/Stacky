@@ -281,6 +281,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_ENV_DECLARE_ENABLED",       # Plan 260 — declarar nombres (OFF, escribe)
         "STACKY_PIPELINE_TRIGGER_ENV_GATE_ENABLED",  # Plan 260 — bloquear disparo con faltantes
         "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED",  # Plan 260 — bloquear commit con secreto
+        "STACKY_PIPELINE_COPILOT_ENABLED",  # Plan 279 — copiloto de pipelines (lee, planea, explica)
+        "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED",  # Plan 279 — crear la pipeline en el repo REAL (nace OFF)
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -6249,6 +6251,52 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,
+        requires="STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    ),
+    # ── Plan 279 — Copiloto de pipelines: un solo hilo conversacional ─────
+    FlagSpec(
+        key="STACKY_PIPELINE_COPILOT_ENABLED",
+        type="bool",
+        default=True,   # default ON: NINGUNA excepcion aplica. Solo LEE, PLANEA,
+                        # SIMULA y EXPLICA (lint/explain/preflight son estaticos);
+                        # no escribe en ningun sistema real, no corre en reposo (se
+                        # dispara por request) y no le saca ninguna decision al
+                        # operador. Curada en _CURATED_DEFAULTS_ON.
+        label="Copiloto de pipelines en un solo hilo",
+        description=(
+            "Plan 279 - Pone un solo hilo conversacional encima de lo que ya existe: "
+            "describis en castellano la pipeline que necesitas y el copiloto arma el "
+            "borrador, lo valida, explica que va a correr y dice que variables faltan, "
+            "sin salir de una sola pantalla. NO escribe nada en el repositorio: eso lo "
+            "gatea STACKY_PIPELINE_COPILOT_COMMIT_ENABLED. OFF: el panel DevOps queda "
+            "exactamente como hoy y la seccion 'Copiloto de pipelines' se atenua."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        requires="STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_COPILOT_COMMIT_ENABLED",
+        # SIN default= A PROPOSITO (regla dura, precedentes literales:
+        # STACKY_DEVOPS_AGENT_ACTION_RUN_ENABLED y
+        # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED). Una flag default OFF NO declara
+        # default=False, porque eso la volveria default_is_known() y
+        # test_default_known_only_for_curated exige que ese conjunto sea EXACTAMENTE
+        # _CURATED_DEFAULTS_ON, donde una flag OFF no puede entrar.
+        # El OFF vive SOLO en config.py. NO va en _CURATED_DEFAULTS_ON.
+        # Excepcion dura (B): ESCRIBE el archivo de pipeline en el repositorio REAL.
+        type="bool",
+        label="El copiloto puede crear la pipeline en el repositorio",
+        description=(
+            "Plan 279 - Decide si el copiloto puede escribir el archivo de pipeline "
+            "(azure-pipelines.yml o .gitlab-ci.yml) en la rama que elijas de tu "
+            "repositorio real, o si solo puede mostrarte el borrador. Nace APAGADA: aun "
+            "encendida exige tu confirmacion explicita y te muestra ANTES como deshacer "
+            "el cambio. OFF: el copiloto llega hasta el borrador validado y te lleva a la "
+            "pantalla para crearlo vos."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
         requires="STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
     ),
     # ── Plan 268 — Explorador del grafo documental ────────────────────────

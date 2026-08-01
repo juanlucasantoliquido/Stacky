@@ -43,6 +43,38 @@ def _warn_legacy_bridge_once() -> None:
         _LEGACY_BRIDGE_WARNED = True
 
 
+def tracker_is_azure_devops(project_name: str | None) -> bool:
+    """¿El tracker declarado del proyecto es Azure DevOps? Resolvedor canónico.
+
+    Fuente de verdad: `issue_tracker.type` del config del proyecto — lo que el
+    operador setea por UI. Deliberadamente NO mira `ticket.tracker_type`: la
+    columna tiene default `azure_devops` y las filas sintéticas (Brief Pool
+    Ticket, `api/agents.py:777-785`) se crean sin ese campo, así que MIENTEN
+    para cualquier proyecto no-ADO.
+
+    Fail-closed: sin config resoluble devuelve True (asume ADO), de modo que
+    todo gate construido sobre este helper conserve su comportamiento previo.
+
+    `get_project_config` se importa dentro de la función a propósito: resuelto
+    por referencia en cada llamada, sigue siendo interceptable parcheando
+    `project_manager.get_project_config` (un alias capturado en el import de
+    módulo haría que ese parche no tuviera efecto).
+    """
+    raw = (project_name or "").strip()
+    if not raw:
+        return True
+    try:
+        from project_manager import get_project_config as _get_cfg
+        cfg = _get_cfg(raw) or {}
+        tracker = cfg.get("issue_tracker") or {}
+        declared = (tracker.get("type") or "").strip().lower()
+        if not declared:
+            return True
+        return declared == _DEFAULT_TRACKER_TYPE
+    except Exception:  # noqa: BLE001
+        return True
+
+
 class ProjectContextError(RuntimeError):
     pass
 

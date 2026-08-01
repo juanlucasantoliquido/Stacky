@@ -205,18 +205,14 @@ def _tracker_is_ado(ticket: Any, project: str | None) -> bool:
 
     Fail-closed: si no se puede resolver el config (proyecto desconocido, error
     de lectura), se asume ADO y el predicado se comporta igual que antes del fix.
+
+    La resolución vive en `services.project_context.tracker_is_azure_devops`
+    (resolvedor canónico, compartido con `api.tickets._provider_for_ticket`);
+    acá sólo se traduce ticket+override a nombre de proyecto.
     """
     try:
-        proj = _ticket_project(ticket, project)
-        if not proj:
-            return True
-        from project_manager import get_project_config
-        cfg = get_project_config(proj) or {}
-        tracker = cfg.get("issue_tracker") or {}
-        declared = (tracker.get("type") or "").strip().lower()
-        if not declared:
-            return True
-        return declared == "azure_devops"
+        from services.project_context import tracker_is_azure_devops
+        return tracker_is_azure_devops(_ticket_project(ticket, project))
     except Exception:  # noqa: BLE001
         return True
 

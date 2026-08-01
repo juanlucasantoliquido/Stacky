@@ -29,7 +29,12 @@ from services import next_agent
 from services.flow_config_store import resolve as resolve_flow
 from services.ado_pipeline_inference import infer_pipeline, invalidate_cache
 from services.ado_client import AdoClient, AdoApiError as _AdoApiError, AdoConfigError as _AdoConfigError
-from services.project_context import ProjectContextError, build_ado_client, resolve_project_context
+from services.project_context import (
+    ProjectContextError,
+    build_ado_client,
+    resolve_project_context,
+    tracker_is_azure_devops,  # F2 — el gate del provider es tracker-aware
+)
 from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
 from services.ci_provider import get_ci_provider, ItemRef, ItemPipelineResult  # Plan 71 F5
 from services.client_profile import load_effective_client_profile  # Plan 79
@@ -411,15 +416,27 @@ def _provider_for_ticket(ticket: "Ticket | None" = None, project_name: str | Non
 
     Espejo provider-agnóstico de ``_ado_client_for_ticket``. La migración está
     gateada por ``STACKY_TICKETS_PROVIDER_ENABLED`` (default **OFF**):
-      - flag OFF → retorna ``None`` y el caller cae a ``_ado_client_for_ticket``
-        (backward-compat byte-idéntico).
+      - flag OFF **y tracker ADO** → retorna ``None`` y el caller cae a
+        ``_ado_client_for_ticket`` (backward-compat byte-idéntico).
       - flag ON + provider disponible → retorna la instancia del puerto.
-      - flag ON + provider no configurado (ej. GitLab sin
+      - flag ON/OFF + provider no configurado (ej. GitLab sin
         ``STACKY_GITLAB_ENABLED``) → retorna ``None`` (fallback ADO), NO propaga.
+
+    F2 — el corto-circuito por la flag aplica SOLO cuando el tracker resuelto es
+    Azure DevOps. El bloqueo de ``STACKY_TICKETS_PROVIDER_ENABLED`` (2026-07-15)
+    está motivado enteramente por la rama ADO: ``AdoTrackerProvider`` construye
+    su cliente con ``build_ado_client()`` directo y 27 tests en 8 archivos
+    mockean ``_ado_client_for_ticket``. La rama GitLab no arrastra esa deuda, y
+    dejarla apagada dejaba a los proyectos GitLab sin publicador de épica
+    (medido: ejecución 210 / RIPLEY, ``epic_publish_error`` = "El proyecto
+    'RIPLEY' no usa Azure DevOps").
     """
-    if not getattr(config.config, "STACKY_TICKETS_PROVIDER_ENABLED", False):
-        return None
     proj = project_name or (ticket.stacky_project_name if ticket is not None else None)
+    if (
+        not getattr(config.config, "STACKY_TICKETS_PROVIDER_ENABLED", False)
+        and tracker_is_azure_devops(proj)
+    ):
+        return None
     try:
         return get_tracker_provider(proj)
     except TrackerConfigError:

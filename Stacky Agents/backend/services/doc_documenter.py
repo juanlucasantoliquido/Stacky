@@ -325,6 +325,16 @@ def build_context_for_mode(mode: DocumenterMode, plan: DocumenterPlan,
         targets = plan.uncovered_modules or ["<repo>"]
         for module in targets:
             blocks.append(_module_context_block(project_name, module))
+        # Plan 284 F4 — la historia real del proyecto según sus tickets, con
+        # triage determinista (sin LLM). Sólo entran los 'signal'.
+        try:
+            from services import doc_ticket_mining
+            mining = doc_ticket_mining.mine_project_tickets(project_name)
+            tickets_block = doc_ticket_mining.build_tickets_context_block(mining)
+            if tickets_block is not None:
+                blocks.append(tickets_block)
+        except Exception as exc:  # nunca tumba el run por el barrido
+            logger.warning("doc_documenter: minería de tickets falló: %s", exc)
     elif mode == DocumenterMode.ENRIQUECER:
         blocks.append(_subgraph_block(project_name))
     # ACTUALIZAR (plan 114): tolerado, sin contexto especial acá.
@@ -594,6 +604,45 @@ def _is_canonical(norm: str) -> bool:
     return norm == "docs/sistema" or "docs/sistema/" in (norm + "/")
 
 
+def evaluate_citation_gate(citations: dict, *, min_ratio: float | None = None,
+                           ) -> dict:
+    """Plan 284 — veredicto del gate de citas. PURA, sin I/O. Nunca lanza.
+
+    Entrada: el dict de doc_evidence.verify_citations -> {"total","ok","bad"}.
+    Salida:  {"passed": bool, "ratio": float, "reason": str}
+
+    Reglas EXACTAS:
+      - total == 0  -> passed=True, ratio=1.0, reason=""      (un doc sin citas
+        no se rechaza: puede ser legítimamente todo [INF]/[NV]. El que miente es
+        el que cita mal, no el que no cita.)
+      - ratio = ok / total
+      - ratio >= min_ratio -> passed=True, reason=""
+      - ratio <  min_ratio -> passed=False,
+        reason="citations_below_threshold:{ok}/{total}"
+    """
+    try:
+        from config import config as _cfg
+        if min_ratio is None:
+            min_ratio = float(getattr(_cfg, "STACKY_DOCS_CITATION_GATE_MIN_RATIO", 0.8))
+        total = int((citations or {}).get("total", 0) or 0)
+        ok = int((citations or {}).get("ok", 0) or 0)
+        if total <= 0:
+            return {"passed": True, "ratio": 1.0, "reason": ""}
+        ratio = ok / total
+        if ratio >= min_ratio:
+            return {"passed": True, "ratio": ratio, "reason": ""}
+        return {"passed": False, "ratio": ratio,
+                "reason": f"citations_below_threshold:{ok}/{total}"}
+    except Exception:
+        # Degradación: ante basura, no bloquea la escritura.
+        return {"passed": True, "ratio": 1.0, "reason": ""}
+
+
+def _citation_gate_enabled() -> bool:
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_DOCS_CITATION_GATE_ENABLED", False))
+
+
 def apply_proposals(proposals: list[DocProposal], target_root: str,
                     branch_name: str | None, *, degraded: bool = False,
                     workspace_root: str | None = None) -> ApplyResult:
@@ -625,20 +674,40 @@ def apply_proposals(proposals: list[DocProposal], target_root: str,
         if not prop.marks_ok:
             result.skipped.append((prop.path, "missing_confidence_marks"))
             continue
+
+        # ---- Plan 284 F3: GATE DE CITAS (antes existía sólo como reporte) ----
+        # El orden pasa de "escribir -> verificar" a "verificar -> decidir -> escribir".
+        # Hasta el 284 el archivo se escribía y recién después se contaban las
+        # citas, así que la marca [V] no garantizaba nada.
+        citations = None
+        if workspace_root is not None:
+            from services import doc_evidence
+            citations = doc_evidence.verify_citations(
+                prop.content + " " + ",".join(prop.sources), workspace_root)
+            if _citation_gate_enabled():
+                verdict = evaluate_citation_gate(citations)
+                if not verdict["passed"]:
+                    result.skipped.append((prop.path, verdict["reason"]))
+                    result.files.append({
+                        "path": norm, "action": prop.action, "citations": citations,
+                        "content_preview": prop.content[:_PREVIEW_MAX_CHARS],
+                        "rejected": True, "reject_reason": verdict["reason"],
+                    })
+                    continue
+        # ---------------------------------------------------------------------
         try:
             dest = (root / norm)
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(prop.content, encoding="utf-8")  # upsert: create==patch (overwrite)
             result.written.append(norm)
-            if workspace_root is not None:
-                from services import doc_evidence
-                citations = doc_evidence.verify_citations(
-                    prop.content + " " + ",".join(prop.sources), workspace_root)
+            if citations is not None:
                 result.files.append({
                     "path": norm,
                     "action": prop.action,
                     "citations": citations,
                     "content_preview": prop.content[:_PREVIEW_MAX_CHARS],
+                    "rejected": False,
+                    "reject_reason": "",
                 })
         except Exception as exc:
             logger.warning("doc_documenter: no se pudo escribir %s: %s", norm, exc)
@@ -953,7 +1022,9 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
 
     result = apply_proposals(
         all_props, write_root, branch, degraded=degraded,
-        workspace_root=(workspace_root if _v2_enabled() else None),
+        # Plan 284 F3 — el gate de citas necesita workspace_root aunque la V2
+        # esté OFF: sin él ni siquiera se cuentan las citas y el gate sería inerte.
+        workspace_root=(workspace_root if (_v2_enabled() or _citation_gate_enabled()) else None),
     )
 
     diff_stat = ""

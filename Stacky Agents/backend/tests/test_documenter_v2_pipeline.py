@@ -528,3 +528,249 @@ def test_plan284_nota_se_persiste_en_el_reporte(monkeypatch, tmp_path,
 
     report = doc_documenter.run_documenter("P", "claude_code_cli", operator_note="hola")
     assert report["operator_note"] == "hola"
+
+
+# ===========================================================================
+# Plan 284 F3 - el archivo con citas falsas NO EXISTE EN DISCO
+# ===========================================================================
+
+def _props_buena_y_mala():
+    from services.doc_documenter import DocProposal
+    buena = DocProposal(path="buena.md", action="create",
+                        content="[V] real.py:2 documentado", marks_ok=True, sources=[])
+    mala = DocProposal(path="mala.md", action="create",
+                       content="[V] real.py:999 y [V] inexistente.py:1",
+                       marks_ok=True, sources=[])
+    return buena, mala
+
+
+def test_plan284_gate_no_escribe_el_archivo_con_citas_falsas(monkeypatch, tmp_path):
+    """Lo que hoy falla: el archivo malo se escribia igual y se reportaba despues."""
+    from config import config
+    from services.doc_documenter import apply_proposals
+
+    monkeypatch.setattr(config, "STACKY_DOCS_CITATION_GATE_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_CITATION_GATE_MIN_RATIO", 0.8)
+
+    (tmp_path / "real.py").write_text("a\nb\nc\n", encoding="utf-8")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    buena, mala = _props_buena_y_mala()
+    result = apply_proposals([buena, mala], str(out), None,
+                             workspace_root=str(tmp_path))
+
+    # PRESENCIA: el archivo con citas validas si se escribe.
+    assert "buena.md" in result.written
+    assert (out / "buena.md").is_file()
+
+    # AUSENCIA: el archivo con citas falsas NO EXISTE EN DISCO.
+    assert "mala.md" not in result.written
+    assert not (out / "mala.md").exists()
+    assert ("mala.md", "citations_below_threshold:0/2") in result.skipped
+
+
+def test_plan284_gate_off_conserva_comportamiento_137(monkeypatch, tmp_path):
+    """Backward-compat exacta: con el gate OFF se escriben AMBOS archivos."""
+    from config import config
+    from services.doc_documenter import apply_proposals
+
+    monkeypatch.setattr(config, "STACKY_DOCS_CITATION_GATE_ENABLED", False)
+
+    (tmp_path / "real.py").write_text("a\nb\nc\n", encoding="utf-8")
+    out = tmp_path / "out"
+    out.mkdir()
+
+    buena, mala = _props_buena_y_mala()
+    result = apply_proposals([buena, mala], str(out), None,
+                             workspace_root=str(tmp_path))
+
+    assert "buena.md" in result.written and "mala.md" in result.written
+    assert (out / "mala.md").is_file()
+    # result.files sigue trayendo el conteo de citas (comportamiento del 137).
+    assert result.files and all("citations" in f for f in result.files)
+
+
+def test_plan284_doc_sin_citas_no_se_rechaza(monkeypatch, tmp_path):
+    """El que miente es el que cita mal, no el que no cita."""
+    from config import config
+    from services.doc_documenter import DocProposal, apply_proposals
+
+    monkeypatch.setattr(config, "STACKY_DOCS_CITATION_GATE_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_CITATION_GATE_MIN_RATIO", 0.8)
+
+    out = tmp_path / "out"
+    out.mkdir()
+    prop = DocProposal(path="sincitas.md", action="create",
+                       content="[INF] esto es inferido y [NV] esto no es verificable",
+                       marks_ok=True, sources=[])
+    result = apply_proposals([prop], str(out), None, workspace_root=str(tmp_path))
+
+    assert "sincitas.md" in result.written
+    assert (out / "sincitas.md").is_file()
+
+
+# ===========================================================================
+# Plan 284 F4 - mineria del corpus de tickets con triage auditable
+# ===========================================================================
+
+def _clasificar(**kw):
+    from services.doc_ticket_mining import classify_ticket
+    base = dict(ticket_id=1, ado_id=1001, external_id=1001,
+                tracker_type="azure_devops", title="t" * 20,
+                description="d" * 250, ado_state="Active", work_item_type="Task")
+    base.update(kw)
+    return classify_ticket(**base)
+
+
+def test_plan284_classify_ticket_tabla():
+    """Tabla con TODOS los campos fijados y el score exacto de cada fila.
+
+    La v1 decia cosas como 'demo con descripcion larga -> noise (score 3-3=0)':
+    esa aritmetica solo cierra si la descripcion esta entre 200 y 799 y el tipo
+    no es Task. Con 1200 chars el score da 2 => signal y el test sale rojo. El
+    riesgo real no es el rojo: es que alguien 'arregle' el test debilitando el
+    assert. Por eso cada fila fija todos los campos.
+    """
+    # 1 - epica rica: +2 extensa +1 suficiente +1 titulo +1 Epic = 5
+    v = _clasificar(ticket_id=1, description="d" * 1200, title="t" * 40, work_item_type="Epic")
+    assert (v.score, v.verdict) == (5, "signal")
+
+    # 2 - frontera signal: +1 suficiente +1 titulo = 2
+    v = _clasificar(ticket_id=2, description="d" * 250, title="t" * 20, work_item_type="Task")
+    assert (v.score, v.verdict) == (2, "signal")
+
+    # 3 - frontera noise: 199 chars no llega a suficiente => +1 titulo = 1
+    v = _clasificar(ticket_id=3, description="d" * 199, title="t" * 20, work_item_type="Task")
+    assert (v.score, v.verdict) == (1, "noise")
+
+    # 4 - sin descripcion: +1 titulo -2 sin_descripcion = -1
+    v = _clasificar(ticket_id=4, description="", title="t" * 20, work_item_type="Task")
+    assert (v.score, v.verdict) == (-1, "noise")
+    assert "sin_descripcion" in v.reasons
+
+    # 5 - tracker sintetico: +1 suficiente +1 titulo +1 Epic -3 demo = 0
+    v = _clasificar(ticket_id=5, tracker_type="demo", description="d" * 300,
+                    title="t" * 20, work_item_type="Epic")
+    assert (v.score, v.verdict) == (0, "noise")
+    assert "tracker_sintetico" in v.reasons
+
+    # 6 - FIX C3: ado_id=-2 y external_id=-7. La regla vieja miraba external_id
+    #     contra un frozenset de ado_ids y no lo detectaba.
+    v = _clasificar(ticket_id=6, ado_id=-2, external_id=-7, description="d" * 300,
+                    title="t" * 20, work_item_type="Epic")
+    assert (v.score, v.verdict) == (0, "noise")
+    assert "ticket_interno_de_stacky" in v.reasons
+
+    # 7 - titulo ruido: +1 suficiente -2 ruido = -1 (titulo "test" no llega a 15)
+    v = _clasificar(ticket_id=7, title="test", description="d" * 300, work_item_type="Task")
+    assert (v.score, v.verdict) == (-1, "noise")
+    assert "titulo_ruido" in v.reasons
+
+    # 8 - MULTIPROVEEDOR: gitlab no queda en desventaja frente a ADO.
+    v = _clasificar(ticket_id=8, tracker_type="gitlab", description="d" * 1200,
+                    title="t" * 40, work_item_type="Issue", ado_state="opened")
+    assert (v.score, v.verdict) == (5, "signal")
+
+    # 9 - FIX C13: cerrado Y documentado es la MEJOR historia: 5 + 1 = 6
+    v = _clasificar(ticket_id=9, description="d" * 1200, title="t" * 40,
+                    work_item_type="Epic", ado_state="Done")
+    assert (v.score, v.verdict) == (6, "signal")
+    assert any(r.startswith("cerrado_y_documentado") for r in v.reasons)
+
+    # 10 - FIX C13: cerrado y flaco = el "obsoleto" del pedido. +1 titulo -2 = -1
+    v = _clasificar(ticket_id=10, description="d" * 50, title="t" * 20,
+                    work_item_type="Task", ado_state="Done")
+    assert (v.score, v.verdict) == (-1, "noise")
+    assert any(r.startswith("cerrado_sin_contenido") for r in v.reasons)
+
+
+def test_plan284_es_sintetico_cubre_los_103():
+    """Cualquier id negativo es sintetico: aritmetica, no catalogo."""
+    from services.doc_ticket_mining import _es_sintetico
+
+    # PRESENCIA: los detecta.
+    assert _es_sintetico(-2, -7) is True
+    assert _es_sintetico(-4, -123) is True
+    assert _es_sintetico(None, -5) is True
+    # AUSENCIA: no marca de mas.
+    assert _es_sintetico(1001, 1001) is False
+    assert _es_sintetico(None, None) is False
+    # No lanza ante basura.
+    assert _es_sintetico("x", None) is False
+
+
+def test_plan284_mine_project_tickets_forma_garantizada(monkeypatch):
+    """Con la flag OFF: las 8 claves presentes, enabled=False y ceros."""
+    from config import config
+    from services.doc_ticket_mining import mine_project_tickets
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TICKET_MINING_ENABLED", False)
+    out = mine_project_tickets("P")
+
+    esperadas = {"enabled", "scope", "total", "signal", "noise",
+                 "by_tracker", "verdicts", "truncated"}
+    assert set(out.keys()) == esperadas          # PRESENCIA de la forma
+    assert out["enabled"] is False               # AUSENCIA de datos
+    assert out["total"] == 0 and out["verdicts"] == []
+
+
+def test_plan284_scope_project_es_case_insensitive(monkeypatch):
+    """FIX C24: 'p' y 'P' son el MISMO proyecto partido por case-sensitivity."""
+    from config import config
+    from db import session_scope
+    from models import Ticket
+    from services.doc_ticket_mining import mine_project_tickets
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TICKET_MINING_ENABLED", True)
+
+    import db as _db
+    from sqlalchemy import inspect as _inspect
+    if not _inspect(_db.engine).has_table("tickets"):
+        Ticket.__table__.create(bind=_db.engine, checkfirst=True)
+
+    with session_scope() as s:
+        s.query(Ticket).delete()
+        for i, proj in enumerate(["p", "p", "P", "P", "OTRO"]):
+            s.add(Ticket(ado_id=9000 + i, external_id=9000 + i,
+                         project=proj, stacky_project_name=proj,
+                         tracker_type="azure_devops",
+                         title="t" * 20, description="d" * 300,
+                         ado_state="Active", work_item_type="Task"))
+
+    out = mine_project_tickets("P", scope="project")
+    assert out["total"] == 4, f"case-insensitive roto: {out['total']}"   # PRESENCIA
+
+    # AUSENCIA GEMELA: el ticket de OTRO proyecto no entra.
+    titulos = {v.ticket_id for v in out["verdicts"]}
+    otro = mine_project_tickets("OTRO", scope="project")
+    assert otro["total"] == 1
+    assert not (titulos & {v.ticket_id for v in otro["verdicts"]})
+
+    with session_scope() as s:
+        s.query(Ticket).delete()
+
+
+def test_plan284_build_tickets_block_solo_signal():
+    """El bloque lleva los signal y NO lleva los noise."""
+    from services.doc_ticket_mining import TicketVerdict, build_tickets_context_block
+
+    def _v(i, verdict, titulo):
+        return TicketVerdict(ticket_id=i, external_id=i, tracker_type="azure_devops",
+                             title=titulo, verdict=verdict, reasons=["r"], score=0)
+
+    mining = {"total": 5, "noise": 3, "verdicts": [
+        _v(1, "signal", "SENIAL_UNO"), _v(2, "signal", "SENIAL_DOS"),
+        _v(3, "noise", "RUIDO_UNO"), _v(4, "noise", "RUIDO_DOS"),
+        _v(5, "noise", "RUIDO_TRES"),
+    ]}
+    block = build_tickets_context_block(mining)
+    contenido = block["content"]
+
+    assert "SENIAL_UNO" in contenido and "SENIAL_DOS" in contenido      # PRESENCIA
+    for ruido in ("RUIDO_UNO", "RUIDO_DOS", "RUIDO_TRES"):
+        assert ruido not in contenido                                    # AUSENCIA
+
+    # Sin ningun signal, no hay bloque (no se ensucia el prompt con nada).
+    assert build_tickets_context_block({"total": 1, "noise": 1,
+                                        "verdicts": [_v(9, "noise", "X")]}) is None

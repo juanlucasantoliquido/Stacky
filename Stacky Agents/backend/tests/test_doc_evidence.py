@@ -247,3 +247,34 @@ def test_plan284_summarize_classes_forma_garantizada():
     assert len(out) == 5
     # La clasificación es una PARTICIÓN: nada se pierde ni se cuenta dos veces.
     assert sum(out.values()) == len(paths)
+
+
+# ===========================================================================
+# Plan 284 F3 - el gate de citas deja de ser decorativo
+# ===========================================================================
+
+def test_plan284_evaluate_citation_gate_tabla():
+    """Tabla completa con min_ratio explicito: un test puro no depende del config."""
+    from services.doc_documenter import evaluate_citation_gate as g
+
+    # Un doc SIN citas no se rechaza: puede ser legitimamente todo [INF]/[NV].
+    r = g({"total": 0, "ok": 0, "bad": []}, min_ratio=0.8)
+    assert r["passed"] is True and r["ratio"] == 1.0 and r["reason"] == ""
+
+    r = g({"total": 10, "ok": 10, "bad": []}, min_ratio=0.8)
+    assert r["passed"] is True and r["ratio"] == 1.0
+
+    # Frontera exacta: 0.8 >= 0.8 pasa.
+    r = g({"total": 10, "ok": 8, "bad": ["a", "b"]}, min_ratio=0.8)
+    assert r["passed"] is True
+
+    r = g({"total": 10, "ok": 7, "bad": ["a"]}, min_ratio=0.8)
+    assert r["passed"] is False
+    assert r["reason"] == "citations_below_threshold:7/10"
+
+    r = g({"total": 1, "ok": 0, "bad": ["x.py:9"]}, min_ratio=0.8)
+    assert r["passed"] is False
+
+    # Degradacion: None nunca lanza y no bloquea.
+    r = g(None, min_ratio=0.8)
+    assert r["passed"] is True

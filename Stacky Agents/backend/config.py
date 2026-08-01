@@ -240,6 +240,9 @@ class Config:
     STACKY_RUN_ADVISOR_ENFORCE = os.getenv("STACKY_RUN_ADVISOR_ENFORCE", "false").lower() in (
         "1", "true", "yes",
     )
+    # Plan 22 V2.2 (mitad 2) — Tope de costo acumulado por ticket, en USD.
+    # 0.0 = SIN LÍMITE (default): el gobierno de costo nace apagado.
+    STACKY_BUDGET_PER_TICKET_USD = float(os.getenv("STACKY_BUDGET_PER_TICKET_USD", "0.0") or 0.0)
 
     # ── Plan 110 — Revisor de PRs (Haiku solo-lectura + modelo local) ──────────
     # DEFAULT ON (decisión explícita del operador 2026-07-09): el fallback del getenv es "true".

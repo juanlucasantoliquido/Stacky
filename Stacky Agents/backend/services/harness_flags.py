@@ -1377,8 +1377,6 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=True,
-        reserved=True,
-        reserved_reason="Plan 22 V2.2 (budget por ticket) declarada anticipadamente; el tope de costo nunca se implementó. Hoy NO limita nada.",
     ),
     # ── V2.3 — Evals programados + gate endurecible ────────────────────────────
     FlagSpec(

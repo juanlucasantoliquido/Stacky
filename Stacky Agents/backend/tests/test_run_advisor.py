@@ -259,3 +259,114 @@ def test_v22_el_launch_consume_el_enforce():
     )
     # y el humano sigue ganando: sólo se consulta si el runtime vino ausente
     assert "runtime_defaulted" in fuente
+
+
+# ── V2.2 (Plan 22) mitad 2 — PRESUPUESTO por ticket ─────────────────────────
+#
+# `harness_flags.py:1381` confesaba: "el tope de costo nunca se implementó. Hoy NO
+# limita nada". Los tests viven acá (y no en un test_run_budget.py nuevo) porque
+# este archivo YA está registrado en los DOS ratchets y V2.2 es UN solo ítem.
+
+
+def test_v22_budget_guarda_la_flag_dejo_de_estar_reservada():
+    """GUARDA anti-falso-verde, afirmada en POSITIVO antes que las ausencias."""
+    from services.harness_flags import FLAG_REGISTRY
+
+    spec = next((f for f in FLAG_REGISTRY if f.key == "STACKY_BUDGET_PER_TICKET_USD"), None)
+    assert spec is not None
+    assert not getattr(spec, "reserved", False)
+    from config import config
+    assert getattr(config, "STACKY_BUDGET_PER_TICKET_USD", None) == 0.0
+
+
+def test_v22_budget_cero_es_sin_limite(monkeypatch):
+    """0.0 = sin límite ⇒ no evalúa nada (byte-idéntico)."""
+    import config as cfg
+    from services import run_budget
+
+    monkeypatch.setattr(cfg.config, "STACKY_BUDGET_PER_TICKET_USD", 0.0, raising=False)
+    assert run_budget.evaluate(ticket_id=1, model="claude-sonnet-4-6") is None
+
+
+def test_v22_degrade_model_baja_un_escalon():
+    from services.run_budget import degrade_model
+
+    assert "sonnet" in degrade_model("claude-opus-4-8")
+    assert "haiku" in degrade_model("claude-sonnet-4-6")
+    # El más barato de la escalera no baja más: nunca sube ni inventa modelo.
+    assert degrade_model("claude-haiku-4-5") is None
+    assert degrade_model(None) is None
+
+
+def test_v22_dentro_del_presupuesto_pasa(monkeypatch):
+    import config as cfg
+    from services import run_budget
+
+    monkeypatch.setattr(cfg.config, "STACKY_BUDGET_PER_TICKET_USD", 10.0, raising=False)
+    monkeypatch.setattr(run_budget, "spent_for_ticket", lambda _t: 2.0)
+
+    d = run_budget.evaluate(ticket_id=1, model="claude-sonnet-4-6", estimated_run_usd=1.0)
+    assert d.action == run_budget.ACTION_OK
+    assert d.spent_usd == 2.0 and d.projected_usd == 3.0
+
+
+def test_v22_excedido_degrada_el_modelo_un_escalon(monkeypatch):
+    import config as cfg
+    from services import run_budget
+
+    monkeypatch.setattr(cfg.config, "STACKY_BUDGET_PER_TICKET_USD", 5.0, raising=False)
+    monkeypatch.setattr(run_budget, "spent_for_ticket", lambda _t: 4.9)
+
+    d = run_budget.evaluate(ticket_id=1, model="claude-sonnet-4-6", estimated_run_usd=1.0)
+    assert d.action == run_budget.ACTION_DEGRADE
+    assert "haiku" in d.model_to
+    assert d.to_metadata()["budget_degraded"] is True
+
+
+def test_v22_excedido_sin_donde_degradar_bloquea_con_402(monkeypatch):
+    import config as cfg
+    from services import run_budget
+
+    monkeypatch.setattr(cfg.config, "STACKY_BUDGET_PER_TICKET_USD", 5.0, raising=False)
+    monkeypatch.setattr(run_budget, "spent_for_ticket", lambda _t: 9.0)
+
+    d = run_budget.evaluate(ticket_id=1, model="claude-haiku-4-5", estimated_run_usd=1.0)
+    assert d.action == run_budget.ACTION_BLOCK
+    payload = d.to_error_payload()
+    assert payload["error"] == "budget_exceeded"
+    assert payload["spent"] == 9.0 and payload["budget"] == 5.0
+
+
+def test_v22_force_budget_permite_el_override_y_lo_sella(monkeypatch):
+    """El operador manda: con force_budget=true pasa igual, pero queda registrado."""
+    import config as cfg
+    from services import run_budget
+
+    monkeypatch.setattr(cfg.config, "STACKY_BUDGET_PER_TICKET_USD", 5.0, raising=False)
+    monkeypatch.setattr(run_budget, "spent_for_ticket", lambda _t: 99.0)
+
+    d = run_budget.evaluate(ticket_id=1, model="claude-haiku-4-5", force=True)
+    assert d.action == run_budget.ACTION_OK
+    assert d.forced is True
+    assert d.to_metadata()["budget_forced"] is True
+
+
+def test_v22_no_medir_el_gasto_no_bloquea(monkeypatch):
+    """Falla-abierto: si el cálculo del gasto explota, NO se traba al operador."""
+    from services import run_budget
+
+    def _boom(_t):
+        raise RuntimeError("db caida")
+
+    monkeypatch.setattr(run_budget, "session_scope", None, raising=False)
+    assert run_budget.spent_for_ticket(999999) == 0.0
+
+
+def test_v22_el_launch_consume_el_presupuesto():
+    """Gate de CONSUMIDOR DE PRODUCCIÓN de la mitad 2."""
+    import inspect
+    from api import agents as agents_api
+
+    fuente = inspect.getsource(agents_api.run)
+    assert "run_budget" in fuente, "V2.2 mitad 2 sin cablear: /run no evalúa presupuesto."
+    assert "budget_exceeded" in fuente or "402" in fuente

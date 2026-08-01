@@ -19,7 +19,9 @@ RESERVED_KEYS = frozenset({
     # (mitad 1, enforce) la cableó en api/agents.py::run vía _apply_advisor_enforce,
     # así que ya no es una flag muerta. Su cobertura ahora vive en
     # tests/test_run_advisor.py (7 casos v22).
-    "STACKY_BUDGET_PER_TICKET_USD",
+    # STACKY_BUDGET_PER_TICKET_USD — SALE el 2026-08-01: el plan 22 V2.2 (mitad 2,
+    # presupuesto) la cableó en api/agents.py::run vía services/run_budget.py
+    # (degrada un escalón, y si no hay a dónde degradar corta con 402).
     "STACKY_BRIEF_MODEL_SELECT_ENABLED",
     "STACKY_SPECULATIVE_MODE",
 })
@@ -83,6 +85,11 @@ def test_reserved_flags_are_actually_dead(corpus):
 def test_read_current_exposes_reserved_fields():
     from services.harness_flags import read_current
     flags = {f["key"]: f for f in read_current()}
-    assert flags["STACKY_BUDGET_PER_TICKET_USD"]["reserved"] is True
-    assert flags["STACKY_BUDGET_PER_TICKET_USD"]["reserved_reason"]
+    # 2026-08-01: el ejemplo de flag RESERVADA pasa de STACKY_BUDGET_PER_TICKET_USD
+    # a STACKY_BRIEF_MODEL_SELECT_ENABLED, porque el plan 22 V2.2 cableó la primera
+    # y dejó de estar reservada. Lo que este test fija es la FORMA de read_current
+    # (que exponga los campos), no qué flag puntual está reservada.
+    assert flags["STACKY_BRIEF_MODEL_SELECT_ENABLED"]["reserved"] is True
+    assert flags["STACKY_BRIEF_MODEL_SELECT_ENABLED"]["reserved_reason"]
     assert flags["STACKY_RUN_ADVISOR_ENABLED"]["reserved"] is False
+    assert flags["STACKY_BUDGET_PER_TICKET_USD"]["reserved"] is False

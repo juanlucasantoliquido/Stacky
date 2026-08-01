@@ -418,6 +418,37 @@ def run():
                 runtime, advisor_routing["confidence"], advisor_routing["reason"],
             )
 
+    # V2.2 (Plan 22) mitad 2 — Presupuesto por ticket: degradar antes que bloquear.
+    # Se evalúa ACÁ, antes de tomar el slot de concurrencia, para que un 402 no
+    # consuma un slot. Con la flag en 0.0 (sin límite) es un no-op.
+    _model_effective = payload.get("model_override")
+    budget_decision = None
+    try:
+        from services import run_budget as _run_budget
+
+        if ticket_id is not None:
+            budget_decision = _run_budget.evaluate(
+                ticket_id=int(ticket_id),
+                model=_model_effective,
+                force=bool(payload.get("force_budget")),
+            )
+        if budget_decision is not None:
+            if budget_decision.action == _run_budget.ACTION_BLOCK:
+                logger.warning(
+                    "V2.2 presupuesto agotado para ticket=%s (gastado=%.4f tope=%.4f)",
+                    ticket_id, budget_decision.spent_usd, budget_decision.budget_usd,
+                )
+                return jsonify(budget_decision.to_error_payload()), 402
+            if budget_decision.action == _run_budget.ACTION_DEGRADE:
+                logger.info(
+                    "V2.2 presupuesto excedido: degradando modelo '%s' → '%s'",
+                    budget_decision.model_from, budget_decision.model_to,
+                )
+                _model_effective = budget_decision.model_to
+    except Exception as _budget_exc:  # noqa: BLE001
+        # Falla-abierto: el gobierno de costo nunca deja al operador sin trabajar.
+        logger.warning("V2.2 presupuesto falló (ignorado, sigue el run): %s", _budget_exc)
+
     # Validación de runtime ANTES de cualquier procesamiento.
     # Reglas:
     #   - runtime ausente o null → github_copilot (retro-compat, marcado con runtime_defaulted=True)
@@ -590,7 +621,7 @@ def run():
             context_blocks=context_blocks,
             chain_from=chain_from,
             user=current_user(),
-            model_override=payload.get("model_override"),
+            model_override=_model_effective,                   # Plan 22 V2.2 (puede venir degradado)
             effort_override=_effort_effective,                 # Plan 212 F2
             system_prompt_override=payload.get("system_prompt_override"),
             use_few_shot=payload.get("use_few_shot", True),

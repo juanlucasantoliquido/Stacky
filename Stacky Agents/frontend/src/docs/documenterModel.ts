@@ -8,7 +8,16 @@ import type {
   DocumenterRunEntry,
 } from "../api/endpoints";
 
-export type DocumenterUiState = "running" | "completed" | "failed" | "decided" | "unknown";
+export type DocumenterUiState =
+  | "running"
+  | "completed"
+  | "failed"
+  | "decided"
+  /** Plan 284 F5.3 — el run se detuvo ANTES de escribir y espera al operador.
+   *  Sin este estado el panel caía en "unknown" y no se renderizaba: los
+   *  botones de aprobación existirían pero nadie los vería nunca. */
+  | "awaiting_approval"
+  | "unknown";
 
 export interface DocumenterSummary {
   uiState: DocumenterUiState;
@@ -37,6 +46,8 @@ export function summarizeDocumenterStatus(
   if (raw === "running") uiState = "running";
   else if (raw === "completed") uiState = "completed";
   else if (raw === "failed") uiState = "failed";
+  else if (raw === "awaiting_approval") uiState = "awaiting_approval";  // Plan 284
+  else if (raw === "budget_exhausted") uiState = "completed";           // Plan 284 A1
   else if (raw.startsWith("decided")) uiState = "decided";
 
   return {
@@ -166,4 +177,162 @@ export function buildRunsView(runs: unknown): DocumenterRunRow[] {
       mtimeIso: run.mtime_iso ?? "",
     };
   });
+}
+
+
+// ---------------------------------------------------------------------------
+// Plan 284 F7 — la salida se entiende: veredicto arriba, etapas con su estado,
+// cobertura y triage en texto llano. Lógica PURA (sin React, sin DOM): RTL y
+// jsdom no están instalados en este repo, así que lo testeable vive acá.
+// ---------------------------------------------------------------------------
+
+/** Orden canónico de las 5 etapas. Espeja STAGE_ORDER del backend. */
+export const STAGE_ORDER_UI = [
+  "PROPONER",
+  "CRITICAR",
+  "MEJORAR",
+  "IMPLEMENTAR",
+  "VERIFICAR",
+] as const;
+
+const STAGE_LABELS: Record<string, string> = {
+  PROPONER: "Proponer",
+  CRITICAR: "Criticar",
+  MEJORAR: "Mejorar",
+  IMPLEMENTAR: "Implementar",
+  VERIFICAR: "Verificar",
+};
+
+const STAGE_STATE_LABELS: Record<string, string> = {
+  pending: "Pendiente",
+  running: "En curso",
+  done: "Hecha",
+  skipped: "Salteada",
+  failed: "Falló",
+  awaiting_approval: "Esperando tu aprobación",
+};
+
+export interface StageView {
+  stage: string;
+  label: string;
+  state: string;
+  badge: string;
+  summary: string;
+}
+
+/** Plan 284 — filas de etapa en el orden canónico, incluso las que no llegaron
+ *  a correr (esas quedan en "pending"). Siempre devuelve 5 filas. */
+export function buildStagesView(
+  status: DocumenterStatusResponse | null | undefined
+): StageView[] {
+  const porEtapa = new Map<string, { state?: string; summary?: string }>();
+  for (const s of status?.stages ?? []) {
+    if (s && typeof s.stage === "string") porEtapa.set(s.stage, s);
+  }
+  return STAGE_ORDER_UI.map((stage) => {
+    const encontrada = porEtapa.get(stage);
+    const state = encontrada?.state ?? "pending";
+    return {
+      stage,
+      label: STAGE_LABELS[stage] ?? stage,
+      state,
+      badge: STAGE_STATE_LABELS[state] ?? state,
+      summary: encontrada?.summary ?? "",
+    };
+  });
+}
+
+export interface VerdictView {
+  verdict: string;
+  label: string;
+  tone: "ok" | "warn" | "bad";
+  detail: string;
+}
+
+/** Plan 284 — veredicto legible. Sin veredicto => "Sin veredicto", tone "warn". */
+export function buildVerdictView(
+  status: DocumenterStatusResponse | null | undefined
+): VerdictView {
+  const verdict = (status?.verdict ?? "").trim();
+  switch (verdict) {
+    case "RADIOGRAFIA_COMPLETA":
+      return {
+        verdict,
+        label: "Radiografía completa",
+        tone: "ok",
+        detail: "Todos los archivos pasaron la verificación de citas.",
+      };
+    case "RADIOGRAFIA_PARCIAL":
+      return {
+        verdict,
+        label: "Radiografía parcial",
+        tone: "warn",
+        detail: "Se escribió documentación, pero quedó terreno sin cubrir.",
+      };
+    case "INSUFICIENTE":
+      return {
+        verdict,
+        label: "Insuficiente: revisá los rechazos",
+        tone: "bad",
+        detail: "No se escribió nada útil o se rechazaron más archivos de los que se escribieron.",
+      };
+    case "PENDIENTE_DE_APROBACION":
+      return {
+        verdict,
+        label: "Esperando tu aprobación",
+        tone: "warn",
+        detail: "El Documentador ya planeó y se autocriticó. No escribió nada todavía.",
+      };
+    default:
+      return { verdict: "", label: "Sin veredicto", tone: "warn", detail: "" };
+  }
+}
+
+export interface RadiographyView {
+  coverageLabel: string;
+  uncovered: string[];
+  classLabel: string;
+  ticketsLabel: string;
+  deltaLabel: string;
+}
+
+/** Plan 284 — resumen de radiografía + minería de tickets en texto llano. */
+export function buildRadiographyView(
+  status: DocumenterStatusResponse | null | undefined
+): RadiographyView {
+  const r = status?.radiography ?? {};
+  const total = r.modules_total ?? 0;
+  const cubiertos = r.modules_covered ?? 0;
+  const pct = Math.round((r.coverage_ratio ?? 0) * 100);
+  const coverageLabel =
+    total === 0
+      ? "Sin módulos que cubrir"
+      : `Cobertura ${cubiertos} de ${total} módulos (${pct}%)`;
+
+  const porClase = r.by_doc_class ?? {};
+  const classLabel = Object.keys(porClase).length
+    ? Object.entries(porClase)
+        .filter(([, n]) => (n ?? 0) > 0)
+        .map(([clase, n]) => `${clase}: ${n}`)
+        .join(" · ")
+    : "";
+
+  const m = status?.ticket_mining ?? {};
+  const ticketsLabel =
+    m.enabled === false
+      ? "Minería de tickets desactivada"
+      : `${m.total ?? 0} tickets barridos — ${m.signal ?? 0} aportaron historia, ${m.noise ?? 0} descartados`;
+
+  // A2 — la derivada es lo que vuelve esto una radiografía y no una foto.
+  const d = status?.radiography_delta ?? {};
+  let deltaLabel = "";
+  if (d.has_previous === true) {
+    const pts = Math.round((d.ratio_delta ?? 0) * 100);
+    const signo = pts > 0 ? `+${pts}` : `${pts}`;
+    const cerrados = (d.modules_closed ?? []).length;
+    deltaLabel = `${signo} pts desde el run anterior`;
+    if (cerrados > 0) deltaLabel += ` — cerraste ${cerrados} módulo(s)`;
+  }
+
+  return { coverageLabel, uncovered: r.uncovered ?? [], classLabel, ticketsLabel, deltaLabel };
 }

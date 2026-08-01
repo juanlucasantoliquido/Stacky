@@ -3543,6 +3543,11 @@ export interface DocumenterFileEntry {
   action: string;
   content_preview?: string;
   citations?: { total: number; ok: number; bad: string[] };
+  /** Plan 284 F3 — true si el gate de citas lo rechazó ANTES de escribirlo.
+   *  El archivo no existe en disco: aparece acá con su motivo, no desaparece. */
+  rejected?: boolean;
+  /** Plan 284 F3 — "citations_below_threshold:{ok}/{total}". */
+  reject_reason?: string;
 }
 
 /** Plan 113 — estado de un run del Documentador. */

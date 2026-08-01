@@ -16,6 +16,10 @@ import {
   buildFilesView,
   buildSkippedView,
   buildRunsView,
+  buildStagesView,
+  buildVerdictView,
+  buildRadiographyView,
+  formatSkipReason,
   type DocumenterRunRow,
 } from "../../docs/documenterModel";
 
@@ -24,15 +28,36 @@ interface Props {
   onDecide: (action: "keep" | "discard") => void;
   deciding: boolean;
   decided: "keep" | "discard" | null;
+  /** Plan 284 F5.3 — aprobar/cancelar el paso a IMPLEMENTAR (human-in-the-loop). */
+  onApprove?: (approve: boolean) => void;
+  approving?: boolean;
 }
 
-export function DocumenterResultPanel({ status, onDecide, deciding, decided }: Props) {
+/** Plan 284 — tokens REALES del tema. No existen tokens `--color-*`: usarlos
+ *  no pinta nada. */
+const TONE_COLOR: Record<string, string> = {
+  ok: "var(--success)",
+  warn: "var(--accent)",
+  bad: "var(--danger)",
+};
+
+export function DocumenterResultPanel({
+  status, onDecide, deciding, decided, onApprove, approving,
+}: Props) {
   const s = summarizeDocumenterStatus(status);
   const [showMerge, setShowMerge] = useState(false);
   const branch = s.branch;
   const filesView = buildFilesView(status);
   const skippedView = buildSkippedView(status);
   const modesSkipped = status.modes_skipped ?? [];
+  // Plan 284 F7 — vistas puras (testeadas en documenterModel.test.ts).
+  const stagesView = buildStagesView(status);
+  const verdictView = buildVerdictView(status);
+  const radiography = buildRadiographyView(status);
+  const awaitingApproval = status.state === "awaiting_approval";
+  const paperStages = (status.stages ?? []).filter(
+    (st) => st.artifact && st.artifact.trim().length > 0
+  );
 
   const [runsView, setRunsView] = useState<DocumenterRunRow[] | null>(null);
   const [runsFetched, setRunsFetched] = useState(false);
@@ -48,7 +73,83 @@ export function DocumenterResultPanel({ status, onDecide, deciding, decided }: P
   }
 
   return (
-    <div style={{ border: "1px solid var(--color-border, #ccc)", borderRadius: 8, padding: 12, marginTop: 8 }}>
+    <div style={{ border: "1px solid var(--border, #ccc)", borderRadius: 8, padding: 12, marginTop: 8 }}>
+      {/* Plan 284 F7 — el VEREDICTO va arriba de todo: es lo primero que el
+          operador tiene que poder leer de un vistazo. */}
+      {status.verdict ? (
+        <div
+          style={{
+            borderLeft: `4px solid ${TONE_COLOR[verdictView.tone]}`,
+            background: "var(--bg-panel)",
+            padding: "8px 12px",
+            borderRadius: 6,
+            marginBottom: 10,
+          }}
+        >
+          <strong style={{ color: TONE_COLOR[verdictView.tone] }}>{verdictView.label}</strong>
+          {verdictView.detail ? (
+            <div style={{ fontSize: "0.9em", color: "var(--text-primary)" }}>
+              {verdictView.detail}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Etapas del pipeline, en el orden canónico. */}
+      {(status.stages ?? []).length > 0 ? (
+        <ol style={{ margin: "0 0 10px", paddingLeft: 18 }}>
+          {stagesView.map((st) => (
+            <li key={st.stage} style={{ opacity: st.state === "pending" ? 0.5 : 1 }}>
+              <strong>{st.label}</strong>: {st.badge}
+              {st.summary ? <span style={{ color: "var(--text-primary)" }}> — {st.summary}</span> : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+
+      {/* Human-in-the-loop: el operador lee el plan y su autocrítica ANTES de
+          que se escriba un solo archivo, y decide. */}
+      {awaitingApproval ? (
+        <div style={{ border: `1px solid ${TONE_COLOR.warn}`, borderRadius: 6, padding: 10, marginBottom: 10 }}>
+          <p style={{ margin: "0 0 6px" }}>
+            El Documentador ya planeó y se autocriticó. <strong>Todavía no escribió nada.</strong>
+          </p>
+          {paperStages.map((st) => (
+            <details key={st.stage} style={{ marginBottom: 4 }}>
+              <summary>{st.stage}</summary>
+              <pre style={{ maxHeight: 240, overflow: "auto", whiteSpace: "pre-wrap" }}>
+                {st.artifact}
+              </pre>
+            </details>
+          ))}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" disabled={approving} onClick={() => onApprove?.(true)}>
+              Aprobar e implementar
+            </button>
+            <button type="button" disabled={approving} onClick={() => onApprove?.(false)}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Radiografía: cobertura, delta contra el run anterior y triage de tickets. */}
+      {status.radiography?.enabled ? (
+        <div style={{ marginBottom: 10, fontSize: "0.92em" }}>
+          <div>{radiography.coverageLabel}</div>
+          {radiography.deltaLabel ? (
+            <div style={{ color: TONE_COLOR.ok }}>{radiography.deltaLabel}</div>
+          ) : null}
+          {radiography.ticketsLabel ? <div>{radiography.ticketsLabel}</div> : null}
+          {radiography.uncovered.length > 0 ? (
+            <details>
+              <summary>{radiography.uncovered.length} módulo(s) sin documentar</summary>
+              <ul>{radiography.uncovered.map((m) => <li key={m}>{m}</li>)}</ul>
+            </details>
+          ) : null}
+        </div>
+      ) : null}
+
       <h4 style={{ margin: "0 0 8px" }}>Resultado del Documentador</h4>
       <p style={{ margin: "2px 0" }}>Salud: {s.healthDelta || "—"}</p>
       <p style={{ margin: "2px 0" }}>
@@ -88,6 +189,23 @@ export function DocumenterResultPanel({ status, onDecide, deciding, decided }: P
               ) : null}
             </details>
           ))}
+        </div>
+      ) : null}
+
+      {/* Plan 284 F3 — los rechazados por el gate de citas van en SU PROPIA
+          sección: no se pierden, se explican. */}
+      {filesView.length > 0 && (status.files ?? []).some((f) => f.rejected) ? (
+        <div style={{ marginTop: 8 }}>
+          <strong style={{ color: TONE_COLOR.bad }}>Rechazados por citas inválidas</strong>
+          <ul>
+            {(status.files ?? [])
+              .filter((f) => f.rejected)
+              .map((f) => (
+                <li key={f.path}>
+                  {f.path} — {formatSkipReason(f.reject_reason ?? "")}
+                </li>
+              ))}
+          </ul>
         </div>
       ) : null}
 

@@ -7,6 +7,9 @@ import {
   buildSkippedView,
   buildRunsView,
   normalizeOperatorNote,
+  buildStagesView,
+  buildVerdictView,
+  buildRadiographyView,
 } from "./documenterModel";
 import type { DocumenterStatusResponse } from "../api/endpoints";
 
@@ -184,5 +187,113 @@ describe("Plan 284 - normalizeOperatorNote", () => {
     expect(normalizeOperatorNote(larga)?.length).toBe(4000);
     // El tope es parametrizable (viaja desde el backend).
     expect(normalizeOperatorNote(larga, 10)?.length).toBe(10);
+  });
+});
+
+// ===========================================================================
+// Plan 284 F7 - la salida se entiende
+// ===========================================================================
+
+describe("Plan 284 - vistas del panel", () => {
+  it("test_plan284_buildStagesView_orden_y_relleno", () => {
+    const status = {
+      stages: [
+        { stage: "PROPONER", state: "done", summary: "1200 caracteres" },
+        { stage: "CRITICAR", state: "skipped", summary: "sin plan que criticar" },
+      ],
+    } as DocumenterStatusResponse;
+
+    const filas = buildStagesView(status);
+    // Siempre 5 filas, en el orden canonico.
+    expect(filas.length).toBe(5);
+    expect(filas.map((f) => f.stage)).toEqual([
+      "PROPONER", "CRITICAR", "MEJORAR", "IMPLEMENTAR", "VERIFICAR",
+    ]);
+    // Las que llegaron traen su estado real...
+    expect(filas[0].state).toBe("done");
+    expect(filas[0].badge).toBe("Hecha");
+    expect(filas[1].badge).toBe("Salteada");
+    // ...y las 3 que no corrieron quedan en pending.
+    expect(filas.slice(2).every((f) => f.state === "pending")).toBe(true);
+    expect(filas[4].badge).toBe("Pendiente");
+
+    // Sin status: igual 5 filas (la UI nunca se rompe).
+    expect(buildStagesView(null).length).toBe(5);
+  });
+
+  it("test_plan284_buildVerdictView_tabla", () => {
+    const v = (verdict?: string) =>
+      buildVerdictView({ verdict } as DocumenterStatusResponse);
+
+    expect(v("RADIOGRAFIA_COMPLETA").label).toBe("Radiografía completa");
+    expect(v("RADIOGRAFIA_COMPLETA").tone).toBe("ok");
+
+    expect(v("RADIOGRAFIA_PARCIAL").label).toBe("Radiografía parcial");
+    expect(v("RADIOGRAFIA_PARCIAL").tone).toBe("warn");
+
+    expect(v("INSUFICIENTE").label).toBe("Insuficiente: revisá los rechazos");
+    expect(v("INSUFICIENTE").tone).toBe("bad");
+
+    expect(v("").label).toBe("Sin veredicto");
+    expect(v("").tone).toBe("warn");
+    expect(buildVerdictView(null).label).toBe("Sin veredicto");
+
+    // La parada human-in-the-loop tambien tiene su etiqueta.
+    expect(v("PENDIENTE_DE_APROBACION").label).toBe("Esperando tu aprobación");
+  });
+
+  it("test_plan284_buildRadiographyView_labels", () => {
+    const conCobertura = buildRadiographyView({
+      radiography: { modules_total: 15, modules_covered: 12, coverage_ratio: 0.8 },
+      ticket_mining: { enabled: true, total: 228, signal: 96, noise: 132 },
+      radiography_delta: { has_previous: true, ratio_delta: 0.12, modules_closed: ["a", "b", "c"] },
+    } as DocumenterStatusResponse);
+    expect(conCobertura.coverageLabel).toBe("Cobertura 12 de 15 módulos (80%)");
+    expect(conCobertura.ticketsLabel).toBe(
+      "228 tickets barridos — 96 aportaron historia, 132 descartados"
+    );
+    expect(conCobertura.deltaLabel).toBe("+12 pts desde el run anterior — cerraste 3 módulo(s)");
+
+    const sinModulos = buildRadiographyView({
+      radiography: { modules_total: 0 },
+      ticket_mining: { enabled: false },
+    } as DocumenterStatusResponse);
+    expect(sinModulos.coverageLabel).toBe("Sin módulos que cubrir");
+    expect(sinModulos.ticketsLabel).toBe("Minería de tickets desactivada");
+    // Sin run previo no se muestra nada (degradacion silenciosa).
+    expect(sinModulos.deltaLabel).toBe("");
+  });
+
+  it("test_plan284_formatSkipReason_citas", () => {
+    // La razon nueva se traduce con su detalle.
+    expect(formatSkipReason("citations_below_threshold:2/9")).toBe(
+      "Rechazado: citas archivo:línea que no existen (2/9 verificadas)"
+    );
+    // PRESENCIA DE CONTROL: no rompimos el mapeo del 137.
+    expect(formatSkipReason("canonical_readonly")).toBe(
+      "docs/sistema/ es de solo lectura"
+    );
+    expect(formatSkipReason("unsafe_path")).toBe("Ruta insegura (fuera del repo)");
+  });
+});
+
+describe("Plan 284 - awaiting_approval es un estado de UI de primera clase", () => {
+  it("test_plan284_awaiting_approval_no_cae_en_unknown", () => {
+    // El panel se renderiza con la condicion uiState !== "running" && !== "unknown".
+    // Si awaiting_approval cayera en "unknown", los botones "Aprobar e
+    // implementar"/"Cancelar" existirian pero NADIE los veria nunca: el patron
+    // exacto de codigo construido, testeado y jamas cableado.
+    const s = summarizeDocumenterStatus({ state: "awaiting_approval" } as DocumenterStatusResponse);
+    expect(s.uiState).toBe("awaiting_approval");
+    expect(s.uiState).not.toBe("unknown");
+    expect(s.running).toBe(false);
+
+    // budget_exhausted (A1) tampoco puede quedar invisible.
+    const b = summarizeDocumenterStatus({ state: "budget_exhausted" } as DocumenterStatusResponse);
+    expect(b.uiState).not.toBe("unknown");
+
+    // PRESENCIA DE CONTROL: un estado desconocido de verdad SIGUE siendo unknown.
+    const u = summarizeDocumenterStatus({ state: "vaya_a_saber" } as DocumenterStatusResponse);
+    expect(u.uiState).toBe("unknown");
   });
 });

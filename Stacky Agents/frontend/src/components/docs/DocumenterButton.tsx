@@ -26,6 +26,7 @@ export function DocumenterButton({
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [note, setNote] = useState("");  // Plan 284 — nota libre del operador
+  const [approving, setApproving] = useState(false);  // Plan 284 F5.3
   const [deciding, setDeciding] = useState(false);
   const [decided, setDecided] = useState<"keep" | "discard" | null>(null);
   const setCodexConsoleExecution = useWorkbench((s) => s.setCodexConsoleExecution);
@@ -37,7 +38,9 @@ export function DocumenterButton({
     refetchInterval: (query) => {
       const st = query.state.data;
       const sum = summarizeDocumenterStatus(st);
-      return sum.running ? 1500 : false;
+      // Plan 284 — seguimos poleando mientras espera aprobación: apenas el
+      // operador aprueba, el run vuelve a "running" y la UI tiene que seguirlo.
+      return sum.running || sum.uiState === "awaiting_approval" ? 1500 : false;
     },
   });
 
@@ -85,6 +88,22 @@ export function DocumenterButton({
     [runId]
   );
 
+  // Plan 284 F5.3 — human-in-the-loop: aprobar o cancelar el paso a escribir.
+  const approve = useCallback(
+    async (ok: boolean) => {
+      if (!runId) return;
+      setApproving(true);
+      try {
+        await Docs.documenterStageApprove(runId, ok);
+      } catch (e) {
+        setLaunchError(String(e));
+      } finally {
+        setApproving(false);
+      }
+    },
+    [runId]
+  );
+
   const summary = summarizeDocumenterStatus(status);
 
   return (
@@ -120,6 +139,8 @@ export function DocumenterButton({
         <DocumenterResultPanel
           status={status}
           onDecide={decide}
+          onApprove={approve}
+          approving={approving}
           deciding={deciding}
           decided={decided}
         />

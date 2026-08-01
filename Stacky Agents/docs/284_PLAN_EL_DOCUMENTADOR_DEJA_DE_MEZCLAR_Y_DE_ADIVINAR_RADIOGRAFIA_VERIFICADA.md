@@ -1,6 +1,6 @@
 # 284 — EL DOCUMENTADOR DEJA DE MEZCLAR Y DE ADIVINAR: FRONTERA PLANES/PROYECTO, NOTA DEL OPERADOR, PIPELINE DE 5 ETAPAS Y RADIOGRAFÍA VERIFICADA
 
-**Estado:** MEJORADO (**v2**, criticado) — 2026-08-01
+**Estado:** **IMPLEMENTADO** F0..F7 (v2 criticado + construido) — 2026-08-01. Ver seccion 11.
 **Autor:** StackyArchitectaUltraEficientCode
 **Juez (v1 → v2):** StackyArchitectaUltraEficientCode (contexto limpio, red-team con verificación de anclajes abriendo archivos)
 **Veredicto de la crítica v1:** **RECHAZADO** — 6 bloqueantes. Todos corregidos en esta v2.
@@ -1881,3 +1881,133 @@ Un implementador puede declarar este plan terminado **sólo si** todo lo siguien
 ---
 
 **Última línea:** este plan **no** re-propone la evidencia de módulo (137 F1), el verificador de citas (137 F2), el short-circuit (137 F3), el historial (137 F4), el preview (137 F5) ni el explorador (268). Los usa. Lo único que hace con ellos es **conectarlos y darles consecuencia**.
+
+---
+
+## 11. ESTADO DE IMPLEMENTACIÓN (2026-08-01)
+
+**Estado:** IMPLEMENTADO F0..F7 — rama `docs/plan-279`, 6 commits, **sin push**.
+**Implementador:** StackyArchitectaUltraEficientCode (contexto limpio, no escribió ni criticó este plan).
+
+### 11.1 Foto del ROJO PREVIO (F0.1, tomada ANTES de tocar un solo archivo)
+
+| Archivo | Baseline |
+|---|---|
+| `tests/test_doc_evidence.py` | `18 passed` |
+| `tests/test_documenter_v2_pipeline.py` | `10 passed` |
+| `tests/test_documenter_autonomy.py` | `6 passed` |
+| `tests/test_docs_api.py` | `11 passed` |
+| `tests/test_harness_flags.py` | **`56 passed, 0 failed`** |
+| `tests/test_harness_flags_help.py` | **`4 failed, 4 passed`** (rojo ajeno) |
+| `tests/test_error_fingerprints_catalog.py` | **`3 failed, 5 passed`** (rojo ajeno) |
+| `npx vitest run src/docs/documenterModel.test.ts` | `14 passed` |
+| `npx tsc --noEmit` | exit 0 |
+
+> **El plan se equivocaba en R5/F0.1:** anunciaba "5 tests ajenos en rojo de fábrica"
+> en `test_harness_flags.py`. **Ese archivo estaba en VERDE (56 passed, 0 failed).**
+> Los 4 rojos ajenos viven en `test_harness_flags_help.py`, que es otro archivo.
+> La barra quedó por lo tanto más exigente: cualquier rojo en `test_harness_flags.py`
+> después del cambio sería mío.
+
+### 11.2 Resultado final REAL (output pegado, no resumido)
+
+```
+test_doc_evidence                    25 passed in 0.81s
+test_documenter_v2_pipeline          38 passed, 7 warnings in 19.69s
+test_documenter_autonomy              6 passed in 2.82s
+test_docs_api                        16 passed, 100 warnings in 10.91s
+test_harness_flags                   56 passed, 29 warnings in 6.39s
+test_harness_flags_help               4 failed, 4 passed in 2.59s   <- = baseline
+test_error_fingerprints_catalog       3 failed, 5 passed in 0.81s   <- = baseline
+
+npx vitest run src/docs/documenterModel.test.ts   20 passed (20)
+```
+
+**Delta contra el baseline: +7 / +28 / 0 / +5 / 0 / 0 / 0 backend, +6 frontend.
+Ningún rojo nuevo.** Los pisos del DoD se cumplen: `test_doc_evidence` ≥ 20 (25),
+`test_documenter_v2_pipeline` ≥ 26 (38), vitest ≥ 19 (20).
+
+### 11.3 Los 3 gates innegociables
+
+| Gate | Resultado |
+|---|---|
+| `test_plan284_nota_viaja_de_run_documenter_al_prompt` | **VERDE** — `1 passed, 18 deselected` (collected 1: no es un `-k` sin match) |
+| `test_plan284_sin_autoaplicado_el_run_espera_aprobacion` | **VERDE** — `1 passed, 37 deselected` |
+| `test_docs_api.py` en los DOS ratchets | **OK** — `run_harness_tests.ps1:366` y `run_harness_tests.sh:417`, cada uno en su sintaxis |
+
+### 11.4 Censos
+
+| Censo | Esperado | Real |
+|---|---|---|
+| F1 taxonomía C1..C4 | 4× True | **4× True** — 309 `.md` → `plan=240, system=15, project=54` (idéntico a lo medido en el plan) |
+| F2 consumidor `_operator_note_block` | 1 | **2** — ver desvío D2 |
+| F3 orden `write_text`/`verify_citations` | 0 | **0** (verify en `:675`, write en `:691`) |
+| F4 `mine_project_tickets` C1..C4 | 4× True | **4× True** — all=228 (signal 116 / noise 112), RIPLEY=65 (signal 63 / noise 2), `{azure_devops:162, gitlab:63, demo:3}` |
+| F5.0 kwarg `system_prompt_override` | 1 | **1** |
+| F5 orden G1/G2 | 2× True | **2× True** (flag leída en `:840`, escritura en `:937`) |
+| F6 A1/P1 | 2× True | **2× True** |
+
+### 11.5 Desvíos declarados
+
+**D1 — `_CURATED_DEFAULTS_ON`: van 6 claves, no 11 (el plan pedía 11).**
+C4 mandaba curar las 11 flags. **Es imposible:** el set está vigilado por DOS asserts
+que se contradicen si se lo hace. `test_default_known_only_for_curated` exige que toda
+spec con `default=` esté en el set; `test_declared_default_true_set` exige que toda key
+del set tenga `declared_default is True`. Un `default=False` (`AUTOAPPLY`) o un `default=`
+numérico (los 4 knobs) no puede cumplir ambos. Se siguió la convención real del repo,
+idéntica al precedente que el propio archivo documenta para el plan 279: sólo las **6
+booleanas ON** declaran `default=True` y se curan; la OFF y las 4 numéricas **no declaran
+`default=`**. Resultado: `56 passed, 0 failed`, igual al baseline.
+
+**D2 — el censo AST de F2 da 2, no 1.**
+Después de F5 hay **dos** consumidores de producción de `_operator_note_block`, ambos
+legítimos: `build_context_for_mode:341` (la nota llega a los modos que escriben) y
+`_run_paper_stage:802` (la nota también guía PROPONER/CRITICAR/MEJORAR, que es
+justamente lo que el operador quiere). El criterio `=1` se escribió para F2 en
+aislamiento, antes de que F5 existiera. La **intención** del censo ("existe un consumidor
+de producción, no sólo la definición") se cumple con más fuerza. El gate real de F2 es el
+test end-to-end, y el propio plan dice que el censo AST es "complementario, **no**
+suficiente".
+
+**D3 — `harness_flags_help.py` no estaba en el plan.**
+Registrar flags sin su ayuda llana habría engrosado la deuda de
+`test_plain_help_covers_all_registry_keys` (82 claves sin ayuda). Se escribieron las **11**
+entradas `PlainHelp` respetando el gate de `"Si "` sin tilde y la denylist de jerga.
+Delta del archivo: 0 (sigue en `4 failed, 4 passed`, y ninguna key del 284 aparece en los rojos).
+
+**D4 — dos tests preexistentes ajustados (no debilitados).**
+Con las etapas ON por default, `test_short_circuit_no_invoca_modos_sin_targets` y
+`test_flag_off_invoca_todos_los_modos` pasaban a medir el gate humano en vez del
+short-circuit de MODOS que les da nombre. Se les fija
+`STACKY_DOCS_PIPELINE_STAGES_ENABLED=False` explícitamente (la regla del repo al flipear
+un default), **conservando intactos todos sus asserts**.
+
+**D5 — el máximo de la nota viaja desde el backend.**
+C18 pedía que el tope no se hardcodeara. Se agregó `operator_note_max_chars` (y
+`operator_note_enabled`) a `GET /api/docs/sources`, que es la superficie que la página
+Docs ya consume.
+
+### 11.6 Bug de cableado encontrado y cerrado (no estaba en el plan)
+
+El panel se renderiza sólo si `uiState !== "running" && !== "unknown"`, y
+`"awaiting_approval"` caía en `"unknown"` ⇒ los botones **"Aprobar e implementar" /
+"Cancelar" habrían existido y nadie los habría visto nunca**: el patrón exacto de
+*código construido, testeado y jamás cableado* que este plan viene a combatir, esta vez
+en la UI. Corregido: `awaiting_approval` y `budget_exhausted` son estados de UI de
+primera clase, el polling sigue vivo mientras espera aprobación, y quedó el test de
+guardia `test_plan284_awaiting_approval_no_cae_en_unknown` con presencia de control.
+
+### 11.7 Pendiente para el operador
+
+1. **`npx tsc --noEmit` da exit 2 por trabajo AJENO sin commitear.** Los 9 errores están
+   en `FinishWorkButton.tsx`, `QaBrowserRunModal.tsx` y `TicketBoard.tsx` (plan 282 F4 en
+   vuelo: un `import { useWorkbench }` duplicado). **Ninguno de los 3 archivos aparece en
+   ninguno de los 6 commits de este plan, y `tsc` no reporta un solo error en los archivos
+   del 284.** Al cerrar F7 (commit `241a228f`) `tsc` daba **exit 0**.
+2. **Smoke visual manual** (lo hace el operador): lanzar el Documentador con una nota y
+   confirmar que (1) el textarea aparece y acepta texto, (2) el run se detiene en
+   "Esperando tu aprobación", (3) el veredicto se ve arriba con color, (4) los archivos
+   aparecen agrupados y los rechazados por citas tienen su sección.
+3. **Sin push** (riel del repo: el push es siempre manual).
+4. `endpoints.ts` conserva cambios sin commitear de la sesión paralela (plan 282, región
+   `Tickets`): se commitearon **sólo** los hunks del 284 vía index.

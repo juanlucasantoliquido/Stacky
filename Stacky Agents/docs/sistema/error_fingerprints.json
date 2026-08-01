@@ -1123,6 +1123,30 @@
           "2026-08-01 10:00:00 INFO stacky_agents sync GitLab ok al arranque: project=RIPLEY {'fetched': 53, 'created': 0, 'updated': 0, 'removed': 0}"
         ]
       }
+    },
+    {
+      "id": "plan284-citas-decorativas",
+      "title": "Se escribe documentacion con citas archivo:linea que no existen",
+      "class": "documentation",
+      "status": "resolved",
+      "log_pattern": "citations_below_threshold:\\d+/\\d+",
+      "log_guarded": true,
+      "killed_by": "plan 284 F3",
+      "killed_commit": null,
+      "date_resolved": "2026-08-01",
+      "guard_test": "tests/test_documenter_v2_pipeline.py::test_plan284_gate_no_escribe_el_archivo_con_citas_falsas",
+      "evidence": "apply_proposals (services/doc_documenter.py) escribia el archivo con dest.write_text y RECIEN DESPUES llamaba a doc_evidence.verify_citations, cuyo resultado iba a result.files solo para mostrarlo. Ninguna razon de skip contemplaba citas invalidas, asi que un documento que citaba 'real.py:999' sobre un archivo de 3 lineas quedaba escrito en disco con la marca [V]. Ademas workspace_root solo se pasaba con la V2 ON, asi que con V2 OFF las citas ni siquiera se contaban.",
+      "note": "F3 invierte el orden a verificar -> decidir -> escribir. El veredicto sale de evaluate_citation_gate, funcion pura con umbral configurable por UI (STACKY_DOCS_CITATION_GATE_MIN_RATIO, default 0.8). Un documento SIN citas no se rechaza: el que miente es el que cita mal, no el que no cita. El archivo rechazado NO existe en disco y aparece en el panel con su motivo y su preview. El gate permanente es el censo AST de orden write_text/verify_citations dentro de apply_proposals, que debe dar 0.",
+      "self_test": {
+        "matches": [
+          "2026-08-01 10:00:00 INFO stacky_agents.docs Documentador rechazo arquitectura.md: citations_below_threshold:2/9",
+          "skipped: ('mala.md', 'citations_below_threshold:0/2')"
+        ],
+        "clean": [
+          "2026-08-01 10:00:00 INFO stacky_agents.docs Documentador escribio arquitectura.md con 9/9 citas verificadas",
+          "2026-08-01 10:00:00 INFO stacky_agents.docs Documentador salteo docs/sistema/01-overview.md: canonical_readonly"
+        ]
+      }
     }
   ]
 }

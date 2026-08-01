@@ -1099,6 +1099,30 @@
       },
       "evidence": "backend/api/pipeline_copilot.py::_log_transicion emite la linea con SOLO conversation_id, origen, destino y action_id (constantes del catalogo, cero datos del operador); backend/services/pipeline_session.py::TRANSITIONS declara que 'failed' es alcanzable desde los 6 estados no terminales; el destino 'failed' es TERMINAL (TRANSITIONS['failed'] == ()), asi que la sesion no vuelve sola",
       "note": "status=guarded: 'failed' es un destino LEGAL, no un bug — pero es terminal, y sin esta linea el sintoma ('el copiloto dejo de responder') no dejaba ningun rastro buscable. Causas ordenadas por probabilidad: (1) una accion de ESCRITURA fallo y D9 detiene la sesion a proposito (solo lo idempotente se reintenta); (2) STACKY_PIPELINE_GENERATOR_ENABLED apagada, con lo que draft y commit mueren en un 404 del generador — el GET de la sesion lo declara en unavailable_reason; (3) el operador cancelo. CERO PII: la rama, el proyecto, el texto del operador y el undo_hint NO se registran (test_la_transicion_deja_una_linea_de_log_sin_pii lo congela)."
+    },
+    {
+      "id": "plan281-ruteo-ado-en-proyecto-gitlab",
+      "title": "Un proyecto GitLab recibe un error de configuracion de Azure DevOps",
+      "class": "routing",
+      "status": "resolved",
+      "log_pattern": "ADO sync-v2 . config:.{0,80}no usa Azure DevOps",
+      "log_guarded": true,
+      "killed_by": "plan 281 F3/F7",
+      "killed_commit": null,
+      "date_resolved": "2026-08-01",
+      "guard_test": "tests/test_plan281_ruteo_por_tracker.py",
+      "evidence": "El poll de useTicketSync.ts postea a /api/tickets/sync-v2 cada 45 s con el nombre del proyecto en el body pero SIN Content-Type: application/json, asi que Flask get_json(silent=True) devolvia None y _request_project_name() daba None. Con project_name None el ruteo caia al proyecto ACTIVO global y _sync_via_provider_or_ado traducia 'no pude resolver el contexto' a 'es Azure DevOps' (el `or` del getattr se evalua ANTES del chequeo de None), terminando en build_ado_client -> AdoConfigError -> HTTP 400 en pantalla.",
+      "note": "F2 lo arregla en las DOS capas (header en el frontend + force=True en el backend). F3 hace que un contexto irresoluble levante TrackerConfigError con mensaje accionable en vez de un error del proveedor equivocado. F7 erradica las 8 funciones que construian cliente ADO sin preguntar por el tracker. El gate permanente es tests/test_plan281_ratchet_ado_only.py.",
+      "self_test": {
+        "matches": [
+          "2026-08-01 10:00:00 WARNING stacky_agents.tickets ADO sync-v2 - config: El proyecto 'RIPLEY' no usa Azure DevOps (tracker_type=gitlab).",
+          "WARNING ADO sync-v2 — config: El proyecto 'PACIFICO' no usa Azure DevOps (tracker_type=jira)."
+        ],
+        "clean": [
+          "2026-08-01 10:00:00 WARNING stacky_agents.tickets sync-v2 - config de tracker: No se pudo resolver el contexto del proyecto 'RIPLEY'. Revisa que el proyecto exista y tenga 'issue_tracker' configurado en Configuracion del proyecto.",
+          "2026-08-01 10:00:00 INFO stacky_agents sync GitLab ok al arranque: project=RIPLEY {'fetched': 53, 'created': 0, 'updated': 0, 'removed': 0}"
+        ]
+      }
     }
   ]
 }

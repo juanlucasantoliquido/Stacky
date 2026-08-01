@@ -465,6 +465,13 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 281 — El ruteo por tracker deja de mentir ───────────────────────
+    # Nace ON. No cae en (A): no enciende loop, daemon, barrido ni llamada a
+    # modelo — corrige el camino de un poll que YA existe. No cae en (B): es
+    # camino de LECTURA, no publica, no commitea, no escribe en el tracker del
+    # operador ni le saca ninguna decisión. Existe sólo como kill-switch de
+    # rollback: apagada, el ruteo vuelve byte-idéntico al de hoy.
+    "STACKY_TRACKER_ROUTING_STRICT_ENABLED",
     # ── Plan 278 — la épica se publica en los 3 runtimes ────────────────────
     # NO es una flag nueva: existe desde el Plan 41 en config.py con default
     # "true", y el Plan 278 solo la REGISTRA en el arnés para que el operador

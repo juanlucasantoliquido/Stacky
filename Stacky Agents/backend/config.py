@@ -1365,6 +1365,18 @@ class Config:
     STACKY_GITLAB_SYNC_ENABLED: bool = os.getenv(
         "STACKY_GITLAB_SYNC_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
+    # ── Plan 281 — El ruteo por tracker deja de mentir ───────────────────────
+    # ON: un contexto de proyecto irresoluble deja de traducirse silenciosamente a
+    # "es Azure DevOps" (levanta un error propio y accionable), el sync de arranque
+    # sincroniza los proyectos no-ADO en vez de morir en un AdoConfigError tragado
+    # como warning, y los sitios que construían cliente ADO preguntan antes por el
+    # config del proyecto. Es camino de LECTURA: no publica, no commitea, no escribe
+    # en el tracker del operador ni le saca ninguna decision — no cae en (A) ni en (B).
+    # OFF: kill-switch de rollback; vuelve el comportamiento de hoy, incluido el
+    # cartel "El proyecto 'X' no usa Azure DevOps" cada 45 s en un proyecto GitLab.
+    STACKY_TRACKER_ROUTING_STRICT_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_ROUTING_STRICT_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
     # ── Plan 277 — Un solo contrato de tipo y padre para GitLab ──────────────
     # ON: al leer un issue de GitLab, el tipo sale de la etiqueta `type::<tipo>` y
     # el padre de `epic::<iid>`, con UNA sola normalización (services/

@@ -549,6 +549,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_GITLAB_HIERARCHY_LOCAL_CLASSIFY_ENABLED",  # Plan 277 F4 — clasificacion local en la BD de Stacky
         "STACKY_GITLAB_SYNC_PARENTS_ENABLED",  # Plan 277 F6 — traer los padres ausentes del listado de abiertos
         "STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED",  # Plan 277 F5 — publicar etiquetas EN el GitLab del operador (OFF)
+        # Plan 281 — El ruteo por tracker deja de mentir
+        "STACKY_TRACKER_ROUTING_STRICT_ENABLED",  # Plan 281 F3/F4/F7 — "no se" deja de significar "es ADO"
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -5535,6 +5537,24 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "escribió). Escribe en la BD de Stacky, NUNCA en el GitLab del operador, nunca borra "
             "(un issue que desaparece se marca cerrado) y es on-demand: sin polling ni sync de "
             "fondo. Con OFF vuelve la carencia declarada y el grafo queda vacío."
+        ),
+        group="global",
+    ),
+    # ── Plan 281 — El ruteo por tracker deja de mentir ────────────────────────
+    FlagSpec(
+        key="STACKY_TRACKER_ROUTING_STRICT_ENABLED",
+        type="bool",
+        default=True,  # default ON (camino de LECTURA: no publica, no escribe en el tracker del operador ni le saca decisiones; curada en _CURATED_DEFAULTS_ON)
+        label="Ruteo estricto por tipo de tracker",
+        description=(
+            "Plan 281 — Si Stacky no puede resolver el contexto de un proyecto, deja de asumir que "
+            "es de Azure DevOps: avisa el problema real en vez de devolver un error del proveedor "
+            "equivocado. Ademas el sync de arranque sincroniza los proyectos que no son de Azure "
+            "DevOps (antes morian en un error tragado como aviso) y las funciones que piden un "
+            "cliente de Azure DevOps preguntan primero de que tracker es el proyecto. Es solo "
+            "lectura: no publica, no sube nada al tracker y no borra datos. Si la apagas vuelve el "
+            "comportamiento anterior, incluido el cartel 'El proyecto no usa Azure DevOps' que "
+            "aparecia cada tanto en un proyecto de GitLab."
         ),
         group="global",
     ),

@@ -87,6 +87,10 @@ $HarnessTestFiles = @(
   "tests/test_speculative_parity.py",
   "tests/test_epic_autopublish_service.py",
   "tests/test_epic_autopublish_runtime_parity.py",
+  # Idempotencia del endpoint de epica desde brief (2do escritor del mismo hecho)
+  "tests/test_epic_from_brief_idempotencia.py",
+  # Saneado de las filas duplicadas que dejo el publicador en un proyecto GitLab
+  "tests/test_saneado_duplicados_gitlab.py",
   "tests/test_speculative_flag.py",
   "tests/test_speculative_claim_flow.py",
   # Plan 58 - Bucle de convergencia de calidad determinista
@@ -883,6 +887,13 @@ $HarnessTestFiles = @(
   "tests/test_pipeline_copilot_secrets.py",
   "tests/test_plan279_agent_turn.py",
   "tests/test_plan279_e2e.py",
+
+  # Plan 281 - El ruteo por tracker deja de mentir (un proyecto GitLab deja de
+  # recibir errores de Azure DevOps). test_plan281_censo_ado_only.py NO va aca:
+  # era el andamio de F0 y se borro en F9.1.
+  "tests/test_plan281_ruteo_por_tracker.py",
+  "tests/test_plan281_sitios_ado_only.py",
+  "tests/test_plan281_ratchet_ado_only.py",
 
 
   # Plan 266 - Cero pantalla rota en el comparador de BD (forma garantizada del summary)

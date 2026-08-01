@@ -13,6 +13,7 @@ Todos los tests son unitarios con mocks de LLM + subprocess.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib
 import os
 import sys
@@ -308,3 +309,151 @@ def test_clamp_model_nunca_opus():
         low = (m or "").lower()
         assert "opus" not in low
         assert "fable" not in low
+
+
+# ── A0.1 — el derivador tiene CALL SITE de producción (Plan 32) ──────────────
+#
+# Gap detectado en el censo del 2026-08-01: `derive()` estaba completa y testeada,
+# pero fuera de tests SOLO existían LECTORES de la clave que debía producir
+# (harness/post_run.py:240, context_enrichment.py:1623, harness_health.py:400).
+# Nadie escribía metadata["acceptance_contract"] antes del run ⇒ n_a=True siempre
+# ⇒ gate, inyección de contexto y KPIs quedaban los tres INERTES.
+# Estos tests prueban el CABLEADO, no la construcción.
+
+
+@contextlib.contextmanager
+def _fake_session_scope():
+    """Sesión de mentira para los tests unitarios de A0.1 (este archivo no toca DB)."""
+
+    class _FakeSession:
+        def get(self, _model, _pk):
+            return object()  # el ticket; el derivador está mockeado igual
+
+    yield _FakeSession()
+
+
+def test_a01_guarda_to_metadata_produce_la_clave_que_lee_post_run():
+    """GUARDA anti-falso-verde: fija el contrato de datos productor↔lector.
+    Si esto falla, los tests de abajo no prueban nada útil porque estarían
+    comparando contra una forma que ningún lector consume."""
+    from services.acceptance_contract import AcceptanceContract
+
+    md = AcceptanceContract(n_a=False, checks_kept=[{"kind": "command"}]).to_metadata()
+
+    assert "acceptance_contract" in md
+    # Las dos claves EXACTAS que lee harness/post_run.py:244-245
+    assert md["acceptance_contract"].get("n_a") is False
+    assert md["acceptance_contract"].get("checks_kept") == [{"kind": "command"}]
+
+
+def test_a01_agent_runner_expone_el_cableado():
+    """El seam pre-run vive en agent_runner (punto único de los 3 runtimes)."""
+    import agent_runner
+
+    assert callable(getattr(agent_runner, "_derive_acceptance_contract_pre_run", None)), (
+        "A0.1 sin cablear: agent_runner no deriva el contrato antes del run."
+    )
+    assert callable(getattr(agent_runner, "_persist_acceptance_contract", None))
+
+
+def test_a01_flag_off_no_deriva_ni_escribe_la_clave(monkeypatch):
+    """Flag OFF → byte-idéntico: no llama al derivador y no escribe metadata."""
+    import agent_runner
+    import config as cfg
+    from services import acceptance_contract as ac
+
+    llamadas = []
+    monkeypatch.setattr(ac, "derive", lambda **kw: llamadas.append(kw))
+    monkeypatch.setattr(cfg.config, "STACKY_ACCEPTANCE_CONTRACT_ENABLED", False, raising=False)
+
+    patch_md = agent_runner._derive_acceptance_contract_pre_run(
+        ticket_id=1, runtime="codex_cli", project_name=None, fingerprint_complexity="M"
+    )
+
+    assert patch_md is None
+    assert llamadas == [], "con la flag OFF no se debe llamar al derivador (costo LLM)"
+
+
+def test_a01_flag_on_deriva_contra_el_baseline_y_devuelve_el_patch(monkeypatch):
+    """Flag ON → deriva y devuelve el patch con la forma que lee post_run."""
+    import agent_runner
+    import config as cfg
+    from services import acceptance_contract as ac
+
+    recibido = {}
+
+    class _FakeContract:
+        def to_metadata(self):
+            return {"acceptance_contract": {"n_a": False, "checks_kept": [{"kind": "command"}]}}
+
+    def _fake_derive(**kw):
+        recibido.update(kw)
+        return _FakeContract()
+
+    monkeypatch.setattr(ac, "derive", _fake_derive)
+    monkeypatch.setattr(cfg.config, "STACKY_ACCEPTANCE_CONTRACT_ENABLED", True, raising=False)
+    # Unitario puro (como el resto de este archivo): sin DB real. Sin esto el
+    # helper cae en su propio fail-open por "no such table: tickets" y el test
+    # pasaría por la razón equivocada.
+    monkeypatch.setattr(agent_runner, "session_scope", _fake_session_scope)
+    monkeypatch.setattr(agent_runner, "resolve_project_context", lambda **kw: None)
+
+    patch_md = agent_runner._derive_acceptance_contract_pre_run(
+        ticket_id=1, runtime="codex_cli", project_name=None, fingerprint_complexity="L"
+    )
+
+    assert patch_md == {"acceptance_contract": {"n_a": False, "checks_kept": [{"kind": "command"}]}}
+    # El juez de baseline necesita saber la complejidad y el runtime reales
+    assert recibido.get("complexity") == "L"
+    assert recibido.get("runtime") == "codex_cli"
+
+
+def test_a01_el_derivador_falla_abierto_y_no_tumba_el_run(monkeypatch):
+    """Si el derivador explota, el run continúa (fail-open), como el gate G0.1."""
+    import agent_runner
+    import config as cfg
+    from services import acceptance_contract as ac
+
+    def _boom(**kw):
+        raise RuntimeError("toolchain ausente")
+
+    monkeypatch.setattr(ac, "derive", _boom)
+    monkeypatch.setattr(cfg.config, "STACKY_ACCEPTANCE_CONTRACT_ENABLED", True, raising=False)
+
+    assert agent_runner._derive_acceptance_contract_pre_run(
+        ticket_id=1, runtime="codex_cli", project_name=None, fingerprint_complexity="M"
+    ) is None
+
+
+def test_a01_run_agent_deriva_antes_de_lanzar_el_runtime(monkeypatch):
+    """El gate REAL de A0.1: run_agent deriva ANTES de que el agente trabaje.
+    El orden importa — el juez de baseline exige el workspace SIN tocar."""
+    import agent_runner
+    import config as cfg
+
+    orden = []
+
+    monkeypatch.setattr(cfg.config, "STACKY_ACCEPTANCE_CONTRACT_ENABLED", True, raising=False)
+    monkeypatch.setattr(
+        agent_runner, "_derive_acceptance_contract_pre_run",
+        lambda **kw: (orden.append("derive"), {"acceptance_contract": {"n_a": True, "checks_kept": []}})[1],
+    )
+    monkeypatch.setattr(
+        agent_runner, "_start_cli_runtime", lambda **kw: (orden.append("run"), 4242)[1]
+    )
+    monkeypatch.setattr(
+        agent_runner, "_persist_acceptance_contract", lambda *a, **k: orden.append("persist")
+    )
+    # El preflight G0.1 no debe interferir con este test
+    monkeypatch.setattr(agent_runner.agents, "get", lambda t: object())
+
+    exec_id = agent_runner.run_agent(
+        agent_type="developer", ticket_id=1, context_blocks=[], user="tester",
+        runtime="codex_cli",
+    )
+
+    assert exec_id == 4242
+    assert orden == ["derive", "run", "persist"], (
+        f"orden incorrecto: {orden}. La derivación debe ocurrir ANTES del run "
+        "(baseline sin tocar) y la persistencia DESPUÉS (necesita el execution_id)."
+    )

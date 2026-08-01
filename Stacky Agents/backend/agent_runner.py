@@ -74,6 +74,80 @@ def _collect_produced_files(output_dir: Path | None) -> list[str]:
         return []
 
 
+def _derive_acceptance_contract_pre_run(
+    *,
+    ticket_id: int,
+    runtime: str,
+    project_name: str | None,
+    fingerprint_complexity: str | None,
+) -> dict | None:
+    """A0.1 (Plan 32) — Deriva el contrato de aceptación ANTES del run.
+
+    El juez determinista del examen exige el workspace BASELINE sin tocar
+    (fail-red on baseline), así que esto corre antes de lanzar cualquier runtime.
+
+    Devuelve el patch de metadata listo para persistir, o None si no corresponde.
+    Flag OFF → None sin llamar al derivador: cero costo LLM y byte-idéntico.
+    Falla-abierto igual que el gate G0.1: un error acá nunca tumba el run.
+    """
+    try:
+        if not getattr(config, "STACKY_ACCEPTANCE_CONTRACT_ENABLED", False):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+
+    try:
+        from services.acceptance_contract import derive as _ac_derive
+
+        with session_scope() as _ac_session:
+            _ac_ticket = _ac_session.get(Ticket, ticket_id)
+            _ac_ctx = resolve_project_context(
+                project_name=project_name, ticket=_ac_ticket
+            )
+            _ac_workspace = (_ac_ctx.workspace_root if _ac_ctx else "") or ""
+            # El derivador lee atributos del ticket (texto y criterios): se llama
+            # DENTRO de la sesión para no tocar un objeto detached.
+            _ac_contract = _ac_derive(
+                ticket=_ac_ticket,
+                workspace=_ac_workspace,
+                complexity=fingerprint_complexity or "M",
+                runtime=runtime,
+            )
+        return _ac_contract.to_metadata()
+    except Exception as _ac_exc:  # noqa: BLE001
+        import logging as _ac_log_mod
+
+        _ac_log_mod.getLogger("stacky.agent_runner").warning(
+            "A0.1 derivación de contrato falló (ignorada, continúa run): %s", _ac_exc
+        )
+        return None
+
+
+def _persist_acceptance_contract(execution_id: int | None, meta_patch: dict | None) -> None:
+    """A0.1 — Sella el contrato en metadata['acceptance_contract'] de la ejecución.
+
+    Es la clave que YA leen harness/post_run.py (gate), context_enrichment.py
+    (inyección del blanco) y harness_health.py (KPIs). Sin este sello los tres
+    leen vacío y quedan inertes.
+    """
+    if not meta_patch or not execution_id:
+        return
+    try:
+        with session_scope() as _ac_ps_session:
+            _ac_exec = _ac_ps_session.get(AgentExecution, execution_id)
+            if _ac_exec is None:
+                return
+            _ac_md = dict(_ac_exec.metadata_dict or {})
+            _ac_md.update(meta_patch)
+            _ac_exec.metadata_dict = _ac_md
+    except Exception as _ac_ps_exc:  # noqa: BLE001
+        import logging as _ac_ps_log
+
+        _ac_ps_log.getLogger("stacky.agent_runner").warning(
+            "A0.1 sellado del contrato falló (ignorado): %s", _ac_ps_exc
+        )
+
+
 def run_agent(
     *,
     agent_type: str,
@@ -141,8 +215,18 @@ def run_agent(
             "G0.1 preflight gate lanzó excepción (ignorada, continúa run): %s", _pf_exc
         )
 
+    # A0.1 (Plan 32) — Derivar el contrato de aceptación ANTES de lanzar el trabajo,
+    # con el workspace todavía en baseline. Punto ÚNICO: los 3 runtimes pasan por acá,
+    # así que el cableado no se duplica por runner (y no rompe la paridad de runtimes).
+    _acceptance_meta = _derive_acceptance_contract_pre_run(
+        ticket_id=ticket_id,
+        runtime=runtime,
+        project_name=project_name,
+        fingerprint_complexity=fingerprint_complexity,
+    )
+
     if runtime in {"codex_cli", "claude_code_cli"}:
-        return _start_cli_runtime(
+        _cli_execution_id = _start_cli_runtime(
             runtime=runtime,
             agent=agent,
             agent_type=agent_type,
@@ -155,6 +239,10 @@ def run_agent(
             project_name=project_name,
             work_item_type=work_item_type,
         )
+        # El sello va después porque recién acá existe el execution_id. La DERIVACIÓN
+        # (lo que exige baseline limpio) ya ocurrió arriba, antes de arrancar el runner.
+        _persist_acceptance_contract(_cli_execution_id, _acceptance_meta)
+        return _cli_execution_id
 
     with session_scope() as session:
         exec_row = AgentExecution(
@@ -178,6 +266,10 @@ def run_agent(
         # vive en el finalizador del runner CLI; este path (github_copilot) no
         # autopublica, pero igual deja la trazabilidad.
         md.setdefault("work_item_type", work_item_type)
+        # A0.1 (Plan 32) — path github_copilot: el contrato ya derivado se sella acá
+        # mismo, en el alta de la ejecución, sin un round-trip extra a la DB.
+        if _acceptance_meta:
+            md.update(_acceptance_meta)
         exec_row.metadata_dict = md
         session.add(exec_row)
         session.flush()

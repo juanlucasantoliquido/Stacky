@@ -71,6 +71,9 @@ import { parseRoute, serializeRoute, TAB_PATHS, type Tab, type RouteState } from
 import { useWorkbench } from "./store/workbench";
 import { tituloDeTickets } from "./lib/trackerLabels";
 import { tabDisponible, motivoNoDisponible } from "./lib/tabsPorTracker";
+// Plan 282 F8 — los 4 kill-switches de UI viven en un módulo puro y se cargan
+// desde la respuesta de /api/harness-flags que la app ya pide.
+import { setTrackerUiFlags, CLAVES_DE_FLAG } from "./services/trackerUiFlags";
 import styles from "./App.module.css";
 
 export default function App() {
@@ -253,6 +256,19 @@ export default function App() {
         if (!alive) return;
         const f = r.flags.find((x) => x.key === "STACKY_NOTIFICATION_CENTER_ENABLED");
         setNotifEnabled(f ? f.value === true : true);
+        // Plan 282 F8 — los 4 kill-switches de UI del eje GitLab, leídos de la
+        // MISMA respuesta (cero requests extra). FAIL-OPEN: una clave ausente o
+        // un fallo de red deja el comportamiento del plan, no lo apaga.
+        const leer = (k: string) => {
+          const s = r.flags.find((x) => x.key === k);
+          return s ? s.value === true : true;
+        };
+        setTrackerUiFlags({
+          labelsGlobal: leer(CLAVES_DE_FLAG.labelsGlobal),
+          urlsRouted: leer(CLAVES_DE_FLAG.urlsRouted),
+          stateFilterRouted: leer(CLAVES_DE_FLAG.stateFilterRouted),
+          adoOnlyTabsGated: leer(CLAVES_DE_FLAG.adoOnlyTabsGated),
+        });
       })
       .catch(() => {
         if (alive) setNotifEnabled(true);

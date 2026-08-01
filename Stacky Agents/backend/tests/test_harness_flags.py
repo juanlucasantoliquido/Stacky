@@ -465,6 +465,32 @@ def test_ado_service_identity_is_env_only_csv():
 # aquí (default_is_known == True ⇔ pertenencia a este set). Agregar/quitar una key acá
 # es la vía canónica para promover/degradar un default; nunca se toca el meta-test.
 _CURATED_DEFAULTS_ON = {
+    # ── Plan 282 — GitLab deja de ser un ADO disfrazado ──────────────────────
+    # Las 7 nacen ON. Ninguna cae en (A): no enciende loop, daemon, barrido ni
+    # llamada a modelo — nada gasta en reposo. Sobre (B), una por una:
+    #  · F1 (publicación del comentario) es la única discutible, porque hoy en
+    #    GitLab NO se escribe nada y encenderla hace que empiecen a aparecer
+    #    comentarios en el tracker del operador. Se sostiene por tres patas
+    #    verificadas: la dispara ÉL con el checkbox "Publicar comentario" por
+    #    corrida (no hay camino autónomo), es idempotente por dos barreras que
+    #    ya existían antes de este plan (dedupe por contenido y dedupe por
+    #    marcador contra el propio tracker), y su modo de fallo es INERTE
+    #    (`publisher_unavailable`): no borra, no cierra, no transiciona. Nacer
+    #    OFF obligaría al operador a encender una flag para que una función que
+    #    ya autorizó deje de estar rota.
+    #  · F3 REDUCE la escritura: deja de emitir un PUT que BORRA al asignado.
+    #    Una flag que quita una escritura destructiva no puede nacer OFF sin
+    #    dejar el destrozo encendido de fábrica.
+    #  · F2 cambia de dónde sale un objeto de configuración (el proveedor pasa
+    #    por la fábrica, que resuelve el certificado).
+    #  · F4, F5, F6 y F7 son lectura y presentación.
+    "STACKY_COMMENT_PUBLISH_ROUTED_ENABLED",        # F1 — el comentario llega al issue
+    "STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED",  # F2 — un solo constructor, con ca_bundle
+    "STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED",        # F3 — deja de borrar al asignado
+    "STACKY_TRACKER_LABELS_GLOBAL_ENABLED",         # F4 — rótulos por tracker
+    "STACKY_TRACKER_URLS_ROUTED_ENABLED",           # F5 — links que no van al tracker ajeno
+    "STACKY_TICKET_STATE_FILTER_ROUTED_ENABLED",    # F6 — filtro y colores por tracker
+    "STACKY_ADO_ONLY_TABS_GATED_ENABLED",           # F7 — tabs ADO-only deshabilitados
     # ── Plan 281 — El ruteo por tracker deja de mentir ───────────────────────
     # Nace ON. No cae en (A): no enciende loop, daemon, barrido ni llamada a
     # modelo — corrige el camino de un poll que YA existe. No cae en (B): es

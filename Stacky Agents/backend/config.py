@@ -2044,6 +2044,35 @@ class Config:
         "STACKY_GITLAB_DEEP_LINKS_ENABLED", "true"
     ).lower() in ("1", "true", "yes")
 
+    # ── Plan 282 — GitLab deja de ser un ADO disfrazado (paridad y fluidez) ──
+    # Las 7 nacen ON. Ninguna cae en las categorias de excepcion: (A) no hay
+    # loop, daemon, barrido ni llamada a modelo — nada gasta en reposo; (B) las
+    # 4 del frontend son lectura y presentacion, F2 cambia de donde sale un
+    # objeto de configuracion, F3 QUITA una escritura destructiva, y F1 repara
+    # una publicacion que el operador YA pide con el checkbox y que hoy falla
+    # en silencio. Curadas en _CURATED_DEFAULTS_ON.
+    STACKY_COMMENT_PUBLISH_ROUTED_ENABLED: bool = os.getenv(
+        "STACKY_COMMENT_PUBLISH_ROUTED_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_TRACKER_LABELS_GLOBAL_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_LABELS_GLOBAL_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_TRACKER_URLS_ROUTED_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_URLS_ROUTED_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_TICKET_STATE_FILTER_ROUTED_ENABLED: bool = os.getenv(
+        "STACKY_TICKET_STATE_FILTER_ROUTED_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+    STACKY_ADO_ONLY_TABS_GATED_ENABLED: bool = os.getenv(
+        "STACKY_ADO_ONLY_TABS_GATED_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
     # Plan 76 — Integración opcional con codebase-memory-mcp (externo). Default OFF.
     # Editable por UI (HarnessFlagsPanel, categoría "Avanzado / experimental").
     # Con flag OFF, Stacky es byte-idéntico a hoy (sin endpoints activos ni config MCP inyectada).

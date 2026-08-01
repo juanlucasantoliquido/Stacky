@@ -1398,6 +1398,9 @@ contrato.
     `docs/280_PLAN_CALENDARIO_DE_REUNIONES_TEAMS_MINUTAS_Y_PENDIENTES_ACCIONABLES.md` (untracked). Son dos
     planes distintos de dos sesiones distintas. **Requiere decisión del operador**: uno de los dos debe
     renumerarse. Este plan tomó el 282 pinneado y **no renumera nada por su cuenta**.
+    ✅ **RESUELTA por el operador el 2026-08-01:** el commiteado conserva el `280`; el untracked se renumeró
+    a `docs/283_PLAN_CALENDARIO_DE_REUNIONES_TEAMS_MINUTAS_Y_PENDIENTES_ACCIONABLES.md`. El primer número
+    libre real pasa a ser el **284**.
 
 ---
 
@@ -1494,3 +1497,104 @@ entre sí; ninguna deja el sistema a medio camino si no se hace.
 - [ ] Ninguna fase de este plan modificó `services/claude_code_cli_runner.py`, `codex_cli_runner.py` ni
       `services/run_outcome.py`: **esa capa es del plan 280** y tocarla es un conflicto de merge.
 - [ ] Sin `git push` (el push es siempre manual).
+
+---
+
+## 10. IMPLEMENTADO — 2026-08-01 (F0..F8)
+
+**Estado:** IMPLEMENTADO. Rama `docs/plan-279`, sin push. Tres commits (backend, frontend, cierre).
+
+### 10.1 Recalibración obligatoria de F0 — el delta, anotado como el plan exige
+
+| Censo | Plan v2 predecía | **MEDIDO al implementar** | Nota |
+|---|---|---|---|
+| Constructores directos de `GitLabTrackerProvider` (K3) | 4 | **4** | Reprodujo a la primera, y en las líneas exactas: `gitlab_ci_logs:11`, `gitlab_ci_provider:31`, `gitlab_preflight:38`, `gitlab_variables:14` |
+| `ado_publisher` rutea por tracker | no | **no** | Reprodujo |
+| Rótulos ADO **ruteables** del frontend (K2) | 40 en 17 archivos | **100 en 34 archivos** | **Desvío de 60.** Ver abajo |
+| Entradas de la allowlist `LEGITIMOS` | 23 | **28** | +5, cada una con motivo escrito |
+
+**Por qué el censo de v2 también medía de menos.** Su filtro descartaba una línea si
+*empezaba* con `//`, `*` o `/*`. Eso deja fuera dos cosas y suma una tercera de más:
+no ve los comentarios JSX `{/* … */}`, no ve las líneas de continuación de un bloque
+que no arrancan con `*`, y (al revés) cuenta como rótulo el cuerpo de esos bloques.
+El censo implementado usa una **máquina de estados por línea** que sigue la apertura
+y el cierre de bloque. Se probó también un stripper de `/* … */` sobre el texto
+entero y **se descartó**: se lo come un `/*` dentro de un string o de un literal de
+expresión regular —hay varios en este repo—, blanquea el `//` de las líneas
+siguientes y convierte comentarios en falsos rótulos (medido: inventaba 11 en
+`api/endpoints.ts` y 3 en `types.ts`).
+
+**Las 5 entradas nuevas de la allowlist, con su motivo:**
+
+| Archivo | Motivo |
+|---|---|
+| `lib/tabsPorTracker.ts` | el tooltip DICE "requiere Azure DevOps": nombrar el tracker que falta ES la función del mensaje |
+| `components/shell/shellNav.ts` | `TAB_META` es el label ESTÁTICO de fallback; el ruteo pasa en el render vía `labelDeTab` [A3], y 4 suites congelan el objeto |
+| `components/StructuredOutput.tsx` | `CITATION_RE` detecta la cadena `ADO-XXXX` **en el texto del agente**: es su dato de entrada, no un rótulo de UI |
+| `components/devops/PipelineLintPanel.tsx` | lint de `azure-pipelines.yml`: mismo criterio que el resto de `components/devops/` |
+| `components/EpicFromBriefModal.tsx` | **DEUDA DECLARADA**: archivo con cambios sin commitear de otra sesión (fix de la épica duplicada). Se rutea en el barrido siguiente |
+
+Y se agregó un **segundo centinela** que el plan no pedía: `NUNCA_ALLOWLISTEABLES`
+prohíbe que la allowlist se trague un archivo que la fase sí arregla. Sin él, la
+forma barata de poner el censo en verde era allowlistear justo los ofensores.
+
+### 10.2 Defecto propio detectado y corregido ANTES de commitear
+
+`Ticket.tracker_type` es **opcional** en el payload: con el vocabulario canónico
+apagado el backend devuelve las 16 claves legacy y ese campo **no viene**. Rutear
+por `ticket.tracker_type` a secas convertía **cada tarjeta de un proyecto ADO** en
+`Tracker-1234`. Lo destapó un test ajeno (`peekModel.test.ts`) y se cerró con
+`trackerEfectivo(delTicket, delProyecto)`, cableado en los 9 sitios que leen el
+tracker del ticket.
+
+### 10.3 Resultado medido por fase
+
+| Fase | Criterio del plan | Medido |
+|---|---|---|
+| F0 backend | 2 casos, reproducen el defecto | **2 passed** (arrancaron los 2 en ROJO) |
+| F0 frontend | 4 casos | **5 passed** (el 5º es el centinela extra de §10.1) |
+| F1 | 7 casos, 7 seleccionados | **7 passed / 7 collected** |
+| F2 | 4 casos, 4 seleccionados | **4 passed / 4 collected** |
+| F3 | 6 casos, 6 seleccionados | **6 passed / 6 collected** |
+| F4 | 8 casos + `tsc` 0 + `shellNav` verde sin editar | **8 passed**, `tsc` 0, `shellNav`/`shellIcons`/`shellIconsCoverage` verdes y **sin tocar** (`git diff` vacío) |
+| F5 | 5 casos | **5 passed** |
+| F6 | 8 casos | **8 passed** |
+| F7 | 7 casos | **7 passed** |
+| F8 | gate 0 o 5 documentado | **exit 5**: K2-K6 en meta (0), **K1 NO MEDIBLE** sin backend levantado |
+
+### 10.4 Correcciones de anclaje del plan (drift real, verificado)
+
+- `TrackerApiError` es **`(status, message, *, kind=...)`**: el `status` es el
+  **primer** posicional. El plan decía `TrackerApiError("msg", 500)`, que es al revés.
+- El guard `no usa Azure DevOps` vive en **`project_context.py:364-367`**, no en `:340-343`.
+- `canResolveWithAgent` está en **`frontend/src/incidents/devResolverModel.ts`**, no en
+  `services/incidents/`.
+- `commandPaletteDevopsActions.test.ts:109-110` **no se rompe**: pasa el literal
+  `'Ir a Tickets ADO'` a `fuzzyScore`, no lee `NAV_COMMANDS`. El que sí se rompía era
+  `commandPaletteData.test.ts` (asserta `NAV_COMMANDS.length === 14`), y por eso
+  `NAV_COMMANDS` se **conservó** y se agregó `buildNavCommands(tracker)`.
+- `_CURATED_DEFAULTS_ON` es una **séptima pata** que el plan no listaba: vive en
+  `tests/test_harness_flags.py` y toda flag con `default=True` debe estar ahí.
+
+### 10.5 Tests ajenos que este plan actualiza (todos en el mismo commit que los rompe)
+
+`test_plan71_gitlab_ci_provider.py` (el seam de parcheo se movió a la fábrica) ·
+`test_gitlab_provider.py::test_unknown_username_clears_assignee` (**congelaba el bug**:
+"si no se encuentra, limpia assignees") · `copyFormats.test.ts` · `peekLinks.test.ts` ·
+`entityActions.test.ts` · `peekModel.test.ts`.
+
+### 10.6 Rojos ajenos, con foto previa (delta CERO, probado contra el commit base)
+
+`test_harness_flags_help.py` 4 · `test_flags_env_read_meta` 1 ·
+`test_harness_flags_bounds.py` 1 y `test_harness_flags_requires.py` 1 (flags
+`STACKY_DOCS_*` del plan 284) · `test_error_fingerprints_catalog.py` 3 y
+`test_error_fingerprints_scan.py` 2 · `test_auto_publish_legacy.py` +
+`test_publish_idempotent_guard.py` 3 failed/10 errors · `test_autopublish_rescue.py` +
+`test_plan218_tracker_contract.py` 5 failed · `test_harness_ratchet_meta.py` 1
+(`test_docs_api.py`) · frontend: `shellIntegration.test.ts` 1, `adhocModalRatchet.test.ts` 2,
+`DevOpsCockpitRegression.test.ts` 1.
+
+### 10.7 Lo que queda para el operador (exige backend levantado + token GitLab)
+
+El **smoke de 9 pasos de F8.3**, sin cambios. Y el `gate_plan282.py` pasa de **5** a
+**0** en cuanto K1 se pueda medir con una corrida real que llegue a `completed`.

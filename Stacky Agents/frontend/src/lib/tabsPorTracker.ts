@@ -13,6 +13,8 @@
  *  frontend que consumen ESE blueprint son estos. */
 export const TABS_SOLO_ADO = ["pm", "sprint", "userstats"] as const;
 
+import { gateDeTabsActivo } from "../services/trackerUiFlags";
+
 const NOMBRE_HUMANO: Record<string, string> = {
   pm: "El Command Center de PM",
   sprint: "El Sprint Board",
@@ -33,6 +35,9 @@ function nombreDelTracker(tracker: string | null | undefined): string {
  *  nada mientras el proyecto todavía no cargó. Los gates de tab que nacen
  *  `false` matan el deep link — es un defecto conocido de este repo. */
 export function tabDisponible(tab: string, tracker: string | null | undefined): boolean {
+  // Plan 282 F8 — kill-switch STACKY_ADO_ONLY_TABS_GATED_ENABLED: con OFF, nada
+  // se deshabilita por tracker (comportamiento previo al plan).
+  if (!gateDeTabsActivo()) return true;
   if (!(TABS_SOLO_ADO as readonly string[]).includes(tab)) return true;
   const t = (tracker ?? "").trim().toLowerCase();
   if (!t) return true;                       // falla abierto

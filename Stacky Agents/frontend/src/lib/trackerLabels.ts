@@ -7,6 +7,8 @@
  *  Lógica pura, sin React: RTL/jsdom no están instalados en este repo, así que todo
  *  lo testeable vive acá y los componentes solo pintan. */
 
+import { rotulosRuteadosActivos } from "../services/trackerUiFlags";
+
 export type TrackerType = "azure_devops" | "gitlab" | "jira" | "mantis";
 
 const NOMBRES: Record<TrackerType, string> = {
@@ -47,6 +49,10 @@ const ESTADOS_FINALES: Record<TrackerType, string[]> = {
 };
 
 function clave(tipo: string | undefined | null): TrackerType | null {
+  // Plan 282 F8 — kill-switch STACKY_TRACKER_LABELS_GLOBAL_ENABLED. Con OFF, el
+  // resolutor UNICO que usan todos los helpers responde siempre Azure DevOps:
+  // la app vuelve, byte a byte, a los rotulos previos al plan.
+  if (!rotulosRuteadosActivos()) return "azure_devops";
   const k = (tipo ?? "") as TrackerType;
   return k in NOMBRES ? k : null;
 }

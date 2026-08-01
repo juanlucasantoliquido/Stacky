@@ -27,12 +27,18 @@ export interface TrackerUrlContext {
   project?: string | null;
 }
 
+import { urlsRuteadasActivas } from "../services/trackerUiFlags";
+
 export function urlDeTicket(
   tracker: TrackerUrlContext,
   id: string | number | null | undefined,
 ): string | null {
   const delBackend = (tracker.ado_url ?? "").trim();
   if (delBackend) return delBackend;
+
+  // Plan 282 F8 — kill-switch STACKY_TRACKER_URLS_ROUTED_ENABLED: con OFF la
+  // app NO compone ninguna URL del lado del cliente y usa solo la del backend.
+  if (!urlsRuteadasActivas()) return null;
 
   const tipo = (tracker.type ?? "").trim().toLowerCase();
   // Sólo ADO se puede componer del lado del cliente; GitLab/Jira/Mantis dependen

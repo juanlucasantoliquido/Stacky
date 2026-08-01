@@ -1147,6 +1147,26 @@
           "2026-08-01 10:00:00 INFO stacky_agents.docs Documentador salteo docs/sistema/01-overview.md: canonical_readonly"
         ]
       }
+    },
+    {
+      "id": "plan282-comentario-no-llega-al-tracker-gitlab",
+      "title": "El comentario del agente se genero y quedo en disco: el publicador es ADO-only",
+      "class": "silent-write-loss",
+      "status": "resolved",
+      "log_pattern": "ADO client build failed.*no usa Azure DevOps",
+      "log_guarded": true,
+      "killed_by": "plan 282 F1",
+      "killed_commit": null,
+      "date_resolved": "2026-08-01",
+      "guard_test": "tests/test_plan282_publicacion_comentario.py",
+      "self_test": {
+        "matches": [
+          "ERROR ado_publisher ADO client build failed: AdoConfigError: El proyecto 'RIPLEY' no usa Azure DevOps (tracker_type=gitlab)."
+        ],
+        "clean": [
+          "INFO ado_publisher publish ok tracker=gitlab item=1115 comment_id=99"
+        ]
+      }
     }
   ]
 }

@@ -233,7 +233,16 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
     ),
     "gitlab_deep_links": (
         # NOTA: el master STACKY_GITLAB_DEEP_LINKS_ENABLED (feature opt-in) → "capacidades_optin".
-        # Categoría sin keys propias por ahora (solo el master, ya movido).
+        # Plan 282 — paridad GitLab: las 7 del eje "GitLab deja de ser un ADO
+        # disfrazado" viven acá, en un bloque contiguo (la frontera de merge más
+        # caliente del árbol: 280/281/282 escriben en este archivo a la vez).
+        "STACKY_COMMENT_PUBLISH_ROUTED_ENABLED",       # F1 — el comentario llega al issue
+        "STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED", # F2 — un solo constructor, con ca_bundle
+        "STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED",       # F3 — deja de borrar al asignado
+        "STACKY_TRACKER_LABELS_GLOBAL_ENABLED",        # F4 — rótulos por tracker
+        "STACKY_TRACKER_URLS_ROUTED_ENABLED",          # F5 — links que no van al tracker ajeno
+        "STACKY_TICKET_STATE_FILTER_ROUTED_ENABLED",   # F6 — filtro y colores por tracker
+        "STACKY_ADO_ONLY_TABS_GATED_ENABLED",          # F7 — tabs ADO-only deshabilitados
     ),
     "devops": (
         "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 87 — panel DevOps: creador gráfico de pipelines
@@ -4449,6 +4458,119 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         # test_default_known_only_for_curated del Plan 63 (gotcha harness-flags-default-explicit-gotcha).
     ),
     # ── Plan 75 — Deep links bidireccionales GitLab ───────────────────────────
+    # ── Plan 282 — GitLab deja de ser un ADO disfrazado ──────────────────────
+    # Las 7 nacen ON y están curadas en _CURATED_DEFAULTS_ON. Bloque CONTIGUO a
+    # propósito: 280, 281 y 282 escriben en este archivo a la vez, y un bloque se
+    # resuelve como UN conflicto, no como siete.
+    FlagSpec(
+        key="STACKY_COMMENT_PUBLISH_ROUTED_ENABLED",
+        default=True,
+        type="bool",
+        label="El comentario del agente se publica en el tracker del ticket (Plan 282)",
+        description=(
+            "Plan 282 F1 - Si esta ON, el publicador de comentarios resuelve el cliente "
+            "por el TRACKER DEL TICKET en vez de construir siempre un cliente Azure "
+            "DevOps. En un proyecto GitLab el HTML del agente llega al issue; antes "
+            "quedaba en disco y la bitacora registraba 'failed'. Si esta OFF vuelve el "
+            "comportamiento previo. No agrega ninguna escritura automatica: la dispara "
+            "el checkbox 'Publicar comentario' del cierre, y es idempotente por dos "
+            "barreras (dedupe por contenido y dedupe por marcador contra el tracker)."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_GITLAB_PROVIDER_FACTORY_ONLY_ENABLED",
+        default=True,
+        type="bool",
+        label="Un solo constructor del proveedor GitLab, con certificado (Plan 282)",
+        description=(
+            "Plan 282 F2 - Si esta ON, los servicios de CI, logs, preflight y variables "
+            "piden el proveedor GitLab a la fabrica, que resuelve el bundle de "
+            "certificado del proyecto. Antes lo construian a mano y morian con "
+            "CERTIFICATE_VERIFY_FAILED contra un GitLab con autoridad interna, mientras "
+            "la sonda y el listado de tickets funcionaban. Si esta OFF vuelve la "
+            "construccion directa, sin certificado."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED",
+        default=True,
+        type="bool",
+        label="Un usuario GitLab que no resuelve falla en vez de desasignar (Plan 282)",
+        description=(
+            "Plan 282 F3 - Si esta ON, asignar un issue de GitLab a un username que no "
+            "existe levanta un error con el nombre que no se pudo resolver. Antes "
+            "mandaba la lista de asignados VACIA, asi que un error de tipeo o una caida "
+            "momentanea del endpoint de usuarios desasignaba el issue en silencio. "
+            "Desasignar a proposito (dejando el campo vacio) se conserva. Si esta OFF "
+            "vuelve el borrado silencioso."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_TRACKER_LABELS_GLOBAL_ENABLED",
+        default=True,
+        type="bool",
+        label="Los rotulos de la pantalla siguen al tracker del proyecto (Plan 282)",
+        description=(
+            "Plan 282 F4 - Si esta ON, las referencias, botones, tooltips y titulos usan "
+            "el nombre del tracker del proyecto activo: en GitLab dicen '#1115' y "
+            "'GitLab' donde antes decian 'ADO-1115' y 'ADO'. Solo lectura y "
+            "presentacion. Si esta OFF, toda la interfaz vuelve a hablar Azure DevOps."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_TRACKER_URLS_ROUTED_ENABLED",
+        default=True,
+        type="bool",
+        label="Los enlaces del ticket dejan de apuntar al tracker de otro cliente (Plan 282)",
+        description=(
+            "Plan 282 F5 - Si esta ON, 'Abrir' y 'Copiar link' usan la URL que manda el "
+            "backend o la construyen con la organizacion REAL del proyecto; si no hay "
+            "ninguna, la accion no se ofrece. Antes se armaba con una organizacion y un "
+            "proyecto fijos de otro cliente, asi que en un proyecto GitLab el enlace "
+            "llevaba a un lugar ajeno. Si esta OFF, la interfaz usa unicamente la URL "
+            "que provee el backend."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_TICKET_STATE_FILTER_ROUTED_ENABLED",
+        default=True,
+        type="bool",
+        label="El filtro 'Solo abiertos' y los colores entienden el tracker (Plan 282)",
+        description=(
+            "Plan 282 F6 - Si esta ON, el vocabulario de estados terminales y los colores "
+            "de los distintivos se resuelven por tracker. En GitLab, cuyos estados son "
+            "'opened' y 'closed', el filtro dejaba pasar todo y los distintivos caian "
+            "todos al mismo gris. Solo lectura y presentacion. Si esta OFF vuelve el "
+            "vocabulario unico de Azure DevOps."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_ADO_ONLY_TABS_GATED_ENABLED",
+        default=True,
+        type="bool",
+        label="Las pantallas que solo funcionan con Azure DevOps se deshabilitan (Plan 282)",
+        description=(
+            "Plan 282 F7 - Si esta ON, en un proyecto que no usa Azure DevOps los accesos "
+            "a PM, Sprint Board y Estadisticas por usuario aparecen deshabilitados con "
+            "el motivo en el globo de ayuda, en vez de llevar a una pantalla que "
+            "responde 'solo disponible para proyectos Azure DevOps'. No se ocultan: "
+            "ocultarlos romperia el enlace directo. Si esta OFF, nada se deshabilita."
+        ),
+        group="global",
+        env_only=False,
+    ),
     FlagSpec(
         key="STACKY_GITLAB_DEEP_LINKS_ENABLED",
         default=True,  # promovida a default ON (operador 2026-07-10, curada en _CURATED_DEFAULTS_ON)

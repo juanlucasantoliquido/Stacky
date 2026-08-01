@@ -1003,6 +1003,14 @@ HARNESS_TEST_FILES=(
   tests/test_plan281_sitios_ado_only.py
   tests/test_plan281_ratchet_ado_only.py
 
+  # Plan 282 - GitLab deja de ser un ADO disfrazado: paridad y fluidez.
+  # Los 4 archivos del eje. El censo de rotulos del frontend NO va aca: corre
+  # con vitest (src/services/__tests__/plan282Censo.test.ts).
+  tests/test_plan282_censo_paridad.py
+  tests/test_plan282_publicacion_comentario.py
+  tests/test_plan282_fabrica_unica.py
+  tests/test_plan282_assignee_no_borra.py
+
   tests/test_plan266_summary_shape.py
   tests/test_plan266_flag_cableado.py
   tests/test_plan266_harness_runner_paridad.py

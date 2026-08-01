@@ -6,6 +6,8 @@
  *  filtro "Solo abiertos" no filtraba NADA y todos los badges caían al mismo
  *  gris. */
 
+import { estadosRuteadosActivos } from "../services/trackerUiFlags";
+
 const CERRADOS_ADO = ["Done", "Closed", "Resolved", "Removed", "Completed"];
 
 /** GitLab: el estado nativo `closed`, más las dos claves lógicas que
@@ -53,6 +55,9 @@ const COLORES_GITLAB: Record<string, string> = {
 };
 
 function estadosCerrados(tracker: string | null | undefined): string[] {
+  // Plan 282 F8 — kill-switch STACKY_TICKET_STATE_FILTER_ROUTED_ENABLED: con OFF
+  // vuelve el vocabulario unico de ADO (el comportamiento previo al plan).
+  if (!estadosRuteadosActivos()) return CERRADOS_ADO;
   return CERRADOS_POR_TRACKER[(tracker ?? "").trim().toLowerCase()] ?? CERRADOS_ADO;
 }
 
@@ -82,7 +87,7 @@ export function colorDeEstado(
 ): string {
   const crudo = (estado ?? "").trim();
   if (!crudo) return COLOR_NEUTRO;
-  const tipo = (tracker ?? "").trim().toLowerCase();
+  const tipo = estadosRuteadosActivos() ? (tracker ?? "").trim().toLowerCase() : "azure_devops";
   const tabla = tipo === "gitlab" ? COLORES_GITLAB : COLORES_ADO;
   if (tabla[crudo]) return tabla[crudo];
   const enMinusculas = crudo.toLowerCase();

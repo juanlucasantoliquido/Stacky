@@ -25,6 +25,7 @@ texto de esos archivos, no el de quien los usa.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -47,7 +48,17 @@ _FORMAS_PROHIBIDAS = frozenset({
     "--amend", "-A", "--all", "-D", "--delete", "--allow-empty",
     "--discard-changes", "--global", "--system", "--no-verify", "-i",
     "--interactive", "--exec", "--upload-pack", "--receive-pack",
+    # Plan 293 — agregados tras PROBAR los exploits contra el catalogo v1:
+    "-C",                       # `switch -C` RESETEA una rama existente (exit 0, commits perdidos)
+    "--force-create",
+    "--orphan", "--detach",     # dejan al usuario en un estado que no sabe deshacer
+    "--ignore-other-worktrees",
+    "--mirror", "--prune-tags",
 })
+
+# Un nombre de rama/remoto valido y NADA MAS. Sin '+' (que fuerza), sin ':'
+# (refspec), sin '*' (comodin), sin '^', sin '~'.
+_NOMBRE_SIMPLE = re.compile(r"^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,200}$")
 
 _TIMEOUT_LOCAL_SEG = 15
 _TIMEOUT_RED_SEG = 30  # igual criterio que STACKY_PRE_RUN_GIT_TIMEOUT_SECONDS
@@ -100,10 +111,44 @@ def _validar(args: list[str], *, escritura: bool = False) -> None:
                 "cualquier otra forma puede escribir en el .git/config del operador."
             )
     elif verbo == "push":
+        # PROBADO ejecutando: `git push origin +main` es un force-push COMPLETO
+        # sin escribir --force, y borro un commit ajeno del remoto con exit 0.
+        # Validar por ARIDAD lo deja pasar: hay que validar la FORMA del refspec.
         if len(args) != 3:
             raise GitVetado(
                 "push solo se admite como ['push',<remoto>,<rama>]: "
                 "cualquier argumento extra puede cambiar la semantica."
+            )
+        remoto, rama = args[1], args[2]
+        if not _NOMBRE_SIMPLE.match(remoto):
+            raise GitVetado(
+                f"push: el remoto {remoto!r} no es un nombre simple. No se admiten "
+                f"URLs ni rutas: solo un remoto ya configurado."
+            )
+        if not _NOMBRE_SIMPLE.match(rama):
+            raise GitVetado(
+                f"push: {rama!r} no es un nombre de rama simple. Un '+' o un ':' "
+                f"convierten el envio en una reescritura forzada de la historia."
+            )
+    elif verbo == "switch":
+        # PROBADO ejecutando: `git switch -C <rama>` RESETEA una rama existente y
+        # destruye sus commits, con exit 0. Forma cerrada, no denylist.
+        formas_ok = (len(args) == 2) or (len(args) == 3 and args[1] == "-c")
+        if not formas_ok:
+            raise GitVetado(
+                "switch solo se admite como ['switch',<rama>] o ['switch','-c',<rama>]."
+            )
+        destino = args[-1]
+        if not _NOMBRE_SIMPLE.match(destino):
+            raise GitVetado(f"switch: {destino!r} no es un nombre de rama valido.")
+    elif verbo == "fetch":
+        # Sin validacion, `fetch origin +refs/heads/*:refs/heads/*` PISA las ramas
+        # locales por la fuerza.
+        formas_ok = args[1:] == ["--prune"] or (len(args) == 2 and _NOMBRE_SIMPLE.match(args[1]))
+        if not formas_ok:
+            raise GitVetado(
+                "fetch solo se admite como ['fetch','--prune'] o ['fetch',<remoto>]: "
+                "un refspec explicito puede sobrescribir ramas locales."
             )
     elif verbo == "merge":
         if len(args) < 2 or args[1] != "--ff-only":
@@ -340,7 +385,52 @@ def repo_overview(workspace: Path) -> dict:
         "archivos": archivos,
         "conflictos": conflictos,
         "identidad_ok": identidad_ok,
+        "operacion_en_curso": operacion_en_curso(raiz),
     }
+
+
+# ── Operacion a medias: lo que el `status` NO delata ─────────────────────────
+#
+# PROBADO ejecutando: con un merge en curso, `git commit -F msg -- <ruta>` muere
+# con `fatal: cannot do a partial commit during a merge` (exit 128). Y apenas el
+# usuario resuelve el conflicto con `add`, las lineas `u` DESAPARECEN del
+# `status --porcelain=v2`, que no tiene ningun campo de estado de merge. O sea:
+# el semaforo daria verde y el mecanismo central del plan fallaria igual.
+#
+# El estado en curso solo se ve en el SISTEMA DE ARCHIVOS.
+_MARCAS_EN_CURSO = (
+    ("MERGE_HEAD", "fusion"),
+    ("CHERRY_PICK_HEAD", "copia_de_cambio"),
+    ("REVERT_HEAD", "reversion"),
+    ("rebase-merge", "reordenamiento"),
+    ("rebase-apply", "reordenamiento"),
+    ("BISECT_LOG", "busqueda_binaria"),
+)
+
+
+def _git_dir(raiz: Path) -> Path | None:
+    """La carpeta .git real. En un worktree enlazado `.git` es un ARCHIVO, asi
+    que no alcanza con `raiz / '.git'`."""
+    res = _run_git(["rev-parse", "--absolute-git-dir"], raiz)
+    if res is None or res.returncode != 0:
+        candidato = raiz / ".git"
+        return candidato if candidato.is_dir() else None
+    ruta = (res.stdout or "").strip()
+    return Path(ruta) if ruta else None
+
+
+def operacion_en_curso(raiz: Path) -> str | None:
+    """Nombre de la operacion a medias, o None. NUNCA lanza."""
+    try:
+        gd = _git_dir(Path(raiz))
+        if gd is None:
+            return None
+        for marca, nombre in _MARCAS_EN_CURSO:
+            if (gd / marca).exists():
+                return nombre
+    except OSError:
+        return None
+    return None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -355,11 +445,19 @@ def repo_overview(workspace: Path) -> dict:
 
 CODIGOS_BLOQUEO = frozenset({
     "repo_no_disponible", "conflictos_presentes", "sin_cambios", "nada_seleccionado",
-    "escritura_apagada", "push_apagado", "sin_identidad_git", "sin_upstream",
+    "escritura_apagada", "push_apagado", "sin_upstream",
+    # PROBADO: con una fusion a medias el commit por rutas muere con exit 128, y
+    # el `status` no lo delata una vez resuelto el conflicto.
+    "operacion_en_curso",
 })
 
 CODIGOS_AVISO = frozenset({
     "hay_cambios_no_seleccionados", "rama_sin_upstream", "carrera_working_tree",
+    # PROBADO: `git commit` SIN user.email NO falla — git deriva la identidad de
+    # usuario+host y commitea con un warning (exit 0). Bloquear por la sonda
+    # `config --get user.email` seria un FALSO BLOQUEO permanente en cualquier
+    # maquina sin identidad explicita. Por eso es AVISO, no bloqueo.
+    "identidad_derivada",
 })
 
 _ACCIONES_QUE_ESCRIBEN = ("confirmar", "traer", "cambiar_rama", "crear_rama")
@@ -402,8 +500,11 @@ def evaluar_operacion(*, repo: dict, accion: str, flags: dict, seleccion: list[s
     if accion in _ACCIONES_QUE_ENVIAN and not flags.get("envio"):
         bloquear("push_apagado")
 
-    if accion == "confirmar" and disponible and not repo.get("identidad_ok", True):
-        bloquear("sin_identidad_git")
+    # Una operacion a medias (fusion, reversion, reordenamiento) hace IMPOSIBLE
+    # el commit por rutas. Es bloqueo duro y el `status` no lo ve.
+    en_curso = repo.get("operacion_en_curso")
+    if en_curso and accion in _ACCIONES_QUE_ESCRIBEN:
+        bloqueos.append({"codigo": "operacion_en_curso", "severidad": "error", "cual": en_curso})
 
     upstream = (repo.get("repo") or {}).get("upstream")
     if accion == "traer" and not upstream:
@@ -419,6 +520,9 @@ def evaluar_operacion(*, repo: dict, accion: str, flags: dict, seleccion: list[s
 
     if not upstream and accion != "traer":
         avisos.append({"codigo": "rama_sin_upstream", "severidad": "info"})
+
+    if accion == "confirmar" and disponible and not repo.get("identidad_ok", True):
+        avisos.append({"codigo": "identidad_derivada", "severidad": "warn"})
 
     if accion == "confirmar" and seleccion:
         avisos.append({"codigo": "carrera_working_tree", "severidad": "info"})

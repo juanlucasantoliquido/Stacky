@@ -224,10 +224,54 @@ def test_26_push_apagado():
     assert "push_apagado" in _codigos(r)
 
 
-def test_27_sin_identidad():
+def test_27_sin_identidad_avisa_pero_NO_bloquea():
+    """PROBADO ejecutando: `git commit` SIN user.email NO falla — git deriva la
+    identidad de usuario+host y commitea con exit 0. Bloquear por la sonda
+    `config --get user.email` (que si sale con exit 1) seria un FALSO BLOQUEO
+    permanente en cualquier maquina sin identidad explicita."""
     repo = {**_REPO_OK, "identidad_ok": False}
     r = gw.evaluar_operacion(repo=repo, accion="confirmar", flags=_FLAGS_TODO, seleccion=["a.txt"])
-    assert "sin_identidad_git" in _codigos(r)
+    assert "identidad_derivada" in [a["codigo"] for a in r["avisos"]]
+    assert r["puede"] is True
+
+
+@pytest.mark.parametrize("marca,esperado", [
+    ("MERGE_HEAD", "fusion"),
+    ("CHERRY_PICK_HEAD", "copia_de_cambio"),
+    ("REVERT_HEAD", "reversion"),
+])
+def test_27b_operacion_a_medias_detectada_en_el_disco(repo, marca, esperado):
+    """PROBADO ejecutando: con una fusion a medias, `git commit -F m -- <ruta>`
+    muere con `fatal: cannot do a partial commit during a merge` (exit 128).
+    Y apenas el usuario resuelve el conflicto con `add`, las lineas `u`
+    DESAPARECEN del status: el sensor elegido NO lo ve. Solo se ve en el disco."""
+    (repo / ".git" / marca).write_text("deadbeef\n", encoding="utf-8")
+    assert gw.operacion_en_curso(repo) == esperado
+    ov = gw.repo_overview(repo)
+    assert ov["operacion_en_curso"] == esperado
+
+
+def test_27c_operacion_a_medias_bloquea_el_confirmar():
+    repo = {**_REPO_OK, "operacion_en_curso": "fusion"}
+    r = gw.evaluar_operacion(repo=repo, accion="confirmar", flags=_FLAGS_TODO, seleccion=["a.txt"])
+    assert "operacion_en_curso" in _codigos(r)
+    assert r["puede"] is False
+
+
+def test_27d_el_status_NO_delata_la_fusion_resuelta(repo):
+    """La razon de ser de la sonda por disco, medida."""
+    _git(repo, "switch", "-c", "otra")
+    (repo / "a.txt").write_text("otra\n", encoding="utf-8")
+    _git(repo, "commit", "-am", "otra")
+    _git(repo, "switch", "principal")
+    (repo / "a.txt").write_text("principal\n", encoding="utf-8")
+    _git(repo, "commit", "-am", "principal")
+    _git(repo, "merge", "otra")
+    _git(repo, "add", "a.txt")          # el usuario "resuelve" el conflicto
+
+    ov = gw.repo_overview(repo)
+    assert ov["conflictos"] == [], "el status ya no muestra el conflicto"
+    assert ov["operacion_en_curso"] == "fusion", "pero la fusion SIGUE en curso"
 
 
 def test_28_aviso_de_cambios_no_seleccionados():
@@ -248,13 +292,14 @@ def test_29_aviso_rama_sin_upstream():
 
 
 def test_30_bloqueos_acumulables():
-    """No devuelve el primero que encuentra: devuelve TODOS."""
-    repo = {**_REPO_OK, "conflictos": ["x"], "identidad_ok": False}
+    """No devuelve el primero que encuentra: devuelve TODOS. Devolver uno solo
+    obliga al usuario a descubrir los otros de a uno."""
+    repo = {**_REPO_OK, "conflictos": ["x"], "operacion_en_curso": "fusion"}
     r = gw.evaluar_operacion(
         repo=repo, accion="confirmar",
         flags={"escritura": False, "envio": False}, seleccion=[],
     )
-    for esperado in ("conflictos_presentes", "sin_identidad_git", "escritura_apagada", "nada_seleccionado"):
+    for esperado in ("conflictos_presentes", "operacion_en_curso", "escritura_apagada", "nada_seleccionado"):
         assert esperado in _codigos(r), f"falta {esperado} en {_codigos(r)}"
 
 

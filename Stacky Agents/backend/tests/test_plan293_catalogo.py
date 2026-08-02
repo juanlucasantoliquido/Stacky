@@ -108,14 +108,88 @@ def test_07c_config_global_lanza():
         gw._validar(["config", "--global", "--get", "user.email"])
 
 
-# ── Regla 8: push con forma exacta ──────────────────────────────────────────
+# ── Regla 8: push con forma exacta Y refspec validado ───────────────────────
 def test_08_push_forma_exacta_permitido():
     gw._validar(["push", "origin", "mi-rama"], escritura=True)
+    gw._validar(["push", "origin", "feature/algo-1.2"], escritura=True)
 
 
 def test_08b_push_con_argumentos_de_mas_lanza():
     with pytest.raises(ValueError):
         gw._validar(["push", "origin", "mi-rama", "--mirror"], escritura=True)
+
+
+@pytest.mark.parametrize(
+    "refspec",
+    [
+        "+main",                      # PROBADO: reescribe la historia del remoto, exit 0
+        "+HEAD:refs/heads/main",      # idem, con refspec completo
+        "HEAD:refs/heads/main",       # refspec con ':' — no es un nombre de rama
+        "refs/heads/*:refs/heads/*",  # comodin
+        "--force",
+        "-f",
+        "^main",
+    ],
+)
+def test_08c_push_con_refspec_que_fuerza_lanza(refspec):
+    """BLOQUEANTE probado ejecutando: `git push origin +main` es un force-push
+    COMPLETO sin escribir --force. Borro un commit ajeno del remoto con exit 0.
+
+    Validar `push` por ARIDAD (len(args)==3) lo deja pasar entero: hay que
+    validar la FORMA del refspec.
+    """
+    with pytest.raises(ValueError):
+        gw._validar(["push", "origin", refspec], escritura=True)
+
+
+def test_08d_push_con_remoto_que_es_una_url_lanza():
+    """El remoto tambien se valida: si no, se puede empujar a cualquier lado."""
+    with pytest.raises(ValueError):
+        gw._validar(["push", "https://otro.servidor/repo.git", "main"], escritura=True)
+
+
+# ── switch: forma cerrada. `-C` RESETEA una rama existente ──────────────────
+def test_08e_switch_formas_permitidas():
+    gw._validar(["switch", "mi-rama"], escritura=True)
+    gw._validar(["switch", "-c", "mi-rama"], escritura=True)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["switch", "-C", "victima"],          # PROBADO: reseteo la rama y borro un commit
+        ["switch", "--force-create", "x"],
+        ["switch", "--orphan", "x"],
+        ["switch", "--detach", "abc123"],
+        ["switch", "--ignore-other-worktrees", "x"],
+        ["switch", "-c", "a", "b", "c"],      # aridad de mas
+        ["switch"],                            # sin destino
+    ],
+)
+def test_08f_switch_destructivo_o_raro_lanza(args):
+    """BLOQUEANTE probado ejecutando: `git switch -C <rama>` resetea una rama que
+    ya existe y DESTRUYE sus commits, con exit 0. Vetar solo -D no alcanza."""
+    with pytest.raises(ValueError):
+        gw._validar(args, escritura=True)
+
+
+# ── fetch: sin validacion de forma se pueden pisar ramas LOCALES ────────────
+def test_08g_fetch_formas_permitidas():
+    gw._validar(["fetch", "--prune"], escritura=True)
+    gw._validar(["fetch", "origin"], escritura=True)
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["fetch", "origin", "+refs/heads/*:refs/heads/*"],  # pisa ramas locales
+        ["fetch", "--all"],
+        ["fetch", "origin", "main:main"],
+    ],
+)
+def test_08h_fetch_con_refspec_lanza(args):
+    with pytest.raises(ValueError):
+        gw._validar(args, escritura=True)
 
 
 # ── Regla 9: merge solo --ff-only ───────────────────────────────────────────

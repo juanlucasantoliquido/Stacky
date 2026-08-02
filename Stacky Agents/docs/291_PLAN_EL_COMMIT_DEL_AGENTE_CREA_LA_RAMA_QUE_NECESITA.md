@@ -1,11 +1,80 @@
 # Plan 291 — El commit del agente crea la rama que necesita
 
-**Estado:** MEJORADO (v1 → v2) — sin implementar
+**Estado:** ✅ **IMPLEMENTADO** (F0..F8) — 2026-08-02, rama `docs/plan-279`, **sin push**
 **Fecha:** 2026-08-02
 **Rama de trabajo:** `docs/plan-279`
 **Alcance:** backend (`services/gitlab_provider.py`, `services/incident_dev_autocommit.py`), registro de **3** flags, tests. **Cero frontend.**
 **Veredicto de la crítica v1:** 🔴 **RECHAZADO — 6 bloqueantes.** Todos corregidos en esta v2 (ver CHANGELOG §8).
 **Sello:** `Juez v2: subagente independiente, misma corrida, contexto limpio`
+
+---
+
+## 0. ESTADO DE IMPLEMENTACIÓN (2026-08-02)
+
+Un commit por fase, `git commit -F` con pathspec acotado, sesión paralela viva y respetada
+(cero `add -A`, cero `amend`/`reset`/`rebase`/`stash`/`checkout`, cero push).
+
+| Fase | Estado | Commit | Criterio binario — **medido** |
+|---|---|---|---|
+| **F0** — baselines | ✅ **IMPLEMENTADA** | (en el cuerpo de F1) | Los **13** baselines del plan reproducen **EXACTO**, incluidos los 5 rojos de fábrica |
+| **F1** — `branch_exists` + `_default_branch_name` + F1.b | ✅ **IMPLEMENTADA** | `c0efc90d` | `7 passed`; delta cero en las 10 suites vecinas |
+| **F2** — `_detect_commit_action` con `rama_existe` | ✅ **IMPLEMENTADA** | `44bf98ce` | `11 passed` (7+4); delta cero |
+| **F3** — las TRES flags | ✅ **IMPLEMENTADA** | `3a6b4a5a` | `18 passed`; 490 → **493** flags; los 6 conteos del criterio, exactos |
+| **F4** — `start_branch` + F4.a | ✅ **IMPLEMENTADA** | `c28dc2d3` | `25 passed`; `test_plan73_repo_writer` **6 → 7 a propósito** |
+| **F5** — detectar (ON) / tapar (OFF) | ✅ **IMPLEMENTADA** | `c0eb80d0` | `8 passed`; delta cero en `test_incident_dev_autocommit` (11) |
+| **F6** — guardia de repo + K2 | ✅ **IMPLEMENTADA** | `a59e5a03` | `10 passed` |
+| **F7** — paridad de los 3 runtimes | ✅ **IMPLEMENTADA** | `21b7c7fc` | `13 passed` (10+3) |
+| **F8** — documentación y activación | ✅ **IMPLEMENTADA** | `f9db98f4` | los **5** greps ≥ 1 |
+| **[ADICIÓN ARQUITECTO 3]** — guard de red a `getaddrinfo` | ✅ **IMPLEMENTADA** | `e7f35b6b` | `test_plan154_network_guard` 4 → **6 passed**; barrido de 39 archivos sin regresión |
+
+### Las dos flags de excepción (B) quedaron APAGADAS
+
+```
+STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED = False
+STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED     = True    (esta es la que solo LEE)
+STACKY_AUTOCOMMIT_REDACT_ENABLED          = False
+```
+
+### K1
+
+`K1: NO MEDIBLE — requiere que el operador encienda STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED
+y ejecute el humo de la sección 4.9 contra su GitLab. Ninguna fase de este plan lo mide.`
+
+### Desviaciones respecto del texto del plan, medidas
+
+1. **F2**: el plan decía *"F2.3 y F2.4 pasan hoy"*. **F2.3 no puede pasar hoy**: el caso de
+   su propia tabla pasa `rama_existe=True` explícitamente, así que muere en el mismo
+   `TypeError` que F2.1/F2.2. El test quedó **exacto como la tabla lo especifica**; lo
+   equivocado era la prosa del *"cómo se comprueba el rojo"*. Sigue siendo guardián de
+   no-regresión.
+2. **F5.5**: se le sumó `secret_scan_files == []` al centinela del bloqueante C1, así que
+   **no** pasa hoy (falla con `KeyError`). Es una versión **más fuerte**: además de exigir
+   el byte-idéntico, exige que el detector **no marque** código legítimo.
+3. **Rojos de fábrica del backend: son SIETE, no cinco.** Se agregan, probados
+   preexistentes restaurando el `conftest.py` de HEAD:
+   `tests/test_plan76_codebase_memory_mcp.py` (1F/9P) y
+   `tests/test_plan74_migrator_wiring.py` (1F/3P, por `harness_defaults.env` parcial —
+   que el propio plan declara fuera de scope).
+4. **F8**: además del archivo que el plan indica, se agregó su fila en `docs/sistema/INDEX.md`,
+   porque esa carpeta es un conjunto indexado y un `.md` huérfano quedaría invisible.
+
+### Gates con mitad de contraste, ejecutados (todos fallan cuando deben)
+
+| Gate | Símbolo del producto parcheado | Resultado de la mitad que DEBE fallar |
+|---|---|---|
+| F3.2 / F3.3 (bloqueante C1) | las dos flags (B) en ON | `AssertionError: assert True is False` — **FALLA** |
+| F4.1 (criterio central) | `GitLabTrackerProvider.branch_exists → False` | **FALLA** |
+| F5.5 (bloqueante C1) | `_PATRONES_ALTA_CONFIANZA := redact_secrets` | **FALLA**, y reproduce el destrozo literal |
+| F5.3 (el reordenamiento) | `_build_pr_body` ignora `sospechosos` | **FALLA** |
+| F6.8 (K2) | `_BRANCH_PREFIX := "suelto/"` | **FALLA** (en el archivo, con `pytest.raises`) |
+| F7.2 (chokepoint) | `ticket_status._run_post_hooks → no-op` | **FALLA** (`llamadas=0`) |
+| Guard de red | `conftest.py` de HEAD | **FALLA** con `socket.gaierror` — o sea, el DNS salía |
+
+### Lo que sigue siendo del OPERADOR
+
+1. **El humo de §8.2 contra su GitLab.** Única validación end-to-end posible.
+2. **Decidir si enciende `STACKY_AUTOCOMMIT_REDACT_ENABLED`.**
+3. **Encender `STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED`** si quiere el ciclo completo.
 
 > **Lo que la crítica confirmó ejecutando (para que nadie lo vuelva a medir):** los **13 baselines** de F0 son exactos, uno por uno; el registry da **490 flags** con `STACKY_GITLAB_ENABLED` **NO registrada** y `STACKY_INCIDENT_DEV_PR_ENABLED` con `requires='STACKY_INCIDENT_DEV_RESOLVER_ENABLED'`; `start_branch` da **0** ocurrencias; ADO **sí** crea la rama en `ado_provider.py:183-190`; `_build_pr_body` **sí** se llama en `:73` antes del bucle de `:83`; `redact_secrets` **sí** enmascara emails; y `test_plan218_tracker_contract[gitlab]` **sí** emite un request HTTPS real.
 >

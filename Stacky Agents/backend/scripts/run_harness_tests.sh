@@ -1094,6 +1094,7 @@ HARNESS_TEST_FILES=(
   # Plan 293 - tablero de trabajo: git guiado para no tecnicos
   tests/test_plan293_catalogo.py
   tests/test_plan293_flags.py
+  tests/test_plan293_overview.py
 )
 
 pass=0

@@ -15,6 +15,14 @@
 - Tabs opcionales (`pm`, `logs`, `docs`, `memory`) se muestran según `useUiSectionsStore` (config server-side de secciones UI). Si el tab activo se oculta → fallback a `team`. [V: App.tsx:54,114-119,153-190]
 - Tabs gated por flag de backend (health probe en boot): `migrador` (`/api/migrator/health`), `devops` (`/api/devops/health`), `dbcompare` (`/api/db-compare/health`); aparecen solo si `flag_enabled===true`. → ver [12-devops](12-devops.md), [14-db-compare](14-db-compare.md). [V: App.tsx:64-107]
 - Atajos de teclado: Ctrl/Cmd+K (command palette), `?` (cheatsheet), Ctrl/Cmd+/ (toggle team/tickets). [V: App.tsx:85-110]
+- **Ficha del ticket a pantalla completa (Plan 287) — NO ES UN TAB.** `TicketFullView` es un
+  **recubrimiento** montado sobre el tablero con la primitiva `Dialog` en modo `bare`, no una pantalla
+  con ruta propia: no está en la unión `Tab`, ni en `TAB_PATHS`, ni en `TAB_META`, ni suma un gate en
+  `App.tsx`. **Ningún censo de tabs debe contarla como el tab número 20.** Se abre con `?ticket=<id>`
+  (campo `ticket?: number` de `RouteState`, espejo de `exec?`), que `App.tsx` le pasa a `TicketBoard`
+  por prop igual que `?exec=` a `ExecutionHistoryPage`. Gated por `STACKY_TICKET_FULLVIEW_ENABLED`
+  (leída con `readCachedBoolFlag`, síncrona y fail-open, para que el enlace directo no muera esperando
+  una sonda). [V: components/ticket/TicketFullView.tsx; services/routes.ts; App.tsx `<TicketBoard ticket=`]
 
 ## Componentes globales (siempre montados)
 DemoModeBanner, TopBar (incluye versión — Plan 38 A), HealthBanner, CommandPalette, ShortcutsCheatsheet,

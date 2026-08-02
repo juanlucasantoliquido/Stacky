@@ -63,6 +63,17 @@ Toda la config vive en `backend/config.py` (clase `Config`, instancia `config`).
 - **Gateway de completion (SSD P1)**: `STACKY_COMPLETION_GATEWAY` (off/shadow/on, default off), `STACKY_AGENT_TOKEN` `<REDACTADO>`. [V: config.py:441-452]
 - **Pre-run git (memoria colaborativa Fase C)**: `STACKY_PRE_RUN_GIT_PULL_*`, `STACKY_PRE_RUN_GIT_WORKSPACE_POLICY` (fetch_only_warn), timeouts. [V: config.py:454-467]
 - **Perfil arnés**: `STACKY_HARNESS_PROFILE` ("", off/safe/full). [V: config.py:334-337]
+- **Ficha del ticket (Plan 287)** — las 3 nacen **ON** (`default=True` en la `FlagSpec` + su key en
+  `_CURATED_DEFAULTS_ON`), `env_only=False`, editables desde el panel del arnés. Ninguna cae en (A)
+  —nada corre en reposo: todo es bajo demanda del operador al abrir la ficha o un panel— ni en (B)
+  —son de solo lectura y no agregan un solo camino de escritura al tracker—:
+  `STACKY_TICKET_FULLVIEW_ENABLED` (categoría `interfaz_ui`; la ficha, su botón y el enlace `?ticket=`),
+  `STACKY_TICKET_HISTORY_API_ENABLED` (`paridad_proveedores`; `GET /api/tickets/<id>/historial`, que se
+  consulta **solo** cuando el operador abre el panel),
+  `STACKY_TRACKER_CAPABILITIES_API_ENABLED` (`paridad_proveedores`; `GET /api/tickets/capacidades`, que
+  lee un dict en memoria). Ninguna declara `requires=`: `test_requires_map_is_frozen` compara por
+  igualdad exacta contra `_REQUIRES_MAP_FROZEN`. [V: config.py final del bloque de flags;
+  services/harness_flags.py; tests/test_harness_flags.py `_CURATED_DEFAULTS_ON`]
 
 ## Secretos / integraciones (R5 — `<REDACTADO>`)
 `ADO_ORG`, `ADO_PROJECT`, `ADO_PAT=<REDACTADO>`, `STACKY_AGENT_TOKEN=<REDACTADO>`. La directiva de DB read-only

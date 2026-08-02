@@ -1,6 +1,7 @@
 # Plan 287 — El ticket se abre entero: una ficha a pantalla completa, la misma para Azure DevOps y para GitLab
 
-**Estado:** MEJORADO (v1 → **v2**) — reescrito por el juez adversarial el 2026-08-02
+**Estado:** **IMPLEMENTADO** el 2026-08-02 (F0..F8; **F7 PARCIAL**, humo §9.2 pendiente) — ver §Estado de implementación al final.
+**Estado previo:** MEJORADO (v1 → **v2**) — reescrito por el juez adversarial el 2026-08-02
 **Veredicto de la crítica v1:** **RECHAZADO** (6 bloqueantes). La v2 los salda; el veredicto de la v2 queda para su propio juez.
 **Fecha:** 2026-08-02
 **Rama al escribir:** `docs/plan-279`
@@ -1200,3 +1201,118 @@ grep -riE "codex|claude|copilot" \
 16. Los **10** pasos del humo §9.2, hechos en **los dos** trackers, con el aviso de pérdida visible en GitLab.
 
 **Ninguna fase se da por cerrada con un "pasó todo". Se pega la salida.**
+
+---
+
+## Estado de implementación (F8.2)
+
+**Implementado el 2026-08-02** sobre la rama `docs/plan-279`, en 3 commits. **Sin push.**
+Entorno: `backend/.venv` (Python 3.13.5). Frontend por archivo (vitest tiene contaminación por orden).
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| **F0.0** | IMPLEMENTADA | Los **15** patrones imprimieron. **Anclajes desplazados otra vez por la sesión paralela** (R1 se materializó por segunda vez): `run_harness_tests.sh` cierre `:1064`→**`:1066`** y última entrada `:1063`→**`:1065`**; `run_harness_tests.ps1` última entrada `:979`→**`:981`**. Mandó el símbolo, como manda §4.3 |
+| **F0.1** | IMPLEMENTADA | Los **9** gates corridos. **Coinciden EXACTAMENTE con los números medidos por el juez**, incluidos los 5 rojos de fábrica con sus ofensores literales |
+| **F0.2** | IMPLEMENTADA | `e7f9fe9f`. Las 5 patas (la 6ª no se tocó). Ver salidas abajo |
+| **F1** | IMPLEMENTADA | `dc88bc77`. Ruta `/historial` + `_normalizar_update(u, tracker)` |
+| **F1.5** | IMPLEMENTADA | `dc88bc77`. `tests/fixtures/plan287_updates.py` + los 3 centinelas. **El gate se corrió CONTRA el defecto** (salida abajo) |
+| **F2** | IMPLEMENTADA | `dc88bc77`. Ruta `/capacidades` + corrección del texto falso de C9 |
+| **F3** | IMPLEMENTADA | `dc88bc77`. Registro en los DOS scripts, **mismo commit** que crea el archivo |
+| **F4** | IMPLEMENTADA | `09eb2c6b`. `types.ts` primero (C5), después `ticketDetailModel.ts` |
+| **F5** | IMPLEMENTADA | `09eb2c6b`. 17→21 y 6→8 |
+| **F6** | IMPLEMENTADA | `09eb2c6b`. `TicketFullView.tsx` + `.module.css` + las 2 funciones de `endpoints.ts` |
+| **F7** | **PARCIAL** | `09eb2c6b`. Cableado COMPLETO (`App.tsx` primero por C4, `TicketBoard` con `hierarchy` crudo por C6, botón en tablero y en grafo) y sus **3 conteos asimétricos exactos**. **Falta: las 6 acciones in-situ de la tabla "se REUSAN, no se reescriben"** — no se montaron porque su verificación es el paso 8 del humo (R13/C10) y el humo no se pudo correr. Montarlas sin ese paso sería declarar verde lo no verificado |
+| **F8.1/8.2/8.3/8.4** | IMPLEMENTADA | Documentación, gate de neutralidad (**0 hits**) y segundo barrido |
+| **§9.2 humo (10 pasos)** | **NO CORRIDO** | Requiere levantar la aplicación contra un ADO y un GitLab reales, con credenciales del operador. **Queda pendiente y por lo tanto los ítems 15 y 16 del DoD NO están cerrados.** El paso 9 (que el historial no nació mudo) está cubierto **automáticamente** por `test_paridad_forma_updates_ninguna_fila_muda` sobre las fixtures reales de los dos adaptadores; el paso 8 (R13, el popover dentro del `Dialog`) **no** tiene cobertura automática |
+
+### El gate de C1, corrido CONTRA el defecto
+
+Se implementó primero el normalizador **ingenuo de la v1** (`u.get("fecha")`, `u.get("autor")`, …) y se
+corrió el centinela. Salida literal:
+
+```
+AssertionError: fila MUDA en azure_devops: {'fecha': None, 'autor': None, 'campo': None, 'de': None, 'a': None}
+  (origen {'rev': 2, 'revisedDate': '2026-06-01T10:00:00Z', 'revisedBy': {'displayName': 'Ana Perez'},
+           'fields': {'System.State': {'oldValue': 'New', 'newValue': 'Active'}}})
+AssertionError: fila MUDA en gitlab: {'fecha': None, 'autor': None, 'campo': None, 'de': None, 'a': None}
+  (origen {'kind': 'state_event', 'created_at': '2026-06-14T09:00:00', 'state': 'closed', 'user': 'dev', 'raw': {}})
+FAILED test_ninguna_fila_sale_toda_en_None[azure_devops]
+FAILED test_ninguna_fila_sale_toda_en_None[gitlab]
+FAILED test_paridad_forma_updates_ninguna_fila_muda[azure_devops]
+FAILED test_paridad_forma_updates_ninguna_fila_muda[gitlab]
+```
+
+**C1 queda demostrado como defecto real y el centinela como discriminante.** Recién después se escribió
+el mapeo por tracker. Confirmado además contra el código: `gitlab_provider.py:622` resuelve `user` a
+**username (string)** antes de devolverlo, así que la fixture `"user": "dev"` refleja la salida del
+adaptador, no la respuesta cruda de la API.
+
+### Salidas literales de los gates
+
+```
+# Servidor (backend/.venv, por archivo)
+tests/test_plan287_ficha_ticket.py                     25 passed
+tests/test_harness_flags.py                            59 passed
+tests/test_harness_flags_requires.py::test_requires_map_is_frozen   1 passed
+ratchet_ado_only + script_parity + harness_ratchet_meta            27 passed
+flags + flags_help + flags_requires                    4 failed, 72 passed   (= baseline F0.1 #8)
+grep -c de las 3 keys sobre el CUERPO de flags_help     0                     (criterio C8)
+violaciones_count de tests/ado_only_baseline.json       0                     (sin subir)
+
+# Interfaz (por archivo)
+src/services/__tests__/routes.test.ts                  21 passed   (17 + 4)
+src/services/__tests__/routesDeepLink.test.ts           8 passed   (6 + 2)
+src/services/__tests__/ticketDetailModel.test.ts        9 passed
+src/__tests__/themeContrast.test.ts                     4 passed
+src/__tests__/a11yCss.test.ts                           3 passed
+npx tsc --noEmit                                        exit 0
+src/services/__tests__/plan273GateState.test.ts         2 failed | 12 passed (14)  = §4.2, sin cambio
+src/__tests__/uiDebtRatchet.test.ts                     1 failed | 2 passed (3)
+    ofensores: ExecutionDetailDrawer.module.css 23>21 · RunReconciliationCard.module.css 1>0 ·
+               DocumenterButton.tsx 3>1 · DocumenterResultPanel.tsx 41>20 · DocsPage.tsx 4>1
+    => LAS MISMAS 5 DE §4.2, NI UNA MAS. Ningun archivo del 287 aparece.
+src/__tests__/adhocModalRatchet.test.ts                 2 failed | 2 passed (4)
+    fuera de la allowlist: ContextMenu.tsx · PeekCard.tsx     |  stale: ShortcutsCheatsheet.tsx
+    => LOS MISMOS 3 DE §4.2, NI UNO MAS.
+
+# Conteos
+grep -c 'style={{' TicketFullView.tsx                            0
+grep -cE '#[0-9a-fA-F]{3,8}\b' TicketFullView.module.css         0
+grep -cE 'import \{[^}]*Dialog[^}]*\} from "\.\./ui"' …          1
+grep -cE 'aria-modal|role="dialog"|createPortal\(' …             0
+grep -c 'stopPropagation' pages/TicketBoard.tsx                 12   (sin cambio)
+grep -c 'stopPropagation' components/TicketGraphView.jsx          9   (8 -> 9)
+grep -c 'style={{' pages/TicketBoard.tsx                        15   (sin cambio)
+grep -c '<TicketBoard ticket=' src/App.tsx                        1   (DoD 14)
+grep -c 'motivo_huerfano' src/types.ts                            1
+grep -c 'useState<GateState>("unknown")' src/App.tsx              8   (sin cambio: la prop NO agrega gate)
+grep -riE "codex|claude|copilot" sobre los 6 archivos nuevos      0   (F8.3)
+KPI: K0=1 · K2=2 · K3=2 · K5=4 · K6=3 · K4 (fetch_item_updates en api/tickets.py)=2 · K10=8
+```
+
+### Tres correcciones al propio plan, medidas
+
+1. **`tests/test_flags_env_read_meta.py` es un SEXTO rojo de fábrica que §4.2 no declara.** El criterio 3
+   de F0.2 lo daba por verde y **ya estaba rojo**. Ofensor único y **ajeno**:
+   `services/validation_playbook.py:STACKY_VALIDATION_PLAYBOOK_ENABLED` (plan 209, `:68` lee el entorno con
+   default local). **Probado en un worktree sobre el commit base `51e5fc51`**: mismo fallo, mismo ofensor.
+   Ninguna de las 3 keys de este plan aparece.
+2. **La aritmética de F2 no cierra: el archivo da `25 passed`, no `21`.** La tabla de F2 lista **7** tests
+   (5 que discriminan + los 2 centinelas heredados de C7) pero el criterio dice "los 4 que discriminan" y
+   declara F2 = 6. Y tres tests están **parametrizados sobre los dos trackers** por instrucción del propio
+   plan, lo que los colecta ×2. Desglose real: F1 12 nombrados → 13 · F1.5 3 → 5 · F2 7 → 7 = **25**.
+   Se implementaron **todos** los tests nombrados: sacar uno para llegar a 21 habría sido maquillar el número.
+3. **El anclaje de montaje de la ficha en F7 apunta al ámbito equivocado.** El `<RunModal>` de `:745` vive
+   dentro de `TicketCard`, no de `TicketBoard`. Mandó la prosa del propio plan ("en el ámbito de la página,
+   no de la tarjeta") y la ficha se monta al final del render de `TicketBoard`, una sola vez para toda la
+   pantalla. Además la prop `onAbrirFicha` hubo que hilarla por `EpicGroup` y por la cadena
+   `TicketGraphView → EpicGroup → TicketNodeCard`, que el plan no menciona.
+
+### Pendiente
+
+- **§9.2 humo, 10 pasos, en los dos trackers** (DoD 15 y 16). En particular el **paso 8 / R13**: si el
+  popover de `CreateChildTaskButton` queda inalcanzable o se roba el Escape dentro del `Dialog`, la
+  acción se omite de la ficha y queda como deuda. **Por eso las acciones in-situ de la tabla de F7 NO se
+  montaron en esta entrega**: montarlas sin poder correr el paso 8 sería declarar verde algo no verificado.
+  La ficha ya cumple su objetivo sin ellas (lectura completa + jerarquía navegable + aviso de pérdida).
+- Los 5+1 rojos de fábrica siguen rojos: son deuda **ajena** y §8.9/§8.10 prohíben tocarlos acá.

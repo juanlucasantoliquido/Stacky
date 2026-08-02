@@ -77,6 +77,8 @@ Health check: `GET /api/health` → `{"ok": true}`. [V: api/__init__.py:115-117]
 | GET `/config/frontend` | config para el frontend |
 | POST `/<ado_id>/prewarm` | pre-warm de caché ADO (I0.3) |
 | **POST `/epics/from-brief`** | publicar épica derivada de brief en ADO (gated `STACKY_EPIC_FROM_BRIEF_ENABLED`) [V: tickets.py:5699; config.py:695-697] |
+| GET `/<id>/historial` | historial de cambios del ticket, por el puerto TrackerProvider (gated `STACKY_TICKET_HISTORY_API_ENABLED`) [V: tickets.py:get_ticket_historial] |
+| GET `/capacidades` | qué soporta el tracker activo y con qué pérdida (gated `STACKY_TRACKER_CAPABILITIES_API_ENABLED`) [V: tickets.py:get_tracker_capacidades] |
 
 ## executions (`/api/executions`) [V: executions.py grep @bp]
 GET `` (lista) · GET `/<id>` · GET `/<id>/logs` · POST `/<id>/input` · GET `/<id>/logs/stream` (SSE) · POST `/<id>/approve` · POST `/<id>/discard` · GET `/history` (gated `STACKY_EXECUTION_HISTORY_ENABLED`) · POST `/<id>/publish-to-ado` · GET `/<id>/diff/<other_id>` · POST `/<id>/cancel` · DELETE `/<id>` · DELETE `/bulk-by-ticket` · POST `/<id>/answer` · GET/DELETE `/<id>/output-files`. [V: executions.py:26-550; config.py:426-428]

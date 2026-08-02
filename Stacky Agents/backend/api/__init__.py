@@ -46,6 +46,7 @@ from .pipeline_generator import bp as pipeline_generator_bp  # Plan 73 — gener
 from .night_foundry import bp as night_foundry_bp  # Plan 202 — La Fragua Nocturna (TMV)
 from .pipeline_inventory import bp as pipeline_inventory_bp  # Plan 246 — inventario vivo de pipelines
 from .pipeline_profiler import bp as pipeline_profiler_bp  # Plan 247 — perfilador de pipelines
+from .pipeline_wizard import bp as pipeline_wizard_bp  # Plan 294 — asistente guiado de creacion
 from .pipeline_audit import bp as pipeline_audit_bp  # Plan 248 — auditoria de pipelines
 from .pipeline_editor import bp as pipeline_editor_bp  # Plan 250 — edicion quirurgica de pipelines
 from .pipeline_environments import bp as pipeline_environments_bp  # Plan 251 — matriz de entornos
@@ -91,6 +92,7 @@ from .devops_actions import bp as devops_actions_bp  # Plan 267 — catálogo de
 from .pipeline_copilot import bp as pipeline_copilot_bp  # Plan 279 — sesión del copiloto de pipelines
 from .meetings import bp as meetings_bp  # Plan 283 — reuniones, minutas y pendientes
 from .meetings_publish import bp as meetings_publish_bp  # Plan 283 — publicar un pendiente
+from .workbench import bp as workbench_bp  # Plan 293 — tablero de trabajo: git guiado
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -135,6 +137,9 @@ api_bp.register_blueprint(pipeline_copilot_bp)  # Plan 279 — url_prefix="/pipe
 # acá obligaría a reiniciar el backend para que el operador viera el efecto.
 api_bp.register_blueprint(meetings_bp)  # Plan 283 — /api/meetings/...
 api_bp.register_blueprint(meetings_publish_bp)  # Plan 283 — /api/meetings-publish/...
+# Plan 293 — tablero de trabajo. url_prefix="/workbench" (NUNCA "/api/...": api_bp
+# ya lo aporta y quedaria /api/api/workbench/...).
+api_bp.register_blueprint(workbench_bp)  # Plan 293 — /api/workbench/...
 api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(reports_bp)
 api_bp.register_blueprint(diag_bp)
@@ -152,6 +157,7 @@ api_bp.register_blueprint(pipeline_generator_bp)  # Plan 73 — url_prefix="/pip
 api_bp.register_blueprint(night_foundry_bp)  # Plan 202 — url_prefix="/night-foundry" → /api/night-foundry/...
 api_bp.register_blueprint(pipeline_inventory_bp)  # Plan 246 — url_prefix="/pipeline-inventory" → /api/pipeline-inventory/...
 api_bp.register_blueprint(pipeline_profiler_bp)  # Plan 247 — url_prefix="/pipeline-profiler" → /api/pipeline-profiler/...
+api_bp.register_blueprint(pipeline_wizard_bp)  # Plan 294 — url_prefix="/pipeline-wizard" → /api/pipeline-wizard/...
 api_bp.register_blueprint(pipeline_audit_bp)  # Plan 248 — url_prefix="/pipeline-audit" → /api/pipeline-audit/...
 api_bp.register_blueprint(pipeline_editor_bp)  # Plan 250 — url_prefix="/pipeline-editor" → /api/pipeline-editor/...
 api_bp.register_blueprint(pipeline_environments_bp)  # Plan 251 — url_prefix="/pipeline-environments" → /api/pipeline-environments/...

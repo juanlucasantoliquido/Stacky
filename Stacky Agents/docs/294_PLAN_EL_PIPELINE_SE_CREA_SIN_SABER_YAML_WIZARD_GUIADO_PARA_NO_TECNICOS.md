@@ -1,12 +1,155 @@
 # Plan 294 — El pipeline se crea sin saber YAML: wizard guiado para no técnicos
 
-**Estado:** PROPUESTO v1 · **Fecha:** 2026-08-02 · **Rama al escribir:** `docs/plan-279`
-**Autor:** StackyArchitectaUltraEficientCode (perfil normal)
+**Estado:** PROPUESTO **v1 → v2** (crítica adversarial aplicada) · **Fecha v1:** 2026-08-02 · **Fecha v2:** 2026-08-02
+**Rama al escribir:** `docs/plan-279`
+**Autor v1:** StackyArchitectaUltraEficientCode (perfil normal)
+**Juez v2: subagente independiente, misma corrida, contexto limpio**
+**Veredicto de la crítica sobre v1: RECHAZADO — 8 bloqueantes.** 162 de 171 anclajes eran correctos.
+**El plan NO cayó por anclajes: cayó por (a) tres afirmaciones de ausencia FALSAS y (b) cinco criterios
+de aceptación mutuamente insatisfacibles entre fases.**
 **Alcance:** P0 completo + inventario automático de pipelines + disparo desde Stacky. P1 restante y P2 en §9.
 
-> **Todo anclaje `archivo:línea` de este documento se verificó abriendo el archivo el 2026-08-02.**
+> **Todo anclaje `archivo:línea` de este documento se verificó abriendo el archivo el 2026-08-02**
+> (v1 por su autor; **re-verificado uno por uno por el juez en la v2**).
 > Hay una **sesión paralela viva** en este árbol. Donde un número de línea puede correrse, el documento
 > da además el **símbolo**. **Si el número no coincide, manda el símbolo.**
+
+---
+
+## 0. CHANGELOG v1 → v2
+
+Una línea por hallazgo resuelto. Los `C#` son los de la crítica adversarial.
+
+### Bloqueantes resueltos (8)
+
+- **C1 (BLOQ, E1) — GAP-4 afirmaba una ausencia FALSA.** El v1 decía: *"`TriggerPipelineSection` no
+  tiene pestaña: su único punto de montaje en toda la app es dentro del constructor gráfico. Grep de
+  `TriggerPipelineSection` en `frontend/src` no devuelve ningún otro montaje"*. **Falso: hay CUATRO
+  montajes** —`PipelineBuilderSection.tsx:746`, `EnvironmentsSection.tsx:615`, `ProductionFlow.tsx:214`,
+  `PublicationsSection.tsx:564`. Además el anclaje `:745` estaba desfasado (real `:746`). GAP-4, C3 y
+  KPI-3 se reescribieron con el hecho real (el disparo **sí** está reusado en 4 superficies; lo que
+  **no** existe es un disparo desde la **fila del inventario**), y **F0 caso 10 congela los 4 montajes**
+  para que nadie los rompa "limpiando".
+- **C2 (BLOQ, E1) — `STATE_LABELS` y `AVAILABLE_BY_STATE` NO son importables.** §3.1 y §5.6 los daban
+  como símbolos exportados de `pipelineCopilotModel.ts` y ordenaban *"se importa desde el modelo del
+  wizard"*. **Son `const` PRIVADAS** (`:34` y `:50`); los exports reales son las funciones
+  `stateLabel(s)` (`:46`) y `availableActionIds(s)` (`:79`). Corregido en las dos secciones y
+  **F0 caso 11 censa los exports reales** antes de que nadie escriba el `import`.
+- **C3 (BLOQ, E1) — §3.4 afirmaba "Grep de `TAB_META` en `frontend/src` = 0".** **Falso**:
+  `components/shell/shellNav.ts:16` lo define y lo consumen `App.tsx:64,341` y
+  `components/shell/AppSidebar.tsx:6,42` —que además dice literal *"`TAB_META` NO se toca: lo congelan
+  4 suites"*. Era un **non-sequitur** copiado de otro plan (TAB_META no tiene nada que ver con
+  `Stepper`). Eliminado y reemplazado por el censo correcto: **lo que no existe es
+  `frontend/src/components/ui/Stepper.tsx`** (verificado con `ls`).
+- **C4 (BLOQ, E2) — F11 caso 1 era INSATISFACIBLE.** Exigía que
+  `WIZARD_RUNTIMES = ("codex","claude","copilot")` coincidiera *elemento a elemento* con los `id` de
+  `COPILOT_RUNTIMES`, cuyos ids REALES son
+  **`("claude_code_cli", "codex_cli", "github_copilot")`** (`pipelineCopilotModel.ts:106-110`,
+  `CopilotRuntimeId` en `:122`). Un modelo menor "resuelve" esto debilitando el assert a `len == 3`
+  ⇒ **falso verde**. El vocabulario de runtime se unificó a los ids reales en §5.4, §5.7, F8, F11 y el
+  glosario. **No se relajó ningún criterio: se corrigió el vocabulario.**
+- **C5 (BLOQ, E2) — F9 rompe un ratchet VERDE que el plan nunca nombra.**
+  `backend/tests/test_devops_action_ratchet.py::test_section_ids_espejan_el_tsx` exige
+  `set(ids de DevOpsPage.tsx) == set(DEVOPS_SECTION_IDS)` de
+  `backend/services/devops_action_catalog.py:46-54` (hoy **18** ids). Agregar `crear-pipeline` al `.tsx`
+  **sin** tocar el catálogo lo pone rojo. **Medido hoy: 13 passed** (verde) y el archivo **está
+  registrado en los DOS ratchets** (`run_harness_tests.ps1:891`, `run_harness_tests.sh:997`) ⇒ es
+  trampa de **commit**. F9 ahora edita `devops_action_catalog.py`, corre ese archivo y lo verifica.
+- **C6 (BLOQ, E2) — el criterio de `test_flag_wiring.py` en F6 era insatisfacible.** F1 registra 3
+  flags; F6 fija *"`test_flag_wiring.py` → fallos ≤ línea base"*. Pero en F6 sólo
+  `STACKY_PIPELINE_WIZARD_ENABLED` tiene consumidor: `STACKY_PIPELINE_TRIGGER_VARS_ENABLED` recién lo
+  tiene en **F7** y `STACKY_PIPELINE_WIZARD_COMMIT_ENABLED` **nunca** en backend (el v1 sólo la usaba en
+  el `.tsx`). Resuelto **sin relajar el gate**: F1 agrega las **dos** claves nuevas a `_health_payload`
+  (`backend/api/devops.py:28`), que es consumo productivo real, y el gate de wiring se corre en **F1 y
+  F9**, no en F6.
+- **C7 (BLOQ, E2) — la promesa "reusa `pipeline_session`, no se escribe otra máquina" era prosa
+  muerta.** Ninguna fase la consume: los 4 endpoints de F6 no la tocan y F8 construye **otra** máquina
+  (`WIZARD_STEPS` + `canAdvance` + `advanceWizard`). El DoD no lo verificaba. Resuelto **conservando la
+  promesa y volviéndola binaria**: §5.6 declara el mapeo P1..P7 → estado, `pipelineWizardModel.ts`
+  **debe** derivar los nombres de `SESSION_STATES` (que **sí** está exportado, `:16`), y
+  **F6 caso 11 + F8 caso 13** asertan que el mapeo es total y que **cada salto consecutivo del wizard
+  es legal según `TRANSITIONS`**.
+- **C8 (BLOQ, E2) — F5 caso 5 contradecía su propia regla de composición.** La regla decía *"por cada
+  una de las primeras `_MAX_DESCRIBED` entradas… **el resto viaja sin ficha**"*, pero el caso exigía que
+  las otras 15 trajeran `purpose_source == "sin_datos"`. Una entrada que nunca pasa por
+  `describe_pipeline` **no tiene esa clave**: el assert es imposible y un modelo menor lo borra.
+  Resuelto **acotando la regla, no el criterio**: **TODAS** las entradas pasan por `describe_pipeline`;
+  sólo las primeras `_MAX_DESCRIBED` reciben el texto YAML.
+
+### Importantes resueltos (11)
+
+- **C9** — `should_trigger` se atribuía a `backend/api/ci.py`; vive en
+  `backend/services/ci_trigger_rules.py:80` (importado en `api/ci.py:26`, usado en `:294` y `:373`).
+- **C10** — `devopsCockpitShell.ts` se citaba **sin directorio** 4 veces; el real es
+  `Stacky Agents/frontend/src/pages/devopsCockpitShell.ts` (**no** `components/devops/`). Las líneas
+  `:20-26`, `:121-151` y `:150` eran correctas.
+- **C11** — F5 mandaba `detect_stack(_active_workspace_root())`, pero
+  `pipeline_stack_detector.detect_stack(project_root: str)` (`:19`) toma **`str`** y
+  `runtime_paths._active_workspace_root()` (`:66`) devuelve **`Path | None`**. Corregido a
+  `detect_stack(str(root)) if root else ""`.
+- **C12** — F3 caso 5 exigía que `intent_to_spec` produjera un spec válido, pero
+  `PipelineSpec.variables` es un **`dict`** (`pipeline_spec.py:88,115`) y `PipelineIntent.variables` es
+  una tupla de **NOMBRES**. El puente no estaba especificado. Ahora está: `{nombre: "" ...}`, con caso
+  de test propio (F3 caso 10).
+- **C13** — §5.5 decía *"`build_inventory` no se toca"* y F10 le agrega el parámetro `describe` y le
+  cambia la clave de cache. Reescrito: lo congelado es **el shape de 12 claves y la lógica de
+  reconciliación**, no la firma.
+- **C14** — `test_plan294_describe.py` tenía **dos** conteos declarados (11 en F2, 14 en F10) y F11
+  cerraba con *"el conteo declarado en su fase"*. F11 ahora declara **17** explícito (11 de F2 + 3 de
+  F10 + 3 nuevos).
+- **C15** — F9 decía *"agregar al payload de `GET /api/devops/health`"* sin nombrar la función. Es
+  `backend/api/devops.py`, **`_health_payload`** (`:28`). Nombrada. Y su guardián
+  `test_health_key_existe_en_health_payload` (`test_devops_action_ratchet.py:59`) ahora se corre.
+- **C16** — F7 edita `trigger_pipeline_route`, que es exactamente lo que espía
+  `backend/tests/test_plan260_trigger_gate.py:329-341` (monkeypatchea `ci_mod.should_trigger`).
+  Agregado como no-regresión nombrada en F7 y en §7.3.
+- **C17** — C8 del v1 acusaba al copiloto de *"desactivar el `onClick` sin explicar"*. El código dice lo
+  contrario: `PipelineCopilotSection.tsx:308-311` documenta que el **plan 288** los convirtió a propósito
+  en etiquetas, con la frase *"En este paso el copiloto puede proponerte:"* y la ejecución movida a la
+  consola. Reescrito para que nadie "arregle" el 288.
+- **C18** — F0 caso 6 (`from services.pipeline_inventory import get_pipeline_yaml`) sin decir DÓNDE va
+  el import. A nivel de módulo daría **error de colección** (1 error, no "6 passed, 3 failed") y el
+  criterio binario sería inalcanzable. Ahora se exige el import **dentro del cuerpo del test**.
+- **C19** — F6 caso 10 y F5 caso 7 mandaban *"monkeypatchear el cliente de modelo"* sin nombrar el
+  módulo. Reemplazado por una guarda **estructural y determinista** (grep del fuente), que es lo que el
+  resto del plan ya usa para "no hace red".
+
+### Menores resueltos (3)
+
+- **C20** — `pipeline_session.py:15-37` → el rango real es `:15-38` (`TERMINAL_STATES` está en `:38`).
+- **C21** — `test_plan247_endpoint.py:61-76` → el test real es `:63-78`.
+- **C22** — el plan mata una clase de error viva (`inventory_unavailable` / 501 perpetuo del perfilador)
+  y no registraba su huella. F2 ahora la registra en
+  `Stacky Agents/docs/sistema/error_fingerprints.json`.
+
+### Adiciones del arquitecto (3)
+
+- **[ADICIÓN ARQUITECTO 1]** — F9: el wizard se declara como **acción DevOps de sólo lectura**
+  (`devops.pipeline_wizard.open`) en `devops_action_catalog.py`, de modo que un no técnico lo alcance
+  escribiendo *"quiero crear una pipeline"* en la consola en castellano y en la paleta. Sin
+  `palette-run` (no ejecuta nada), sin flag nueva, sin trabajo del operador.
+- **[ADICIÓN ARQUITECTO 2]** — F8: `strictRuntime` y la **prohibición explícita de
+  `normalizeCopilotRuntime`** dentro del wizard. Ese normalizador **hoy, en producción**, devuelve
+  `'claude_code_cli'` ante un id desconocido (`pipelineCopilotModel.ts:127-130`): es exactamente la
+  **degradación silenciosa de la elección** que R4 prohíbe. El wizard no puede rutear por ahí, y un test
+  lo verifica.
+- **[ADICIÓN ARQUITECTO 3]** — F10: la línea de mayor riesgo del diálogo HITL —*"Esta pipeline NO
+  despliega a ningún ambiente"*— dejaba de ser decorado y pasa a **calcularse** con
+  `pipeline_profiler.detect_environments` (`:485`), con tres estados honestos
+  (`no_despliega` / `despliega_a: [...]` / `no_se_pudo_determinar`) y test propio. Afirmar "no
+  despliega" sin saberlo es el peor error posible antes de encolar una corrida real.
+
+### Conteos v1 → v2 (el orquestador los verifica)
+
+| Métrica | v1 | v2 |
+|---|---|---|
+| Fases (F0..F11) | 12 | **12** (ninguna eliminada, ninguna fusionada) |
+| Criterios BINARIOS de fase | 12 | **12** |
+| Casos de test enumerados | 125 | **142** (+17; **0 eliminados**) |
+| Archivos de test NUEVOS nombrados | 13 | **13** |
+| Archivos de test de NO-REGRESIÓN nombrados | 12 | **15** (+`test_devops_action_ratchet.py`, +`test_plan260_trigger_gate.py`, +`test_plan247_profiler_core.py`) |
+| Ítems del Definition of Done | 22 | **29** |
+| Flags nuevas | 3 | **3** (1 ON, 2 OFF con (B) citada) |
 
 > **AVISO AL IMPLEMENTADOR — LEER ANTES DE ESCRIBIR UNA LÍNEA.**
 > Este plan **construye muy poco código nuevo de dominio**. La capacidad central que el operador pidió
@@ -16,6 +159,20 @@
 > Lo que falta no es capacidad: es **secuencia, lenguaje llano y cableado**.
 > **Si en cualquier fase te encontrás escribiendo un barrido de repo, un cliente HTTP de ADO/GitLab, un
 > renderizador de YAML o una máquina de estados de sesión: PARÁ. Ya existe. Volvé a §3.**
+
+> **LAS 5 TRAMPAS DE ESTE PLAN, EN ORDEN DE COSTO (agregadas en la v2 tras el rechazo del v1).**
+> Leelas ahora; cada una hundió una parte del v1.
+> 1. **La sección nueva tiene DOS registros, no uno.** `DevOpsPage.tsx` **y**
+>    `backend/services/devops_action_catalog.py`. Falta uno ⇒ `test_devops_action_ratchet.py` (hoy
+>    **13 passed**, registrado en los DOS ratchets) tumba **el commit**, no la fase. → §3.4, F9.
+> 2. **Los runtimes se llaman `claude_code_cli`, `codex_cli`, `github_copilot`.** `"codex"`, `"claude"`
+>    y `"copilot"` **no existen**. → §5.7, F11 caso 8.
+> 3. **`STATE_LABELS` y `AVAILABLE_BY_STATE` NO son exports.** Usá `stateLabel()` y
+>    `availableActionIds()`. → §3.1, F0 caso 11.
+> 4. **Una flag registrada sin literal en código productivo deja `test_flag_wiring.py` rojo para
+>    siempre.** Por eso las 3 entran a `_health_payload` en **F1**. → §7.2, F1 casos 8-9.
+> 5. **`TriggerPipelineSection` está montado en 4 lugares, no en uno.** El v1 afirmaba lo contrario.
+>    **No lo "consolides".** → GAP-4, F0 caso 10.
 
 ---
 
@@ -37,7 +194,7 @@ Todo lo actual **se conserva íntegro** detrás de un **"Modo avanzado"**. No se
 |---|---|---|---|
 | **KPI-1** | Campos de formulario visibles a la vez para crear una pipeline | **28** (10 propios de `PipelineBuilderSection.tsx` + 18 de `BlockProperties.tsx:43-247`) | **≤ 4 por paso**, verificado por el gate de F9 |
 | **KPI-2** | Decisiones técnicas obligatorias antes de ver un YAML | **≥ 6** (stack, preset, bloques, propiedades por bloque, variables, rama) | **0** — el wizard propone TODO y el usuario solo confirma o corrige |
-| **KPI-3** | Clics desde "quiero disparar esta pipeline" hasta la confirmación | **hoy: inalcanzable desde Inventario.** `TriggerPipelineSection` solo se monta dentro del constructor (`PipelineBuilderSection.tsx:745`) | **1 clic** desde la fila del inventario |
+| **KPI-3** | Clics desde "veo esta pipeline en el inventario" hasta la confirmación de disparo | **hoy: INALCANZABLE desde el inventario.** `TriggerPipelineSection` está reusado en **4** superficies (`PipelineBuilderSection.tsx:746`, `EnvironmentsSection.tsx:615`, `ProductionFlow.tsx:214`, `PublicationsSection.tsx:564`) y **en ninguna de las 4** hay una fila de inventario: hay que salir del inventario, entrar a otra sección y volver a elegir la pipeline a mano | **1 clic** desde la fila del inventario |
 | **KPI-4** | Llamadas a modelo en reposo que agrega este plan | 0 | **0** — ninguna fase enciende loop, daemon, barrido ni prefetch |
 
 **KPI-5 (seguridad, binario):** cero valores de secreto en preview, diff, prompt, log o payload. Se
@@ -54,14 +211,25 @@ Tres planes recientes tocaron esta zona y **ninguno atacó la puerta de entrada*
   `construir` en `construir` + `gobernar` porque tenía "7 secciones heterogéneas". **Repartió el
   amontonamiento en dos cajones, pero el amontonamiento sigue adentro de la pestaña `pipelines`.**
   Este plan no revierte nada del 275: agrega **una** sección al grupo `construir` y deja los 5 grupos de
-  `devopsCockpitShell.ts:20-26` intactos.
+  `DEVOPS_SECTION_GROUPS` intactos.
+  > **RUTA EXACTA (C10) — el archivo NO está en `components/devops/`.** Es
+  > **`Stacky Agents/frontend/src/pages/devopsCockpitShell.ts`**, líneas `20-26`. Cada vez que este
+  > documento diga `devopsCockpitShell.ts`, se refiere a **esa** ruta.
 - **Plan 279** (`docs/279_PLAN_EL_COPILOTO_DE_PIPELINES_UN_SOLO_HILO_CONVERSACIONAL.md`, IMPLEMENTADO
   F0..F9) construyó la máquina de estados de 8 pasos (`backend/services/pipeline_session.py:15-37`) y el
   panel del copiloto. **Pero el copiloto no avanza el estado desde el frontend**: `PipelineCopilot.advance`
   (`frontend/src/api/endpoints.ts:5117`) y `PipelineCopilot.question` (`:5123`) tienen **0 llamadores**
-  —grep en `frontend/src` devuelve solo la definición—, y las acciones del paso se renderizan como
-  `<span>` sin `onClick` (`PipelineCopilotSection.tsx:315-326`). Este plan **reusa esa máquina de estados
-  como columna vertebral del wizard** y le pone, por fin, un consumidor.
+  —grep en `frontend/src` devuelve la definición y nada más; los únicos métodos de ese namespace que sí
+  se llaman son `.session` y `.undoHint` (`PipelineCopilotSection.tsx:73` y `:80`)—.
+  Este plan **reusa esa máquina de estados como columna vertebral del wizard** y le pone, por fin, un
+  consumidor **verificado por test** (§5.6, F6 caso 11, F8 caso 13).
+  > **CORRECCIÓN v2 (C17) — lo que el v1 llamaba defecto es una decisión del plan 288.** Que las
+  > acciones del paso sean `<span>` sin `onClick` (`PipelineCopilotSection.tsx:315-326`) **no es un
+  > descuido**: `:308-311` lo documenta textualmente —*"antes esto eran botones SIN onClick: prometían
+  > una acción que no ocurría. Ahora son etiquetas… la ejecución vive en la consola de abajo, que es el
+  > ÚNICO mecanismo de confirmación del panel (D1)"*— y arriba hay una frase explicativa visible
+  > (*"En este paso el copiloto puede proponerte:"*). **Prohibido "arreglarlo" en este plan:** sería
+  > revertir el 288 y reintroducir el botón que miente.
 - **Plan 288** (`docs/288_PLAN_LA_VISTA_DEL_TICKET_ADELGAZA_Y_EL_SELECTOR_DE_MODELOS_DEJA_DE_MENTIR.md`)
   tocó `api/pipeline_generator.py` (`_target_efectivo`: el proyecto manda sobre el cuerpo). Este plan
   **respeta esa decisión y la reusa**: el wizard nunca manda `target` a mano, deja que el proyecto lo
@@ -90,7 +258,7 @@ ninguna se habla con otra**. El usuario no técnico no tiene por dónde empezar.
 | Extracción del disparador desde el YAML | `pipeline_inventory.py`, `extract_trigger` (ADO y GitLab, con las limitaciones de GitLab **declaradas** en el propio código) | **COMPLETO** | Alimenta "cuándo se ejecuta" del Paso 6 |
 | **Perfilador de pipelines** | `backend/services/pipeline_profiler.py` (plan 247): `detect_pipeline_stacks`, `detect_agents`, `detect_triggers`, `detect_phases`, `detect_artifacts`, `detect_environments` | **COMPLETO** | Alimenta "qué hace cada etapa" del Paso 6 |
 | **Frase en castellano, determinista, sin modelo** | `pipeline_profiler.py`, `build_purpose_template` + `PURPOSE_MAX_CHARS = 200` + `PURPOSE_SOURCE_TEMPLATE = "plantilla"` | **COMPLETO** | **Es el "qué hace en lenguaje simple" que pidió el operador.** Cero tokens |
-| **Disparo de pipeline (HITL)** | `backend/api/ci.py`, `POST /api/ci/<project>/trigger` (`trigger_pipeline_route`); rechaza con 400 sin `confirm=True`; idempotencia de 60 s (`should_trigger`) | **COMPLETO** | El wizard y el inventario lo llaman; **no se reimplementa** |
+| **Disparo de pipeline (HITL)** | `backend/api/ci.py`, `POST /api/ci/<project>/trigger` (`trigger_pipeline_route`, `:246`); rechaza con 400 sin `confirm=True`; idempotencia de 60 s vía `should_trigger`, que **NO vive en `api/ci.py`**: está en `backend/services/ci_trigger_rules.py:80`, se importa en `api/ci.py:26` y se llama en `:294` (trigger) y `:373` (preview) — **C9** | **COMPLETO** | El wizard y el inventario lo llaman; **no se reimplementa** |
 | Preview del disparo (read-only) | `backend/api/ci.py`, `GET /api/ci/<project>/trigger-preview` (`trigger_preview_route`) | **COMPLETO** | Es la pantalla de confirmación del disparo |
 | Monitoreo de la corrida | `backend/api/ci.py`, `GET /api/ci/<project>/pipeline/<pipeline_id>` (`monitor_pipeline_route`), con cap real de polls (`_MAX_ACTIVE_POLLS_PER_PIPELINE = 5`) | **COMPLETO** | Seguimiento post-disparo |
 | Bitácora de corridas | `backend/api/ci.py`, `GET /api/ci/runs` (`list_ci_runs_route`) + `backend/services/ci_run_ledger.py` | **COMPLETO** | Historial del Paso 7 |
@@ -99,14 +267,24 @@ ninguna se habla con otra**. El usuario no técnico no tiene por dónde empezar.
 | Render `PipelineSpec` → YAML | `backend/services/pipeline_renderers.py` (`to_ado_yaml`, `to_gitlab_yaml`) vía `backend/api/pipeline_generator.py`, `POST /api/pipeline-generator/preview` | **COMPLETO** | Es el motor del Paso 5. **No se escribe otro renderizador** |
 | Escritura al repo real | `backend/services/repo_writer.py`, `RepoWriter.commit_file` + `get_repo_writer`; implementaciones en `backend/services/ado_provider.py:146` (`commit_file`) y `backend/services/gitlab_provider.py:853` (`commit_file`) | **COMPLETO EN LOS DOS PROVEEDORES** | Es el Paso 7. **La paridad ADO/GitLab de escritura YA está resuelta** |
 | Gate de secretos antes de escribir | `backend/api/pipeline_generator.py`, llamada a `evaluar_gate_secretos` (`backend/services/ci_env_gate.py`) | **COMPLETO** | Se hereda gratis al reusar el endpoint |
-| Máquina de estados de 8 pasos | `backend/services/pipeline_session.py`: `PIPELINE_SESSION_STATES`, `TRANSITIONS`, `TERMINAL_STATES`, `can_transition`, `advance`, `next_question`, `undo_hint`, `PIPELINE_FILENAME` | **COMPLETO** (plan 279) | **Es la máquina de estados del wizard.** No se escribe otra |
-| Espejo de la máquina en el frontend | `frontend/src/components/devops/pipelineCopilotModel.ts`: `SESSION_STATES`, `STATE_LABELS`, `AVAILABLE_BY_STATE`, `needsOperatorConfirmation`, `mustShowUndoHint`, `COPILOT_RUNTIMES`, `normalizeCopilotRuntime` | **COMPLETO**, con test (`devops/__tests__/pipelineCopilotModel.test.ts`) | Se importa desde el modelo del wizard |
+| Máquina de estados de 8 pasos | `backend/services/pipeline_session.py`: `PIPELINE_SESSION_STATES` (`:15`), `TRANSITIONS` (`:27`), `TERMINAL_STATES` (`:38`), `PIPELINE_FILENAME` (`:45`), `can_transition` (`:67`), `advance` (`:76`), `next_question` (`:158`), `undo_hint` (`:171`). **Rango real `:15-38`, no `:15-37` (C20)** | **COMPLETO** (plan 279) | **Es la máquina de estados del wizard.** No se escribe otra: §5.6 fija el mapeo y **F6 caso 11 + F8 caso 13 lo asertan** |
+| Espejo de la máquina en el frontend | `frontend/src/components/devops/pipelineCopilotModel.ts`. **EXPORTADOS (usables): `SESSION_STATES` (`:16`), `COPILOT_ACTION_IDS` (`:22`), `COPILOT_WRITE_ACTION_ID` (`:32`), `stateLabel(s)` (`:46`), `availableActionIds(s)` (`:79`), `needsOperatorConfirmation` (`:84`), `mustShowUndoHint` (`:95`), `COPILOT_RUNTIMES` (`:106`), `normalizeCopilotRuntime` (`:127`)** | **COMPLETO**, con test (`devops/__tests__/pipelineCopilotModel.test.ts`) | Se importa **sólo lo exportado**. Ver la trampa de abajo |
 | Detección de stack | `backend/services/pipeline_stack_detector.py`, `detect_stack(root) -> "python" \| "node" \| "dotnet" \| None`; endpoint `GET /api/devops/detect-stack` (`backend/api/devops.py`, `detect_stack_route`) | **EXISTE PERO ES DELGADO** (ver GAP-7) | F5 lo **compone**, no lo reemplaza |
 | Lint determinista | `POST /api/devops/pipeline-lint/validate` y `/explain`; clientes ya tipados en `frontend/src/api/endpoints.ts` (`DevOps.pipelineLintValidate`, `DevOps.pipelineLintExplain`) | **COMPLETO** | Paso 6 |
 | Preflight | `POST /api/devops/preflight/check`; cliente `DevOps.preflightCheck` | **COMPLETO** | Paso 6 |
 | Variables / secretos | `DevOpsVariables.list` / `.create` / `.remove` (`endpoints.ts`, namespace `DevOpsVariables`) | **COMPLETO** | Paso 3 y Paso 6 (por NOMBRE, nunca por valor) |
 | Selector de runtime | `frontend/src/components/AgentRuntimeSelector` (usado en `PipelineCopilotSection.tsx:208`) + `COPILOT_RUNTIMES` (3 entradas) | **COMPLETO** | Paso 4 |
-| Primitiva de pestañas | `frontend/src/components/ui/Tabs.tsx`, `export default function Tabs` | **COMPLETO** | Se usa para "Guiado / Modo avanzado" |
+| Primitiva de pestañas | `frontend/src/components/ui/Tabs.tsx`, `export default function Tabs` (`:28`) | **COMPLETO** | Se usa para "Guiado / Modo avanzado" |
+| Catálogo de acciones DevOps | `backend/services/devops_action_catalog.py`: `DEVOPS_ACTION_CATALOG` y `DEVOPS_SECTION_IDS` (`:46-54`, **18** ids hoy) | **COMPLETO** | **Hay que registrarlo, no reescribirlo.** Toda sección nueva del cockpit **debe** entrar acá o el ratchet se pone rojo (§3.4, F9) |
+
+> **TRAMPA DE IMPORT (C2) — dos de los símbolos que el v1 mandaba importar NO EXISTEN como export.**
+> En `pipelineCopilotModel.ts`, **`STATE_LABELS` (`:34`) y `AVAILABLE_BY_STATE` (`:50`) son `const`
+> PRIVADAS del módulo**, sin `export`. Escribir
+> `import { STATE_LABELS, AVAILABLE_BY_STATE } from './pipelineCopilotModel'` **rompe `tsc`**.
+> Lo que hay que usar son las funciones equivalentes que **sí** están exportadas:
+> **`stateLabel(s)`** en lugar de `STATE_LABELS[s]`, y **`availableActionIds(s)`** en lugar de
+> `AVAILABLE_BY_STATE[s]`. **Prohibido exportarlas para "arreglarlo"**: cambiar la superficie pública de
+> un módulo del plan 279 es alcance ajeno. **F0 caso 11 censa esto antes de que nadie escriba el import.**
 
 ### 3.2 Flags que ya existen en esta zona (default REAL leído del `os.getenv`, no del comentario)
 
@@ -115,7 +293,7 @@ ninguna se habla con otra**. El usuario no técnico no tiene por dónde empezar.
 | `STACKY_PIPELINE_INVENTORY_ENABLED` | **ON** | `backend/config.py:1648-1650`, `os.getenv(..., "true").strip().lower() == "true"`; `FlagSpec` en `backend/services/harness_flags.py:6169` con `default=True`; curada en `backend/tests/test_harness_flags.py:603` | Inventario |
 | `STACKY_PIPELINE_TRIGGER_ENABLED` | **ON** | `backend/config.py:1731-1733`, `os.getenv(..., "true").lower() in ("1","true","yes")`; `FlagSpec` en `harness_flags.py:3783` con `default=True` | Disparo + monitoreo |
 | `STACKY_PIPELINE_GENERATOR_ENABLED` | **ON** | `backend/config.py:1738-1740`; `FlagSpec` `harness_flags.py:3799` con `default=True` | Preview + commit del generador |
-| `STACKY_PIPELINE_PROFILER_ENABLED` | **ON** | `backend/config.py` (bloque plan 247, `os.getenv(..., "true")`); `FlagSpec` `harness_flags.py:3816` | Perfilador |
+| `STACKY_PIPELINE_PROFILER_ENABLED` | **ON** | `backend/config.py:1744-1746`, `os.getenv(..., "true")`; `FlagSpec` `harness_flags.py:3816` | Perfilador |
 | `STACKY_CI_RUN_LEDGER_ENABLED` | **ON** | `backend/config.py:2044-2046` | Bitácora de corridas |
 | `STACKY_DEVOPS_STACK_DETECT_ENABLED` | **ON** | `backend/config.py:1909-1911` | `detect-stack` |
 | `STACKY_PIPELINE_COPILOT_ENABLED` | **ON** | `backend/config.py:2568-2570` | Copiloto (lee/planea) |
@@ -137,7 +315,7 @@ ninguna se habla con otra**. El usuario no técnico no tiene por dónde empezar.
 | **GAP-1** | **El inventario ignora el proyecto activo.** Pide el inventario con `project = null` fijo y descarta el contexto | `frontend/src/components/devops/PipelineInventorySection.tsx:80` (`void ctx;`) y `:85` (`PipelineInventory.list(null, false)`) |
 | **GAP-2** | **El inventario no dice qué hace cada pipeline.** Muestra 7 columnas técnicas (Estado / Nombre / Proveedor / Ruta del YAML / Rama / Última corrida / Trigger); ninguna en lenguaje llano, aunque el perfilador ya sabe generarla | `PipelineInventorySection.tsx:163-181` vs. `pipeline_profiler.py`, `build_purpose_template` |
 | **GAP-3** | **Desde el inventario no se puede disparar nada.** Hay columna "Trigger", pero es informativa | `PipelineInventorySection.tsx:172` |
-| **GAP-4** | **El disparo está sepultado.** `TriggerPipelineSection` **no tiene pestaña**: su único punto de montaje en toda la app es dentro del constructor gráfico, debajo del preview de YAML, del lint, del preflight y del botón de commit | `frontend/src/components/devops/PipelineBuilderSection.tsx:745`. Grep de `TriggerPipelineSection` en `frontend/src` no devuelve ningún otro montaje |
+| **GAP-4** *(reescrito en v2 — C1)* | **El disparo no tiene pestaña propia y NUNCA cuelga de una lista de pipelines.** `TriggerPipelineSection` está **reusado en 4 superficies** (eso es sano y no se toca), pero **en las 4 el usuario ya tiene que saber qué pipeline quiere y en qué sección vive**: ninguna nace de una fila del inventario. Además, en el constructor cuelga **debajo** del preview de YAML, del lint, del preflight y del botón de commit | **Los 4 montajes reales, medidos con grep el 2026-08-02:** `PipelineBuilderSection.tsx:746` (import `:53`), `EnvironmentsSection.tsx:615` (import `:46`), `ProductionFlow.tsx:214` (import `:16`), `PublicationsSection.tsx:564` (import `:43`). **NINGUNO está en `PipelineInventorySection.tsx`** |
 | **GAP-5** | **No se puede disparar con variables de esa corrida.** El puerto es `trigger_pipeline(item_ref, ref)`; el cuerpo de ADO manda solo `resources.repositories.self.refName` | `backend/services/ci_provider.py`, `Protocol CIProvider`, método `trigger_pipeline`; `backend/services/ado_ci_provider.py`, cuerpo del POST dentro de `trigger_pipeline`; `backend/services/gitlab_ci_provider.py`, `trigger_pipeline` delega con **solo** `ref` |
 | **GAP-6** | **BUG VIVO: el perfilador no puede perfilar por id de pipeline.** Importa `get_pipeline_yaml` de `services.pipeline_inventory` — **esa función no existe** (grep de `def get_pipeline_yaml` en `backend/` = 0 resultados). El camino `pipeline_id` devuelve **siempre 501**. El test que lo cubre **fuerza el `ImportError` con monkeypatch**, así que congela el 501 como comportamiento esperado y el bug nunca se ve | `backend/api/pipeline_profiler.py:32` y `:39`; test `backend/tests/test_plan247_endpoint.py:61-76` |
 | **GAP-7** | **La detección de stack es de una sola palabra.** Devuelve `"python" \| "node" \| "dotnet" \| None`. No hay framework, ni gestor de paquetes, ni comando de build, ni comando de test — todo lo que el Paso 1 del brief exige | `backend/services/pipeline_stack_detector.py`, `_MANIFEST_SIGNALS` y `detect_stack` |
@@ -162,11 +340,29 @@ ninguna se habla con otra**. El usuario no técnico no tiene por dónde empezar.
   `backend/tests/test_plan259_ratchet_script_parity.py:46` fija `_PS1_LAG_MAX = 64`.
   **Estamos EXACTAMENTE en el límite: hay que registrar la MISMA cantidad de archivos en los dos, o el
   gate de paridad se pone rojo.**
-- **No hay primitiva `Stepper`.** Grep de `TAB_META` en `frontend/src` = 0; no existe
-  `frontend/src/components/ui/Stepper.tsx`. Hay 4 wizards ad-hoc; el único con lógica pura reaprovechable
-  como **molde** es `frontend/src/components/MigratorWizard.logic.ts` (`nextStep`, `stepIndex`,
-  `stepLabel`), pero su tipo de paso es un union literal cerrado del migrador: **se copia el patrón, no
-  el archivo**.
+- **No hay primitiva `Stepper`.** Verificado con `ls` de `frontend/src/components/ui/`: hay 18
+  primitivas (`Tabs.tsx`, `Dialog.tsx`, `Input.tsx`, `Select.tsx`, `Textarea.tsx`, `Checkbox.tsx`,
+  `Field.tsx`, `Card.tsx`, …) y **no existe `Stepper.tsx`**. El único con lógica pura reaprovechable
+  como **molde** es `frontend/src/components/MigratorWizard.logic.ts` (`nextStep` `:37`, `stepIndex`
+  `:46`, `stepLabel` `:57`), pero su tipo de paso es un union literal cerrado del migrador: **se copia
+  el patrón, no el archivo**.
+  > **CORRECCIÓN v2 (C3) — el v1 decía aquí "Grep de `TAB_META` en `frontend/src` = 0". ES FALSO.**
+  > `TAB_META` se define en `frontend/src/components/shell/shellNav.ts:16` y lo consumen `App.tsx:64` y
+  > `:341`, y `components/shell/AppSidebar.tsx:6` y `:42` —cuyo comentario `:9` dice literal
+  > *"`TAB_META` NO se toca: lo congelan 4 suites y lo consume App.tsx"*. Además **no tiene ninguna
+  > relación con `Stepper`**: era un párrafo copiado de otro plan. **`TAB_META` está FUERA DE SCOPE de
+  > este plan y no se toca:** la sección nueva vive en `DEVOPS_SECTIONS`, que es otro registro.
+
+- **Una sección nueva del cockpit tiene DOS registros, no uno (C5).** Además de `DEVOPS_SECTIONS` en
+  `frontend/src/pages/DevOpsPage.tsx:151`, el id **debe** estar en `DEVOPS_SECTION_IDS` de
+  `Stacky Agents/backend/services/devops_action_catalog.py:46-54`. El guardián es
+  `backend/tests/test_devops_action_ratchet.py::test_section_ids_espejan_el_tsx` (`:76-86`), que compara
+  los dos conjuntos con `==` (no con `⊆`) usando la regex `^\s*id: '([a-z0-9-]+)',` sobre el `.tsx`.
+  **Medido el 2026-08-02: ese archivo da `13 passed` (VERDE) y está registrado en los DOS ratchets**
+  (`run_harness_tests.ps1:891`, `run_harness_tests.sh:997`) ⇒ **es trampa de COMMIT**: agregar la
+  sección al `.tsx` sin tocar el catálogo tumba el commit, no la edición.
+  El mismo archivo trae `test_health_key_existe_en_health_payload` (`:59-65`), que exige que todo
+  `health_key` del catálogo exista en `api/devops.py::_health_payload` (`:28`).
 - **Mono-operador sin auth real.** En este producto **403 = flag apagada, NO permiso**. El guard estándar
   de la casa es `abort(404)` per-request leyendo **la instancia** `_config.config` (nunca el módulo: el
   módulo devuelve el default y mata el branch OFF, con lo cual el test de flag-off pasaría en falso).
@@ -179,12 +375,12 @@ ninguna se habla con otra**. El usuario no técnico no tiene por dónde empezar.
 |---|---|---|---|---|---|---|
 | **C1** | Sobrecarga cognitiva: 28 campos y ~22 botones simultáneos, sin orden | `PipelineBuilderSection.tsx` (845 líneas, 30 `useState`), `BlockProperties.tsx:43-247` | El no técnico no sabe por dónde empezar; abandona | **P0** | La pantalla expone el **modelo de datos** (`PipelineSpec` con bloques y propiedades) en vez de la **tarea** | Wizard de 7 pasos, **una decisión principal por pantalla**; el `PipelineSpec` se arma solo (F3, F4, F9) |
 | **C2** | Fragmentación: 8 pestañas hablan de pipelines y ninguna se habla con otra | `DevOpsPage.tsx:151-348` (18 secciones; 8 sobre pipelines, repartidas en `construir` y `gobernar`) | Para una tarea hay que recorrer 3-4 pestañas y recordar el estado a mano | **P0** | Cada plan agregó su pestaña; nadie agregó el hilo | **Una** sección nueva (`crear-pipeline`) que orquesta las existentes; las 18 quedan como están (F9) |
-| **C3** | El disparo no es alcanzable donde el usuario lo espera | `PipelineBuilderSection.tsx:745`; `PipelineInventorySection.tsx:172` | Ve la pipeline en el inventario y no puede ejecutarla; tiene que ir al constructor gráfico y scrollear | **P0** | El disparo se construyó como hijo del constructor, no como capacidad del proyecto | Botón "Ejecutar" en la fila del inventario → pantalla de confirmación (F10) |
+| **C3** *(reescrito v2 — C1)* | El disparo no es alcanzable **desde donde el usuario ve la pipeline** | Los 4 montajes de `TriggerPipelineSection` (`PipelineBuilderSection.tsx:746`, `EnvironmentsSection.tsx:615`, `ProductionFlow.tsx:214`, `PublicationsSection.tsx:564`) vs. `PipelineInventorySection.tsx:172` (columna "Trigger" **informativa**) | Ve la pipeline en el inventario y no puede ejecutarla; tiene que salir, elegir otra sección y volver a identificarla a mano | **P0** | El componente **sí** se reusa bien; lo que falta es el punto de entrada desde una **lista** de pipelines | Botón "Ejecutar" en la fila del inventario → pantalla de confirmación (F10). **No se toca ninguno de los 4 montajes existentes** (F0 caso 10 los congela) |
 | **C4** | El inventario ignora el proyecto activo | `PipelineInventorySection.tsx:80,85` | En multi-proyecto ve el inventario equivocado y no se entera | **P0** | `void ctx;` y `null` literal | Se pasa el proyecto del contexto y se lo agrega a la `queryKey` (F10) |
 | **C5** | El inventario es técnico: 7 columnas, ninguna en castellano llano | `PipelineInventorySection.tsx:163-181` | "azure-pipelines.yml / ci / main" no le dice nada a quien no sabe DevOps | **P0** | El perfilador, que ya genera la frase, nunca se conectó al inventario | `describe_pipeline` casa inventario + perfilador (F2) |
 | **C6** | Bug vivo: perfilar por id de pipeline devuelve 501 siempre | `api/pipeline_profiler.py:32,39`; `def get_pipeline_yaml` no existe en `backend/` | La ficha "qué hace" no se puede pedir por pipeline; hay que mandar el YAML entero a mano | **P0** | Un plan (247) programó contra una función que el plan hermano (246) nunca expuso | F2 crea `get_pipeline_yaml` en el inventario |
 | **C7** | Duplicación: constructor y copiloto escriben por la misma ruta con dos HITL distintos | `CommitPipelineModal.tsx:50` y el binding `devops.pipeline_new.commit` de `devopsActionBindings.ts`, ambos a `POST /api/pipeline-generator/commit` | Dos pantallas de confirmación distintas para el mismo acto; el usuario no sabe cuál es la buena | **P1** | Dos planes construyeron su propio HITL sobre el mismo endpoint | El wizard **no crea un tercero**: reusa el endpoint y expone **una sola** pantalla de confirmación (F6 caso 8, F9) |
-| **C8** | Acciones deshabilitadas sin explicación | Las acciones del paso son `<span>` sin `onClick` (`PipelineCopilotSection.tsx:315-326`); avisos de flags faltantes en `:249-265` | El usuario ve algo que parece un botón y no pasa nada | **P1** | Se desactivó el `onClick` sin desactivar el elemento ni explicar | Regla dura §6-R6 + gates de F9 y F10: **nada deshabilitado sin motivo visible y sin salida** |
+| **C8** *(reescrito v2 — C17)* | El riesgo de **repetir** el patrón "parece botón y no hace nada" en el wizard | En el copiloto **ya fue resuelto por el plan 288**: `PipelineCopilotSection.tsx:308-311` documenta la conversión deliberada a etiquetas + frase explicativa; el `<span>` sin `onClick` de `:315-326` **es esa decisión, no un bug**. Avisos de flags faltantes en `:249-265` | Si el wizard reintroduce controles inertes, el no técnico se traba | **P1** | Riesgo de diseño del wizard nuevo, **no** deuda del copiloto | Regla dura §6-R6 + gates de F9 caso 7 y F10 casos 2-3: **nada deshabilitado sin motivo visible y sin salida**. **El panel del copiloto NO se toca en este plan** |
 | **C9** | No hay adaptación al tipo de pipeline: el mismo formulario para todo | `PipelineBuilderSection.tsx` (no hay ninguna rama por objetivo; `stackFilter:324` solo filtra presets) | Le piden datos de despliegue a quien solo quiere correr tests | **P1** | No existe un esquema de preguntas; existe un formulario | Esquema declarativo de preguntas con dependencias (F4) |
 | **C10** | La confirmación final no es comprensible y mezcla 4 actos en botones sueltos | Commit (`CommitPipelineModal.tsx`), trigger (`TriggerPipelineSection.tsx:362-375`), guardar borrador (`PipelineBuilderSection.tsx:482-495`) y crear definición (`DevOpsProduction.ensureAdoDefinition`) viven en 4 lugares | Confirma sin saber qué se va a escribir, dónde, ni cómo revertirlo | **P0** | Nunca hubo una pantalla de cierre | Paso 7 con **los 4 actos separados y nombrados**, uno recomendado (F9) |
 | **C11** | La consola de acciones falla en silencio por falta de `/api` | `DevOpsActionConsole.tsx:117,130,153`; también `frontend/src/components/CommandPalette.tsx:96` | La única superficie ejecutable del copiloto queda muerta sin ningún error visible | **P1** | Rutas literales sin prefijo contra un backend que solo sirve `/api/*` | **Fuera de scope** (§9): es un defecto del 267/279, no del wizard. Se documenta para que el plan que lo tome no lo redescubra |
@@ -299,7 +495,8 @@ class PipelineIntent:
     deploy_target: str = ""
     variables: tuple[str, ...] = ()          # NOMBRES. JAMAS valores.  (KPI-5)
     required_secrets: tuple[str, ...] = ()   # NOMBRES. JAMAS valores.  (KPI-5)
-    runtime: str = ""                  # "codex" | "claude" | "copilot"
+    runtime: str = ""                  # VOCABULARIO REAL (C4), NO inventado:
+                                       # "claude_code_cli" | "codex_cli" | "github_copilot"
     constraints: tuple[str, ...] = ()
     proposed_path: str = ""            # de pipeline_session.PIPELINE_FILENAME
     existing_pipeline_key: str = ""    # clave del inventario (pipeline_inventory.identity_key)
@@ -309,15 +506,27 @@ class PipelineIntent:
 - `existing_pipeline_key` es **exactamente** la `key` que produce `identity_key` en
   `pipeline_inventory.py` (`"<provider>::<ruta normalizada>"`). Así el Paso 2 "modificar existente"
   referencia el inventario **sin inventar identificadores**.
-- `intent_to_spec(intent) -> dict` traduce a lo que `dict_to_spec` de
-  `backend/services/pipeline_spec.py` ya sabe leer. **Es el único puente**; el wizard no renderiza YAML.
+- `intent_to_spec(intent) -> dict` traduce a lo que `dict_to_spec` (`backend/services/pipeline_spec.py:140`)
+  ya sabe leer. **Es el único puente**; el wizard no renderiza YAML.
+- **Puente de `variables` — especificado, no inferido (C12).** `PipelineSpec.variables` es un **`dict`**
+  (`pipeline_spec.py:88` a nivel spec y `:115` a nivel stage) mientras que `PipelineIntent.variables` es
+  una tupla de **NOMBRES**. La traducción es **exactamente** esta y no otra:
+  ```python
+  spec_dict["variables"] = {nombre: "" for nombre in intent.variables}
+  ```
+  Cadena vacía **a propósito**: el nombre viaja al YAML, el valor **nunca**. `required_secrets` **no**
+  entra en el spec: viaja aparte, sólo para el aviso "te falta cargar X" del Paso 6.
 - **Invariante KPI-5, verificado por test:** `variables` y `required_secrets` contienen **nombres**.
   `intent_to_dict` **debe** lanzar `ValueError` si algún elemento contiene `=` o `:` — es exactamente la
   forma en que un valor se cuela en una lista de nombres.
 
 ### 5.5 Contrato del inventario enriquecido (F2)
 
-`build_inventory` **no se toca en su lógica**. Se agregan **dos** funciones nuevas al mismo módulo:
+**Qué está congelado y qué no (C13).** Lo congelado de `build_inventory` (`pipeline_inventory.py:627`)
+es **el shape de las 12 claves de `make_entry` (`:142`) y la lógica de reconciliación (`reconcile`,
+`:207`)**: eso **no cambia**. Lo que **sí** cambia, y sólo en F10, es **aditivo**: un parámetro
+`describe: bool = False` y la clave de `_CACHE` (`:602`, hoy `project or ""`). Sin el parámetro, la
+salida es byte-idéntica a hoy. Se agregan además **dos** funciones nuevas al mismo módulo:
 
 ```python
 def get_pipeline_yaml(pipeline_key: str, project: str | None = None) -> tuple[str, str]:
@@ -328,12 +537,16 @@ def get_pipeline_yaml(pipeline_key: str, project: str | None = None) -> tuple[st
 
 def describe_pipeline(entry: dict, yaml_text: str | None) -> dict:
     """Enriquece UNA entrada del inventario con la ficha en castellano.
-    Claves que AGREGA (nunca quita ni renombra las 12 existentes):
-      purpose        str   frase de build_purpose_template (<=200 chars, plantilla, SIN modelo)
-      purpose_source str   "plantilla" | "sin_datos"
-      stages_es      list[str]
-      when_es        str   'cuando alguien sube algo a main'
-      artifacts_es   list[str]
+    Claves que AGREGA (6; nunca quita ni renombra las 12 existentes):
+      purpose         str   frase de build_purpose_template (<=200 chars, plantilla, SIN modelo)
+      purpose_source  str   "plantilla" | "sin_datos"
+      stages_es       list[str]
+      when_es         str   'cuando alguien sube algo a main'
+      artifacts_es    list[str]
+      environments_es list[str]   # [ADICION ARQUITECTO 3] de detect_environments
+                                  # (pipeline_profiler.py:485). Lista VACIA = "no despliega";
+                                  # purpose_source == "sin_datos" = "no se pudo determinar".
+                                  # La UI NUNCA debe confundir esos dos casos (F10 caso 12).
     Si yaml_text es None o no parsea: purpose_source="sin_datos" y el resto vacio.
     NUNCA lanza."""
 ```
@@ -344,19 +557,42 @@ originales siguen presentes y con el mismo nombre.
 
 ### 5.6 Máquina de estados del wizard
 
-**Se reusa `backend/services/pipeline_session.py` tal cual.** El mapeo paso↔estado es:
+**Se reusa `backend/services/pipeline_session.py` tal cual.** El mapeo paso↔estado es **CERRADO,
+TOTAL y verificado por test** (C7 — en el v1 esto era prosa que ninguna fase consumía):
 
-| Paso UI | Estado de `PIPELINE_SESSION_STATES` |
-|---|---|
-| P1, P2, P3, P4 | `discovery` |
-| P5 | `draft` |
-| P6 | `review` (o `secrets` si faltan variables) |
-| P7 | `confirm` → `committed` \| `failed` |
+```python
+# vive en backend/services/pipeline_intent.py, exportado como WIZARD_STEP_TO_STATE
+WIZARD_STEP_TO_STATE: dict[str, str] = {
+    "p1": "discovery",
+    "p2": "discovery",
+    "p3": "discovery",
+    "p4": "discovery",
+    "p5": "draft",
+    "p6": "review",     # el frontend puede mostrar "secrets" si faltan variables; la
+                        # transicion review->secrets YA es legal en TRANSITIONS
+    "p7": "confirm",    # confirm -> committed | failed, ya en TRANSITIONS
+}
+```
 
-`can_transition` y `advance` **ya validan** las transiciones legales (`TRANSITIONS`), y
-`TERMINAL_STATES = ("committed", "failed")` ya impide avanzar desde un terminal. **No se escribe otra
-máquina.** El frontend espeja con lo que ya está en `pipelineCopilotModel.ts` (`SESSION_STATES`,
-`STATE_LABELS`, `AVAILABLE_BY_STATE`, `needsOperatorConfirmation`, `mustShowUndoHint`).
+**Por qué esto es verificable y no una promesa:**
+1. **`WIZARD_STEP_TO_STATE` es total:** sus 7 claves son exactamente `p1..p7` y **todos** sus valores
+   están en `PIPELINE_SESSION_STATES` (`pipeline_session.py:15`). → **F6 caso 11**.
+2. **Cada salto consecutivo del wizard es legal:** para todo `k` en `1..6`, si
+   `WIZARD_STEP_TO_STATE[f"p{k}"] != WIZARD_STEP_TO_STATE[f"p{k+1}"]`, entonces
+   `can_transition(origen, destino)` (`pipeline_session.py:67`) devuelve `True`. → **F6 caso 11**.
+   *(Comprobación en papel contra `TRANSITIONS` `:27-36`: `discovery→draft` ✔, `draft→review` ✔,
+   `review→confirm` ✔. Los tres saltos son legales hoy; el test lo vuelve permanente.)*
+3. **El frontend no inventa nombres:** `pipelineWizardModel.ts` **importa `SESSION_STATES`** de
+   `pipelineCopilotModel.ts` (`:16`, exportado) y su tabla de estados debe ser un subconjunto de esa
+   lista. → **F8 caso 13**.
+4. **No se escribe otra máquina de ESTADOS.** `WIZARD_STEPS`/`canAdvance`/`advanceWizard` de F8 son la
+   **navegación de pantallas** (índice del stepper), no una segunda máquina de estados de sesión: cada
+   paso se proyecta al estado canónico por (1) y todo salto se valida contra `TRANSITIONS` por (2).
+
+`TERMINAL_STATES = ("committed", "failed")` (`:38`) ya impide avanzar desde un terminal.
+El frontend espeja con lo **exportado** de `pipelineCopilotModel.ts`: `SESSION_STATES` (`:16`),
+`stateLabel` (`:46`), `availableActionIds` (`:79`), `needsOperatorConfirmation` (`:84`),
+`mustShowUndoHint` (`:95`). **`STATE_LABELS` y `AVAILABLE_BY_STATE` NO se pueden importar** (§3.1).
 
 ### 5.7 Los 3 runtimes: cómo se distingue el fallback legítimo de la degradación silenciosa
 
@@ -374,6 +610,36 @@ selección se respeta sin fallback silencioso"). **No son lo mismo. Esta es la r
 disponibles)` devuelve **`pedido` o `None`. Jamás un runtime distinto del pedido.** El `None` obliga a la
 UI a mostrar la pantalla de "no disponible" con los 3 botones. No existe camino en el que el runtime
 efectivo difiera del solicitado sin que el usuario haya vuelto a elegir.
+
+**Vocabulario de runtime — los ids REALES, no los inventados (C4).** El v1 usaba
+`("codex", "claude", "copilot")`, que **no existen en el código**. Los ids reales son los de
+`COPILOT_RUNTIMES` (`frontend/src/components/devops/pipelineCopilotModel.ts:106-110`) y del tipo
+`CopilotRuntimeId` (`:122`):
+
+| id REAL | Etiqueta que ya muestra la UI | `mode` |
+|---|---|---|
+| `claude_code_cli` | "Claude Code (recomendado)" | `cli` |
+| `codex_cli` | "Codex" | `cli` |
+| `github_copilot` | "GitHub Copilot (modo determinista)" | `deterministic` |
+
+**Todo el plan usa estos tres strings y sólo estos tres.** Cualquier aparición de `"codex"`, `"claude"`
+o `"copilot"` sueltos en el código nuevo es un defecto.
+
+> **[ADICIÓN ARQUITECTO 2] — el agujero de R4 no está en el wizard: está VIVO en producción.**
+> `normalizeCopilotRuntime` (`pipelineCopilotModel.ts:127-130`) hace exactamente lo que R4 prohíbe:
+> ```ts
+> return (RUNTIME_IDS.includes(r) ? r : 'claude_code_cli') as CopilotRuntimeId;
+> ```
+> Ante un id desconocido **cambia el runtime elegido por otro, en silencio, sin avisar**. Para el
+> copiloto es una decisión del 279 que este plan **no revierte** (alcance ajeno), pero
+> **el wizard tiene PROHIBIDO rutear su elección por esa función**. En su lugar, F8 expone:
+> ```ts
+> /** R4 duro: devuelve `pedido` si esta disponible, o null. JAMAS otro runtime. */
+> export function strictRuntime(pedido: string, disponibles: string[]): string | null
+> ```
+> y **F8 caso 14** asierta por grep del fuente que `pipelineWizardModel.ts` **no contiene** la subcadena
+> `normalizeCopilotRuntime`. *(Trampa de auto-gate: no escribas ese identificador tampoco en un
+> comentario del archivo; la explicación va acá, en el documento.)*
 
 ### 5.8 Endpoints: reuso vs. nuevo
 
@@ -492,7 +758,9 @@ deliberado: evita el tercer HITL de C7.
 |   Que va a pasar:                                                         |
 |     · Se va a encolar una corrida REAL en Azure DevOps                    |
 |     · Va a consumir minutos de tu CI                                      |
-|     · Esta pipeline NO despliega a ningun ambiente                        |
+|     · Esta pipeline no despliega a ningun ambiente        <- CALCULADO,   |
+|       (o) Ojo: esta pipeline despliega a: produccion         no fijo.     |
+|       (o) No pude determinar si despliega. Revisa el archivo.  [ADICION 3]|
 |     · Si volves a apretar antes de 60 s, se reusa la misma corrida        |
 |                                                                           |
 |   Para cancelar: cerra esta ventana. No se ejecuta nada hasta confirmar.  |
@@ -509,9 +777,13 @@ deliberado: evita el tercer HITL de C7.
 - **Rollback:** apagar `STACKY_PIPELINE_WIZARD_ENABLED` hace desaparecer la sección `crear-pipeline`
   (mecanismo estándar `healthKey` + `gateFlagKey` de `DevOpsPage.tsx`, igual que las otras 16 secciones
   gateadas). **Todo lo demás queda idéntico a hoy.** Es rollback de un click, por UI.
-- **Aterrizaje:** `resolveLandingSection` (`devopsCockpitShell.ts:121-151`) **no se toca**. Su último
-  recurso sigue siendo `'pipelines'` (`devopsCockpitShell.ts:150`). Cambiarlo sería una regresión del
-  plan 275.
+- **Aterrizaje:** `resolveLandingSection` (**`Stacky Agents/frontend/src/pages/devopsCockpitShell.ts:121-151`**)
+  **no se toca**. Su último recurso sigue siendo `return 'pipelines';` (**`:150`**, verificado). Cambiarlo
+  sería una regresión del plan 275.
+- **Reversión del ratchet de secciones:** apagar la flag **no** saca el id del catálogo. `crear-pipeline`
+  queda en `DEVOPS_SECTION_IDS` y en `DEVOPS_SECTIONS` siempre; lo que la flag apaga es el **render** (el
+  mecanismo `gateFlagKey` estándar). Eso mantiene verde a `test_section_ids_espejan_el_tsx` con la flag
+  en cualquier posición.
 
 ---
 
@@ -572,7 +844,30 @@ se pone rojo:
 
 **Además (guardián transversal):** `backend/tests/test_flag_wiring.py`
 (`test_every_non_reserved_flag_is_wired`, línea 57) exige que la flag **tenga un consumidor real** en el
-código; una flag registrada pero sin `getattr(_config.config, "<KEY>", ...)` en producción se pone roja.
+código.
+
+> **CÓMO FUNCIONA DE VERDAD ESE CENTINELA (C6) — leerlo o F6 nace insatisfacible.**
+> `_production_corpus()` (`test_flag_wiring.py:30-53`) concatena **`backend/**/*.py` MÁS
+> `frontend/src/**/*.{ts,tsx}`** (excluye `backend/tests/**`, `services/harness_flags.py`,
+> `services/harness_flags_help.py` y todo directorio `__tests__`). El assert es
+> `spec.key not in corpus`: **basta con que la key aparezca como LITERAL** en cualquiera de esos
+> archivos. No exige un `getattr` — pero **sí** exige que alguien la escriba en producción.
+>
+> **Consecuencia sobre este plan, medida:**
+> - `STACKY_PIPELINE_WIZARD_ENABLED` → consumidor en F6 (`api/pipeline_wizard.py`, `_gate()`).
+> - `STACKY_PIPELINE_TRIGGER_VARS_ENABLED` → consumidor recién en **F7** (`api/ci.py`).
+> - `STACKY_PIPELINE_WIZARD_COMMIT_ENABLED` → en el v1 **no tenía ningún consumidor backend jamás**,
+>   sólo un `title` de un `.tsx` que ni siquiera se exigía que contuviera la key.
+>
+> **Resolución (sin relajar el gate):** **F1 agrega las DOS claves nuevas a `_health_payload`**
+> (`backend/api/devops.py:28`, patrón idéntico a las 40+ que ya están ahí):
+> ```python
+> "pipeline_wizard_enabled": bool(getattr(cfg, "STACKY_PIPELINE_WIZARD_ENABLED", False)),          # Plan 294
+> "pipeline_wizard_commit_enabled": bool(getattr(cfg, "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED", False)),  # Plan 294
+> "pipeline_trigger_vars_enabled": bool(getattr(cfg, "STACKY_PIPELINE_TRIGGER_VARS_ENABLED", False)),    # Plan 294
+> ```
+> Es **consumo productivo real** (lo lee la UI para decidir qué habilitar), es **aditivo**, y deja las 3
+> flags cableadas **desde F1**. Por eso el gate de wiring se corre en **F1 y F9**, y **no** en F6.
 
 **Trampas literales de `PLAIN_HELP` (medidas en el test):**
 `test_plain_help_on_off_start_with_si` (`test_harness_flags_help.py:56`) exige que `on_effect` y
@@ -594,11 +889,23 @@ miden, se confunden con daño propio:
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_flag_wiring.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_requires.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_bounds.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_devops_action_ratchet.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan260_trigger_gate.py" -q
 ```
 
-**Criterio de no-regresión de todo el plan:** el conteo de fallos de cada uno de esos 5 archivos
+**Criterio de no-regresión de todo el plan:** el conteo de fallos de cada uno de esos **7** archivos
 **después** del plan debe ser **≤** el de la línea base. No se exige verde absoluto: se exige
 **delta ≤ 0**.
+
+> **DOS de esos 7 son NUEVOS en la v2 y NO son opcionales (C5, C16):**
+> - `test_devops_action_ratchet.py` — **medido el 2026-08-02: `13 passed`, VERDE.** Su
+>   `test_section_ids_espejan_el_tsx` compara con `==` los ids del `.tsx` contra `DEVOPS_SECTION_IDS`.
+>   F9 lo rompe si no se toca el catálogo. Como está verde hoy, **su delta admisible es 0 fallos: tiene
+>   que seguir en 13 passed.**
+> - `test_plan260_trigger_gate.py` — espía `trigger_pipeline_route` monkeypatcheando
+>   `ci_mod.should_trigger` (`:329-341`) y verifica que el gate del plan 260 corra **antes**. F7 edita
+>   exactamente esa ruta e inserta código **entre** el guard HITL y la idempotencia: es el test que
+>   detecta si el orden se rompió.
 
 ---
 
@@ -632,9 +939,29 @@ implementador reescriba las capacidades que ya existen.
 4. `test_maquina_de_estados_ya_existe` — `from services.pipeline_session import PIPELINE_SESSION_STATES, TRANSITIONS, advance`; `len(PIPELINE_SESSION_STATES) == 8`.
 5. `test_escritor_de_repo_ya_existe_en_los_dos_proveedores` — los módulos `services.ado_provider` y `services.gitlab_provider` contienen ambos, leídos como texto, la cadena `def commit_file`.
 6. **`test_get_pipeline_yaml_falta` (NACE ROJO)** — `from services.pipeline_inventory import get_pipeline_yaml` **debe importar sin error**. Hoy lanza `ImportError`. **Contraste de F2.**
+   > **C18 — el `import` va DENTRO del cuerpo del test, nunca a nivel de módulo.** A nivel de módulo,
+   > pytest reporta **error de colección** (`1 error`) y **ningún** otro caso del archivo corre: el
+   > criterio "6 passed, 3 failed" sería inalcanzable y el implementador creería que rompió todo.
 7. **`test_flags_294_registradas` (NACE ROJO)** — las 3 keys nuevas están en `{s.key for s in FLAG_REGISTRY}`. **Contraste de F1.**
-8. **`test_docstring_de_ci_no_miente` (NACE ROJO)** — leer `backend/api/ci.py` como texto y asertar que **no** contiene la subcadena `default OFF`. **Contraste de F1.**
-9. `test_no_hay_segundo_renderizador` — grep en `backend/services/` de `def to_ado_yaml` devuelve **exactamente 1** archivo (`pipeline_renderers.py`). Guarda anti-duplicación permanente.
+8. **`test_docstring_de_ci_no_miente` (NACE ROJO)** — leer `backend/api/ci.py` como texto y asertar que **no** contiene la subcadena `default OFF`. **Contraste de F1.** *(Verificado: hoy la contiene, en `api/ci.py:11`.)*
+9. `test_no_hay_segundo_renderizador` — grep en `backend/services/` de `def to_ado_yaml` devuelve **exactamente 1** archivo (`pipeline_renderers.py`, `:110`; `to_gitlab_yaml` en `:308`). Guarda anti-duplicación permanente.
+10. **`test_los_cuatro_montajes_del_trigger_siguen_ahi` (NUEVO v2 — C1)** — leer los 4 `.tsx` como texto
+    y asertar que **cada uno** contiene `<TriggerPipelineSection`:
+    `frontend/src/components/devops/PipelineBuilderSection.tsx`,
+    `frontend/src/components/devops/EnvironmentsSection.tsx`,
+    `frontend/src/components/devops/ProductionFlow.tsx`,
+    `frontend/src/components/devops/PublicationsSection.tsx`.
+    **Nace VERDE y debe seguir verde.** Existe porque el v1 afirmaba que había **un solo** montaje: este
+    caso impide que alguien "consolide" el disparo y rompa 3 superficies vivas creyendo el dato viejo.
+11. **`test_exports_reales_del_modelo_del_copiloto` (NUEVO v2 — C2)** — leer
+    `frontend/src/components/devops/pipelineCopilotModel.ts` como texto y asertar, en un solo caso, las
+    dos mitades:
+    - **presencia:** contiene `export const SESSION_STATES`, `export function stateLabel`,
+      `export function availableActionIds`, `export const COPILOT_RUNTIMES`.
+    - **ausencia:** **no** contiene `export const STATE_LABELS` ni `export const AVAILABLE_BY_STATE`
+      (son privadas, `:34` y `:50`).
+    **Nace VERDE.** Su valor es informativo-duro: si alguien las exporta para "arreglar" el plan, este
+    caso se pone rojo y obliga a discutirlo en vez de ampliar la superficie pública del 279.
 
 > **TRAMPA — leerla o el gate se autoinvalida.** El caso 8 grepea la cadena `default OFF` sobre
 > `backend/api/ci.py`. **No escribas esa cadena en un comentario nuevo de ese archivo** al corregirlo,
@@ -646,9 +973,10 @@ implementador reescriba las capacidades que ya existen.
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_baseline.py" -q
 ```
 
-**Criterio de aceptación BINARIO:** al terminar F0, la corrida da **6 passed, 3 failed** (fallan los casos
-6, 7 y 8). Al terminar F2, da **9 passed, 0 failed**. **Si al crear F0 da 9 passed, el test no prueba
-nada y hay que arreglarlo antes de seguir.**
+**Criterio de aceptación BINARIO:** al terminar F0, la corrida da **8 passed, 3 failed** (fallan los casos
+6, 7 y 8; los 11 casos existen). Al terminar F2, da **11 passed, 0 failed**. **Si al crear F0 da 11
+passed, el test no prueba nada y hay que arreglarlo antes de seguir.** Si da `1 error` en vez de
+`8 passed, 3 failed`, el import del caso 6 quedó a nivel de módulo (C18): moverlo adentro del test.
 
 **Flag que la protege:** ninguna (es un test).
 **Impacto por runtime:** ninguno. Fallback: n/a.
@@ -672,8 +1000,9 @@ y corregir el comentario mentiroso de `api/ci.py`.
 | `Stacky Agents/backend/config.py` | 3 atributos con su `os.getenv` |
 | `Stacky Agents/backend/services/harness_flags_help.py` | 3 entradas en `PLAIN_HELP` |
 | `Stacky Agents/backend/tests/test_harness_flags.py` | `STACKY_PIPELINE_WIZARD_ENABLED` en `_CURATED_DEFAULTS_ON` (**solo esa**) |
-| `Stacky Agents/deployment/harness_defaults.env` | regenerar con `deployment/export_harness_defaults.py` |
+| `Stacky Agents/deployment/harness_defaults.env` | regenerar con `deployment/export_harness_defaults.py` (**verificado: el generador existe en `deployment/`**) |
 | `Stacky Agents/backend/api/ci.py` | docstring de módulo (línea 11): reemplazar la frase del default por *"Flag STACKY_PIPELINE_TRIGGER_ENABLED: default ON (operador 2026-07-05), leida per-request."* |
+| **`Stacky Agents/backend/api/devops.py`** *(NUEVO v2 — C6/C15)* | dentro de **`_health_payload`** (`:28`), **3 claves aditivas** al final del dict: `pipeline_wizard_enabled`, `pipeline_wizard_commit_enabled`, `pipeline_trigger_vars_enabled` (el snippet exacto está en §7.2). **Esto es lo que cablea las 3 flags desde F1** y lo que la UI lee para R6 |
 
 **Diff ilustrativo — `backend/config.py`:**
 ```python
@@ -726,6 +1055,8 @@ y corregir el comentario mentiroso de `api/ci.py`.
 5. Las 3 están en `_CATEGORY_KEYS["devops"]`.
 6. Las 3 tienen entrada en `PLAIN_HELP` con los 4 campos no vacíos, y `on_effect`/`off_effect` empiezan con la cadena `"Si "`.
 7. `STACKY_PIPELINE_WIZARD_COMMIT_ENABLED` declara `requires="STACKY_PIPELINE_WIZARD_ENABLED"`; `STACKY_PIPELINE_TRIGGER_VARS_ENABLED` declara `requires="STACKY_PIPELINE_TRIGGER_ENABLED"`.
+8. **(NUEVO v2 — C6/C15)** `from api.devops import _health_payload`; el dict devuelto contiene las **3** claves nuevas (`pipeline_wizard_enabled`, `pipeline_wizard_commit_enabled`, `pipeline_trigger_vars_enabled`) y **conserva** `trigger_enabled`, `generator_enabled` y `pipeline_inventory_enabled` con el mismo nombre (no-regresión del payload).
+9. **(NUEVO v2 — C6)** Las **3** keys aparecen como **literal** en al menos un archivo de `backend/` que **no** sea `tests/`, `services/harness_flags.py` ni `services/harness_flags_help.py` — es exactamente la condición que evalúa `_production_corpus()` de `test_flag_wiring.py:30-53`. **Mitad de contraste: este caso falla si alguien registra las flags y se olvida del `_health_payload`.**
 
 **Ratchets:** registrar `test_plan294_flags.py` en los DOS (`.ps1` con comillas y coma, `.sh` sin nada).
 
@@ -736,16 +1067,23 @@ y corregir el comentario mentiroso de `api/ci.py`.
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_help.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_requires.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_bounds.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_flag_wiring.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_devops_action_ratchet.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_baseline.py" -q
 ```
 
-**Criterio BINARIO:** `test_plan294_flags.py` → **7 passed, 0 failed**. Los 4 archivos de arnés →
-**fallos ≤ línea base de §7.3**. `test_plan294_baseline.py` → los casos 7 y 8 pasan, queda **1 failed**
-(el caso 6, que cierra F2) → **8 passed, 1 failed**.
+**Criterio BINARIO:** `test_plan294_flags.py` → **9 passed, 0 failed**. Los 5 archivos de arnés
+(`test_harness_flags`, `_help`, `_requires`, `_bounds`, `test_flag_wiring`) → **fallos ≤ línea base de
+§7.3**. `test_devops_action_ratchet.py` → **13 passed** (F1 no lo toca; se corre para fijar que sigue
+verde antes de F9). `test_plan294_baseline.py` → los casos 7 y 8 pasan, queda **1 failed** (el caso 6,
+que cierra F2) → **10 passed, 1 failed**.
 
-> **NOTA IMPORTANTE:** `test_flag_wiring.py` exigirá un **consumidor real** de cada flag. En F1 todavía no
-> existe. **Correr `test_flag_wiring.py` recién al cerrar F6** (que crea los consumidores), no en F1.
-> Si el implementador lo corre en F1 y lo ve rojo, **no es daño**: es la fase equivocada.
+> **CORRECCIÓN v2 (C6) — la nota del v1 sobre `test_flag_wiring.py` era exactamente al revés.**
+> El v1 decía *"correrlo recién al cerrar F6"*. Pero en F6 **dos de las tres flags siguen sin
+> consumidor** (`TRIGGER_VARS` llega en F7 y `WIZARD_COMMIT` no llegaba nunca al backend), así que el
+> criterio de F6 era insatisfacible. Con las 3 claves en `_health_payload`, **el gate se corre en F1**
+> (donde ya tiene que pasar) **y se repite en F9**. Si en F1 sale rojo, **sí es daño propio**: falta el
+> `_health_payload`.
 
 **Flag que la protege:** las tres son el entregable.
 **Impacto por runtime:** ninguno (son flags de servidor). Fallback: n/a.
@@ -765,6 +1103,14 @@ algo a main."*
 **Archivos a editar:**
 - `Stacky Agents/backend/services/pipeline_inventory.py` — **agregar** `get_pipeline_yaml` y
   `describe_pipeline` al final del archivo. **No tocar nada de lo existente.**
+- **`Stacky Agents/docs/sistema/error_fingerprints.json`** *(NUEVO v2 — C22)* — esta fase **mata una
+  clase de error viva**: el `501 {"error": "inventory_unavailable"}` que `api/pipeline_profiler.py:33-38`
+  devuelve **siempre** que se pide un perfil por `pipeline_id`. Registrar su huella con
+  `status: "resuelto"` y el plan que la cierra (294 F2). **Antes de editar, abrir el archivo y copiar el
+  shape de una entrada existente; NO inventar campos.** Si el archivo declara un `status` cerrado por
+  enum y `"resuelto"` no está entre los valores, usar el valor existente que signifique lo mismo —
+  **nunca agregar un valor nuevo al enum** (precedente conocido: un `status` fuera del enum pone rojo el
+  catálogo).
 
 **Archivos a crear:**
 - `Stacky Agents/backend/tests/test_plan294_describe.py`
@@ -862,7 +1208,8 @@ ruta con `..` (traversal); archivo mayor al cap; YAML que no parsea; `yaml_text=
 ```
 
 **Criterio BINARIO:** `test_plan294_describe.py` → **11 passed, 0 failed**. `test_plan294_baseline.py` →
-**9 passed, 0 failed**. Los 3 archivos del 246/247 → **el mismo conteo que antes de la fase**.
+**11 passed, 0 failed** (los 11 casos, incluidos los 2 nuevos de la v2). Los 3 archivos del 246/247 →
+**el mismo conteo que antes de la fase**.
 
 > **NOTA sobre `test_plan247_endpoint.py`:** su caso `test_pipeline_id_sin_inventario_devuelve_501`
 > (`:61-76`) **fuerza el `ImportError` con un `monkeypatch` de `builtins.__import__`**. Por eso
@@ -890,12 +1237,19 @@ ruta con `..` (traversal); archivo mayor al cap; YAML que no parsea; `yaml_text=
 ```python
 INTENT_SCHEMA_VERSION: str = "1"
 
+#: Los 3 ids REALES (C4). Espejan COPILOT_RUNTIMES de pipelineCopilotModel.ts:106-110.
+WIZARD_RUNTIME_IDS: tuple[str, ...] = ("claude_code_cli", "codex_cli", "github_copilot")
+
+#: Mapeo CERRADO paso del wizard -> estado canonico de pipeline_session (5.6, C7).
+WIZARD_STEP_TO_STATE: dict[str, str] = {...}             # 7 claves p1..p7
+
 @dataclass(frozen=True)
 class PipelineIntent: ...                                # los 24 campos de 5.4
 
 def intent_from_dict(d: dict | None) -> PipelineIntent   # tolerante: campo desconocido se IGNORA
 def intent_to_dict(i: PipelineIntent) -> dict            # lanza ValueError si un "nombre" trae "=" o ":"
 def intent_to_spec(i: PipelineIntent) -> dict            # dict que services.pipeline_spec.dict_to_spec acepta
+                                                         # variables -> {nombre: ""}  (C12)
 def validate_intent(i: PipelineIntent) -> list[str]      # motivos en CASTELLANO; vacia si OK
 ```
 
@@ -909,12 +1263,22 @@ def validate_intent(i: PipelineIntent) -> list[str]      # motivos en CASTELLANO
 7. `validate_intent` con `goal=""` devuelve al menos un motivo no vacío.
 8. `validate_intent` con `goal="modificar_existente"` y `existing_pipeline_key=""` devuelve un motivo.
 9. El módulo **no importa red ni modelo**: grep del fuente por `requests`, `urllib`, `ado_client`, `gitlab_client` = 0 ocurrencias.
+10. **(NUEVO v2 — C12) El puente de `variables` es exacto.** Con
+    `PipelineIntent(variables=("NUGET_FEED", "SIGNING_KEY"), ...)`:
+    `intent_to_spec(i)["variables"] == {"NUGET_FEED": "", "SIGNING_KEY": ""}` — **un `dict`, no una
+    lista**, con **todos los valores string vacío**. Y `required_secrets` **no** aparece como clave del
+    spec. *(Existe porque `PipelineSpec.variables` es un `dict` (`pipeline_spec.py:88`) y el v1 no decía
+    cómo se llenaba: sin esto, el caso 5 es inimplementable sin adivinar.)*
+11. **(NUEVO v2 — C4) Vocabulario de runtime.** `validate_intent` con
+    `runtime="claude"` (id inventado) devuelve **al menos un motivo**; con `runtime="claude_code_cli"`
+    devuelve **cero motivos por ese campo**. Los 3 ids aceptados son exactamente
+    `("claude_code_cli", "codex_cli", "github_copilot")`.
 
 **Comando:**
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_intent.py" -q
 ```
-**Criterio BINARIO:** **9 passed, 0 failed**.
+**Criterio BINARIO:** **11 passed, 0 failed**.
 **Flag:** ninguna (módulo puro; lo gatea quien lo consuma, en F6).
 **Impacto por runtime:** ninguno. Fallback: n/a.
 **Trabajo del operador: ninguno.**
@@ -942,7 +1306,7 @@ class WizardGoal:
     pipeline_kind: str                 # "ci" | "cd" | "ci_cd" | "quality"
     needs_inventory: bool = False      # True SOLO para "modificar_existente"
 
-WIZARD_GOALS: tuple[WizardGoal, ...] = (...)      # los 9 de 5.3, EN ESE ORDEN
+WIZARD_GOALS: tuple[WizardGoal, ...] = (...)      # los 9 de la tabla de abajo, EN ESE ORDEN
 
 @dataclass(frozen=True)
 class WizardQuestion:
@@ -968,6 +1332,21 @@ def default_answers(goal: str, stack: str, provider: str) -> dict:
     node -> 'npm run build'/'npm test'; python -> 'pip install -r requirements.txt'/'pytest'."""
 ```
 
+**Los 9 objetivos, con su `pipeline_kind` FIJADO (v2 — el v1 dejaba el `kind` de 4 de ellos sin
+declarar, y `pipeline_kind` es un vocabulario cerrado de 4 valores):**
+
+| # | `id` | `pipeline_kind` | `needs_inventory` |
+|---|---|---|---|
+| 1 | `compilar_validar` | `ci` | `False` |
+| 2 | `ejecutar_tests` | `ci` | `False` |
+| 3 | `generar_artefacto` | `ci` | `False` |
+| 4 | `desplegar` | `cd` | `False` |
+| 5 | `ci_completo` | `ci` | `False` |
+| 6 | `entrega_completa` | `ci_cd` | `False` |
+| 7 | `calidad_seguridad` | `quality` | `False` |
+| 8 | `modificar_existente` | `ci` | **`True`** |
+| 9 | `describir_libre` | `ci` | `False` |
+
 **Tests — casos exactos:**
 1. `WIZARD_GOALS` tiene **9** entradas, ids únicos, y **cada una** tiene `help` y `example` no vacíos.
 2. **Anti-formulario-genérico (§5.3):** `questions_for("ejecutar_tests", stack="node")` devuelve **≤ 4**
@@ -980,12 +1359,16 @@ def default_answers(goal: str, stack: str, provider: str) -> dict:
 8. Los 3 stacks × los 9 objetivos = **27 combinaciones**: `questions_for` **nunca lanza** y **nunca** devuelve dos preguntas con el mismo `id`.
 9. `needs_inventory` es `True` **solo** para el objetivo `modificar_existente`.
 10. El módulo es puro: grep del fuente por `requests`, `urllib`, `os.walk`, `open(` = 0 ocurrencias.
+11. **(NUEVO v2)** El `pipeline_kind` de **cada uno** de los 9 objetivos está en
+    `{"ci","cd","ci_cd","quality"}` y coincide **exactamente** con la tabla de arriba, comparada como
+    `dict` completo (`{g.id: g.pipeline_kind for g in WIZARD_GOALS} == <la tabla>`). *(Sin esto, 4 de
+    los 9 quedaban con `kind` indefinido y cada implementador elegía uno distinto.)*
 
 **Comando:**
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_wizard_schema.py" -q
 ```
-**Criterio BINARIO:** **10 passed, 0 failed**.
+**Criterio BINARIO:** **11 passed, 0 failed**.
 **Flag:** ninguna (puro).
 **Impacto por runtime:** ninguno (el esquema es idéntico para los 3). Fallback: n/a.
 **Trabajo del operador: ninguno.**
@@ -1029,15 +1412,37 @@ def probe_project(project: str | None = None, *, refresh: bool = False) -> dict:
 ```
 
 **Reglas de composición (todas reusan; ninguna reimplementa):**
-- `stack` ← `services.pipeline_stack_detector.detect_stack(_active_workspace_root())`.
+- `stack` ← `services.pipeline_stack_detector.detect_stack` (`:19`). **Ojo con los tipos (C11):** esa
+  función toma **`project_root: str`**, y `runtime_paths._active_workspace_root()` (`:66`) devuelve
+  **`Path | None`**. La línea exacta es:
+  ```python
+  root = _active_workspace_root()
+  stack = (detect_stack(str(root)) or "") if root else ""
+  ```
+  **Nunca** `detect_stack(_active_workspace_root())` a secas: con workspace ausente pasa `None` y
+  revienta.
 - `framework` / `package_manager` / `build_command` / `test_command` ← tabla **cerrada y determinista**
   por stack + presencia de manifiesto (`package.json` con `scripts.test` → `npm test`; `pyproject.toml`
   → `pytest`; `.sln` → `dotnet build`). **Si no hay señal, string vacío. Nunca se inventa.**
-- `provider` / `repository` / `default_branch` ← `services.project_context.resolve_project_context`.
+- `provider` / `repository` / `default_branch` ← `services.project_context.resolve_project_context` (`:373`).
 - `variables` ← solo **nombres**, del servicio de variables existente.
-- `inventory` ← `build_inventory(project, refresh=refresh)` y, por cada una de las **primeras
-  `_MAX_DESCRIBED`** entradas, `describe_pipeline(entry, get_pipeline_yaml(entry["key"]))` envuelto en
-  `try/except`. El resto viaja sin ficha, con `purpose_source == "sin_datos"`.
+- `inventory` ← `build_inventory(project, refresh=refresh)` y después, **sobre TODAS las entradas**:
+  ```python
+  for i, entry in enumerate(entradas):
+      texto = None
+      if i < _MAX_DESCRIBED:
+          try:
+              texto, _ = get_pipeline_yaml(entry.get("key") or "")
+          except Exception:                     # noqa: BLE001
+              texto = None
+      salida.append(describe_pipeline(entry, texto))   # TODAS pasan por aca
+  ```
+  > **CORRECCIÓN v2 (C8) — el v1 decía "el resto viaja sin ficha, con `purpose_source == 'sin_datos'`",
+  > y eso era imposible.** Una entrada que **no** pasa por `describe_pipeline` es el dict crudo de
+  > `make_entry`: **no tiene la clave `purpose_source` en absoluto**, así que el caso 5 no podía pasar y
+  > un modelo menor lo habría borrado. La regla correcta: **todas** pasan por `describe_pipeline`; el
+  > tope `_MAX_DESCRIBED` limita **cuántas leen el YAML del disco**, que es lo caro. Las que no lo leen
+  > reciben `yaml_text=None` y salen con `purpose_source == "sin_datos"`, que es el contrato de §5.5.
 - **Cada bloque va en su propio `try/except`.** Que falle uno no puede vaciar los otros; cada fallo
   agrega una entrada a `sources` con `available: False` y `reason` no vacío.
 
@@ -1046,16 +1451,28 @@ def probe_project(project: str | None = None, *, refresh: bool = False) -> dict:
 2. Con `build_inventory` lanzando, `probe_project` **no lanza**, `inventory` viene vacío y hay una entrada en `sources` con `available: False` y `reason` no vacío (**degradación visible**).
 3. Con `detect_stack` devolviendo `None`, `stack == ""` y `build_command == ""` (**no se inventa**).
 4. **R3:** ningún elemento de `variables` contiene `=` ni `:`.
-5. Con un inventario de 40 entradas mockeado, **exactamente 25** traen `purpose_source == "plantilla"` y las otras 15 `"sin_datos"`.
+5. **(reescrito v2 — C8)** Con un inventario de **40** entradas mockeado y `get_pipeline_yaml`
+   mockeado para devolver un YAML válido **siempre**: **las 40** entradas traen la clave
+   `purpose_source`; **exactamente 25** valen `"plantilla"` y **exactamente 15** valen `"sin_datos"`.
+   *(El mock de `get_pipeline_yaml` es obligatorio: sin él no hay archivos en disco, las 40 darían
+   `sin_datos` y el caso no probaría el tope.)*
 6. `probe_project` **no escribe**: monkeypatchear `builtins.open` para que lance si el modo contiene `"w"` y verificar que igual devuelve el payload.
-7. `probe_project` **no llama a ningún modelo** (KPI-4): monkeypatchear el cliente de modelo para que lance y verificar que igual pasa.
+7. **(reescrito v2 — C19)** `probe_project` **no llama a ningún modelo** (KPI-4), verificado de forma
+   **estructural y determinista** en vez de con un mock de un cliente sin nombrar: leer el fuente de
+   `services/pipeline_project_probe.py` y asertar **0 ocurrencias** de cada una de estas subcadenas:
+   `llm`, `anthropic`, `openai`, `copilot_bridge`, `model_router`, `requests`, `urllib`, `httpx`.
+   *(El v1 decía "monkeypatchear el cliente de modelo" sin decir cuál: inejecutable para un modelo
+   menor.)*
 8. Con un proyecto inexistente, `ok is True` y todo lo no resoluble en vacío (**nunca una excepción**).
+9. **(NUEVO v2 — C11)** Con `_active_workspace_root` mockeado devolviendo `None`, `probe_project`
+   **no lanza** y devuelve `stack == ""` y `build_command == ""`. **Mitad de contraste del bug de tipos:
+   si alguien escribe `detect_stack(_active_workspace_root())`, este caso se pone rojo.**
 
 **Comando:**
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_project_probe.py" -q
 ```
-**Criterio BINARIO:** **8 passed, 0 failed**.
+**Criterio BINARIO:** **9 passed, 0 failed**.
 **Flag:** se consume bajo `STACKY_PIPELINE_WIZARD_ENABLED` (ON) en F6.
 **Impacto por runtime:** ninguno (sin modelo, idéntico para los 3). Fallback: n/a.
 **Trabajo del operador: opt-in (default ON).**
@@ -1126,15 +1543,37 @@ def _gate():
    ruta** cuyo endpoint contenga `commit`, `trigger`, `apply` o `delete`, y que los métodos declarados
    estén todos en `{"GET","POST","HEAD","OPTIONS"}`. (Guarda arquitectónica de C7.)
 9. `POST /draft` con un cuerpo que trae `variables: ["K=v"]` → **400** (R3, propagado desde `intent_to_dict`).
-10. **KPI-4:** monkeypatchear el cliente de modelo para que lance y verificar que los 4 endpoints siguen respondiendo 200/400 (ninguno llama a un modelo).
+10. **(reescrito v2 — C19) KPI-4, verificado de forma determinista:** leer el fuente de
+    `api/pipeline_wizard.py` y asertar **0 ocurrencias** de `llm`, `anthropic`, `openai`,
+    `copilot_bridge`, `model_router`, `requests`, `urllib`, `httpx`; **y además** que los 4 endpoints
+    responden 200/400 en la corrida normal del archivo. *(El v1 pedía "monkeypatchear el cliente de
+    modelo" sin nombrar el módulo.)*
+11. **(NUEVO v2 — C7) El mapeo paso↔estado es total y legal.** En un solo caso, las tres mitades:
+    ```python
+    from services.pipeline_intent import WIZARD_STEP_TO_STATE
+    from services.pipeline_session import PIPELINE_SESSION_STATES, can_transition
+
+    assert set(WIZARD_STEP_TO_STATE) == {f"p{k}" for k in range(1, 8)}          # total
+    assert set(WIZARD_STEP_TO_STATE.values()) <= set(PIPELINE_SESSION_STATES)   # vocabulario canonico
+    for k in range(1, 7):                                                        # saltos legales
+        o, d = WIZARD_STEP_TO_STATE[f"p{k}"], WIZARD_STEP_TO_STATE[f"p{k+1}"]
+        assert o == d or can_transition(o, d), (k, o, d)
+    ```
+    **Este es el caso que convierte "reusamos la máquina del 279" de promesa en hecho.** Si alguien
+    inventa un estado (`"wizard_review"`, `"paso5"`, …), se pone rojo.
 
 **Comandos:**
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_wizard_api.py" -q
-"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_flag_wiring.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_intent.py" -q
 ```
-**Criterio BINARIO:** `test_plan294_wizard_api.py` → **10 passed, 0 failed**.
-`test_flag_wiring.py` → **fallos ≤ línea base de §7.3** (acá ya hay consumidor real de la flag del wizard).
+**Criterio BINARIO:** `test_plan294_wizard_api.py` → **11 passed, 0 failed**;
+`test_plan294_intent.py` → **11 passed** (sin cambios respecto de F3).
+
+> **CORRECCIÓN v2 (C6): `test_flag_wiring.py` NO se corre acá.** El v1 lo ponía como criterio de F6, pero
+> en F6 `STACKY_PIPELINE_TRIGGER_VARS_ENABLED` (F7) y `STACKY_PIPELINE_WIZARD_COMMIT_ENABLED` todavía no
+> tienen consumidor ⇒ el criterio era insatisfacible. Con el `_health_payload` de F1 las 3 quedan
+> cableadas desde F1, y el gate se corre en **F1** y se repite en **F9**.
 
 **Flag que la protege:** `STACKY_PIPELINE_WIZARD_ENABLED` (ON).
 **Impacto por runtime:** ninguno (los 4 endpoints son deterministas, sin modelo). Fallback: n/a.
@@ -1197,17 +1636,29 @@ valor es `None`; **aborta con 400** si no es `dict`, si tiene más de 25 claves,
 10. **HITL intacto:** sin `confirm: true` → **400**, con o sin variables.
 11. **Idempotencia intacta:** dos disparos iguales dentro de 60 s → el segundo devuelve `status: "reused"`.
 12. **CERO RED:** el módulo de test monkeypatchea `socket.socket` para que lance, y los 11 casos anteriores igual pasan. **Ningún test dispara una pipeline real.**
+13. **(NUEVO v2 — C16) El orden del gate del plan 260 no se movió.** Con la flag de variables **ON** y
+    el gate del 260 **bloqueando**, `should_trigger` **no** se llama (`_validar_variables` puede correr
+    antes o después, pero el disparo no ocurre). Es el mismo invariante que
+    `test_plan260_trigger_gate.py:329-341` espía en su propia corrida; acá se repite **con variables en
+    el cuerpo**, que es la combinación nueva que ese test no cubre.
 
 **Comandos:**
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_trigger_vars.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan260_trigger_gate.py" -q
 ```
 Y el test del plan 72 sobre el trigger: **localizarlo con
 `grep -rn "trigger_pipeline_route" "Stacky Agents/backend/tests/"` — NO adivinar el nombre del archivo** —
 y correrlo con el mismo comando por archivo.
 
-**Criterio BINARIO:** `test_plan294_trigger_vars.py` → **12 passed, 0 failed**. El test del plan 72 →
-**el mismo conteo que antes de la fase**.
+**Criterio BINARIO:** `test_plan294_trigger_vars.py` → **13 passed, 0 failed**.
+`test_plan260_trigger_gate.py` → **el mismo conteo que en la línea base de §7.3** (es el guardián del
+orden `guard HITL → gate 260 → idempotencia`, y F7 inserta código justo ahí).
+El test del plan 72 → **el mismo conteo que antes de la fase**.
+
+> **INVARIANTE DE ORDEN (C16), literal:** el bloque nuevo va **después** del guard de `confirm=True` y
+> **después** del gate del plan 260 (`api/ci.py:274`, comentario *"el gate corre DESPUES de tener
+> provider.name"*), y **antes** de la llamada a `should_trigger` de `:294`. Ni un renglón antes.
 
 **Flag que la protege:** `STACKY_PIPELINE_TRIGGER_VARS_ENABLED` (**OFF, categoría B**).
 **Impacto por runtime:** ninguno (es servidor). Fallback: n/a.
@@ -1256,8 +1707,26 @@ export function goBack(s: WizardState): WizardState                           //
 export function buildIntent(s: WizardState, probe: ProbePayload): Record<string,unknown>
 export function serializeDraft(s: WizardState): string                        // para localStorage
 export function parseDraft(raw: string | null): WizardState | null            // tolera basura
-export function resolveWizardRuntime(pedido: string, disponibles: string[]): string | null   // 5.7
+
+// --- R4 (5.7). Los ids son los REALES de COPILOT_RUNTIMES, no "codex"/"claude"/"copilot" (C4).
+export const WIZARD_RUNTIME_IDS = ['claude_code_cli', 'codex_cli', 'github_copilot'] as const;
+/** [ADICION ARQUITECTO 2] Devuelve `pedido` o null. JAMAS otro runtime.
+ *  Reemplaza a la normalizacion permisiva del copiloto, que cae al primero. */
+export function strictRuntime(pedido: string, disponibles: string[]): string | null
+/** Alias historico del plan: misma semantica que strictRuntime. */
+export function resolveWizardRuntime(pedido: string, disponibles: string[]): string | null
+
+// --- R2: los 4 actos del Paso 7 no se encadenan NUNCA.
+export const WIZARD_ACT_IDS = ['guardar_borrador', 'crear_archivo', 'registrar_definicion',
+                               'ejecutar'] as const;
+/** SIEMPRE null. Existe para que la ausencia de encadenamiento sea TESTEABLE
+ *  y no una promesa de prosa: no hay "siguiente acto automatico". */
+export function nextActAfter(act: string): null
 ```
+
+> **`WIZARD_STEP_TO_STATE` en el frontend:** `pipelineWizardModel.ts` **importa `SESSION_STATES`** de
+> `./pipelineCopilotModel` y expone `stepState(stepId: string): string`, cuyos valores deben estar en
+> `SESSION_STATES`. **No se copia la lista de estados a mano.**
 
 **Tests de `stepperModel.test.ts` (6 casos):** índices correctos; `nextStepId` del último → `null`;
 `prevStepId` del primero → `null`; `stepStatus` produce los 4 valores según el caso; `progressLabel`
@@ -1271,20 +1740,42 @@ devuelve `"3 de 7"`; un id inexistente **no lanza**.
 5. `serializeDraft` → `parseDraft` es round-trip exacto.
 6. `parseDraft("{basura")` → `null`, **no lanza**.
 7. `parseDraft(null)` → `null`.
-8. **R4:** `resolveWizardRuntime("codex", ["claude","copilot"])` devuelve **`null`** (nunca `"claude"`).
-9. **R4:** `resolveWizardRuntime("codex", ["codex","claude"])` devuelve `"codex"`.
-10. **R4 — el gate duro:** para los 3 pedidos × los 8 subconjuntos de disponibles (**24 combinaciones**,
-    recorridas en un bucle dentro del test), el resultado es **`pedido` o `null`**, jamás otro valor.
+8. **R4 (ids reales, C4):** `strictRuntime("codex_cli", ["claude_code_cli","github_copilot"])` devuelve **`null`** (nunca `"claude_code_cli"`).
+9. **R4:** `strictRuntime("codex_cli", ["codex_cli","claude_code_cli"])` devuelve `"codex_cli"`.
+10. **R4 — el gate duro:** para los 3 pedidos de `WIZARD_RUNTIME_IDS` × los 8 subconjuntos de
+    disponibles (**24 combinaciones**, recorridas en un bucle dentro del test), el resultado es
+    **`pedido` o `null`**, jamás otro valor. Y `resolveWizardRuntime` devuelve **lo mismo** que
+    `strictRuntime` en las 24.
 11. `buildIntent` produce un objeto cuyas claves son **exactamente** las 24 de `PipelineIntent`.
 12. **R3:** `buildIntent` **nunca** pone en `variables` un string que contenga `=` o `:`.
+13. **(NUEVO v2 — C7) El wizard habla el vocabulario del 279.** `WIZARD_STEPS.map(s => stepState(s.id))`
+    devuelve sólo valores incluidos en `SESSION_STATES` **importado** de `./pipelineCopilotModel`, y
+    `stepState` está definida para los 7 ids. *(Espejo cliente del F6 caso 11.)*
+14. **(NUEVO v2 — [ADICIÓN ARQUITECTO 2]) R4, la mitad que faltaba:** leer el fuente de
+    `pipelineWizardModel.ts` como texto y asertar que **no contiene** la subcadena
+    `normalizeCopilotRuntime`. Esa función (`pipelineCopilotModel.ts:127-130`) **cae a
+    `'claude_code_cli'` ante un id desconocido**: rutear la elección del usuario por ahí sería
+    exactamente la degradación silenciosa que R4 prohíbe, y los casos 8-10 **no la detectarían** porque
+    prueban `strictRuntime`, no el camino real. *(Trampa de auto-gate: no escribas ese identificador ni
+    en un comentario del archivo.)*
+15. **(NUEVO v2 — R2) Los 4 actos no se encadenan.** `WIZARD_ACT_IDS` tiene **4** ids únicos y
+    `nextActAfter(a) === null` para **los 4** y también para un id inventado. *(El v1 sólo defendía R2
+    con un grep de dos frases prohibidas en el `.tsx`; esto lo vuelve una propiedad del modelo.)*
 
 **Comandos:**
 ```
 cd "Stacky Agents/frontend" && npx vitest run src/components/ui/stepperModel.test.ts
 cd "Stacky Agents/frontend" && npx vitest run src/components/devops/pipelineWizardModel.test.ts
+cd "Stacky Agents/frontend" && npx vitest run src/components/devops/__tests__/pipelineCopilotModel.test.ts
 cd "Stacky Agents/frontend" && npx tsc --noEmit
 ```
-**Criterio BINARIO:** 6 passed + 12 passed, y `tsc --noEmit` con **0 errores**.
+**Criterio BINARIO:** `stepperModel.test.ts` → **6 passed**; `pipelineWizardModel.test.ts` →
+**15 passed**; `pipelineCopilotModel.test.ts` → **el mismo conteo que antes de la fase** (no-regresión:
+F8 lo importa, no lo modifica); `tsc --noEmit` → **0 errores**.
+
+> **SI `tsc` SE QUEJA DE `STATE_LABELS` O `AVAILABLE_BY_STATE`, PARÁ (C2).** No son exports: usá
+> `stateLabel()` y `availableActionIds()`. **Exportarlas para que compile es alcance del plan 279, no de
+> este**, y rompería el caso 11 de F0.
 
 > **PROHIBIDO:** escribir un `.test.tsx` que renderice un componente. **RTL y jsdom no están
 > instalados**; un test así reporta *"no tests"* y **exit 0** — un falso verde perfecto.
@@ -1327,11 +1818,43 @@ Fallback: si el elegido no está, **`null`** y la UI pide una elección nueva; *
     render: (ctx) => <PipelineWizardSection ctx={ctx} />,
   },
   ```
-- `Stacky Agents/backend/api/devops.py` — agregar `pipeline_wizard_enabled` al payload de
-  `GET /api/devops/health` (es la clave que consume `healthKey`). **Aditivo, no cambia nada existente.**
+- `Stacky Agents/backend/api/devops.py` — la clave `pipeline_wizard_enabled` que consume `healthKey`
+  **ya la agregó F1** dentro de **`_health_payload`** (`:28`), junto con las otras dos (§7.2). **F9 no
+  vuelve a tocar este archivo**; sólo verifica que la clave siga ahí.
+- **`Stacky Agents/backend/services/devops_action_catalog.py`** *(NUEVO v2 — C5, BLOQUEANTE del v1)*:
+  1. **`DEVOPS_SECTION_IDS` (`:46-54`) pasa de 18 a 19 ids**, agregando `"crear-pipeline"`
+     **inmediatamente antes de `"pipelines"`** (mismo orden que el `.tsx`, para que el diff se lea).
+     **Sin esto, `test_devops_action_ratchet.py::test_section_ids_espejan_el_tsx` (`:76-86`) se pone
+     ROJO** — compara los dos conjuntos con `==`, y hoy está en **13 passed**.
+  2. **[ADICIÓN ARQUITECTO 1]** una entrada nueva en `DEVOPS_ACTION_CATALOG`:
+     ```
+     id          "devops.pipeline_wizard.open"
+     label       "Crear una pipeline paso a paso"
+     summary     "Abre el asistente guiado que arma tu pipeline sin que escribas YAML."
+     section_id  "crear-pipeline"
+     nav_path    "/devops/crear-pipeline"     # OBLIGATORIO f"/devops/{section_id}" — test_nav_path_de_seccion_es_devops_slug (:89)
+     effect      "read"                        # NO escribe: sólo navega
+     impact      (el que el enum use para "ninguno")   # test_write_declara_impacto (:26) sólo aplica a effect="write"
+     flag_key    "STACKY_PIPELINE_WIZARD_ENABLED"      # test_flag_key_existe_en_el_registro (:85)
+     health_key  "pipeline_wizard_enabled"             # test_health_key_existe_en_health_payload (:59)
+     reach       SIN "palette-run"             # no ejecuta nada; sólo aparece y navega
+     phrases     "crear una pipeline", "armar una pipeline", "hacer un pipeline",
+                 "no se yaml", "necesito una pipeline"
+     ```
+     **Valor:** un no técnico escribe *"quiero crear una pipeline"* en la consola en castellano o en la
+     paleta y **cae en el wizard**. Cero flags nuevas, cero endpoints nuevos, cero trabajo del operador,
+     cero tokens en reposo. Es la puerta de entrada que el §2 dice que falta, hecha con el mecanismo que
+     ya existe (plan 267).
+     > **ANTES DE ESCRIBIRLA: abrí `devops_action_catalog.py` y copiá el shape de una entrada
+     > `effect="read"` que ya exista.** Los campos `impact`, `reach` y `phrases` son vocabularios
+     > cerrados del 267; inventar un valor pone rojo el ratchet. **Y revisá
+     > `test_frases_no_colisionan_entre_read_y_write` (`:110`): ninguna de las 5 frases puede colisionar
+     > con las de una acción de escritura.** Si alguna colisiona, cambiá la frase — **nunca** el test.
 
-**NO se toca:** `devopsCockpitShell.ts` (los 5 grupos y `resolveLandingSection` quedan igual — el plan 275
-manda), `PipelineBuilderSection.tsx`, ni ninguna de las 18 secciones existentes.
+**NO se toca:** `Stacky Agents/frontend/src/pages/devopsCockpitShell.ts` (los 5 grupos `:20-26` y
+`resolveLandingSection` `:121-151` quedan igual — el plan 275 manda), `PipelineBuilderSection.tsx`,
+`PipelineCopilotSection.tsx` (C17), `components/shell/shellNav.ts` / `TAB_META` (C3), ni ninguna de las
+18 secciones existentes.
 
 **"Modo avanzado":** un `Tabs` (`frontend/src/components/ui/Tabs.tsx`) con dos ítems, `Guiado` (default)
 y `Modo avanzado`. El segundo **no duplica nada**: muestra una lista de las capacidades avanzadas y un
@@ -1350,7 +1873,19 @@ botón por cada una que **cambia la pestaña activa del cockpit** a la sección 
 7. **R6:** en `PipelineWizardSection.tsx`, `count("disabled=") <= count("title=")`, y ninguna línea con `disabled=` carece de `title=` en esa misma línea o en la siguiente.
 8. **R2:** el `.tsx` contiene los **4** rótulos de acto del Paso 7 como cadenas distintas, y **no** contiene la cadena `Hacer todo` ni la cadena `Crear y ejecutar`.
 9. `endpoints.ts` exporta `PipelineWizard` con las 4 funciones, y dentro de ese namespace **no** aparecen las subcadenas `/commit` ni `/trigger`.
-10. **Anti-duplicación (C7):** `PipelineWizardSection.tsx` **no** contiene `to_ado_yaml`, `to_gitlab_yaml` ni un literal de plantilla YAML; el YAML siempre viene del servidor.
+10. **Anti-duplicación (C7 del v1):** `PipelineWizardSection.tsx` **no** contiene `to_ado_yaml`, `to_gitlab_yaml` ni un literal de plantilla YAML; el YAML siempre viene del servidor.
+11. **(NUEVO v2 — C5) Los DOS registros están sincronizados.** Leer
+    `Stacky Agents/backend/services/devops_action_catalog.py` como texto y asertar que contiene
+    `"crear-pipeline"`; y que la cantidad de ids de `DEVOPS_SECTION_IDS` es **19**. *(Espejo en el lado
+    frontend del ratchet backend; que el implementador lo vea rojo en su propia fase y no recién en el
+    commit.)*
+12. **(NUEVO v2 — [ADICIÓN ARQUITECTO 1])** El catálogo declara `devops.pipeline_wizard.open` con
+    `nav_path` **exactamente** `/devops/crear-pipeline`, `effect` `read`, y **sin** `palette-run` en su
+    `reach`. *(Que la puerta de entrada en castellano exista y que **no** sea ejecutable desde la paleta:
+    abre una pantalla, no dispara nada.)*
+13. **(NUEVO v2 — C6/C15)** `backend/api/devops.py` contiene la cadena `"pipeline_wizard_enabled"`
+    dentro de `_health_payload`; sin ella, el `healthKey` de la sección apunta a una clave inexistente y
+    la sección **no se renderiza nunca** aunque la flag esté ON.
 
 > **TRAMPA DE AUTO-GATE:** el caso 8 grepea el `.tsx` buscando la **ausencia** de esas dos frases.
 > **No las escribas en un comentario del `.tsx`** explicando que están prohibidas. Van en este documento
@@ -1361,11 +1896,24 @@ botón por cada una que **cambia la pestaña activa del cockpit** a la sección 
 cd "Stacky Agents/frontend" && npx vitest run src/pages/__tests__/plan294WizardTab.test.ts
 cd "Stacky Agents/frontend" && npx tsc --noEmit
 cd "Stacky Agents/frontend" && npx vitest run src/pages/__tests__/DevOpsPage.test.ts
+cd "Stacky Agents/frontend" && npx vitest run src/pages/__tests__/devopsCockpitShell.test.ts
+cd "Stacky Agents/frontend" && npx vitest run src/pages/__tests__/DevOpsCockpitRegression.test.ts
+cd "Stacky Agents/frontend" && npx vitest run src/pages/__tests__/plan275DevOpsGroupBalance.test.ts
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_devops_action_ratchet.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_flag_wiring.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_wizard_api.py" -q
 ```
-**Criterio BINARIO:** `plan294WizardTab.test.ts` → **10 passed**; `tsc --noEmit` → **0 errores**;
-`DevOpsPage.test.ts` → verde. **Si ese archivo tiene el número 18 fijado en una aserción, actualizarlo a
-19 es parte de esta fase y debe declararse en el mensaje del commit.**
+**Criterio BINARIO:** `plan294WizardTab.test.ts` → **13 passed**; `tsc --noEmit` → **0 errores**;
+`test_devops_action_ratchet.py` → **13 passed** (**el mismo número que en la línea base: esta fase es la
+que lo puede romper**); `test_flag_wiring.py` → **fallos ≤ línea base**; `DevOpsPage.test.ts`,
+`devopsCockpitShell.test.ts`, `DevOpsCockpitRegression.test.ts` y `plan275DevOpsGroupBalance.test.ts` →
+**el mismo conteo que antes de la fase**.
+
+> **LOS TRES ARCHIVOS DE COCKPIT SON NO-REGRESIÓN DEL 275, y hay que CORRERLOS, no suponerlos.**
+> `plan275DevOpsGroupBalance.test.ts` es, por su propio nombre, un test de **balance de grupos**: pasar
+> el grupo `construir` de 2 a 3 secciones puede tener un tope declarado ahí. **Si alguno tiene el número
+> 18 (o un tope de secciones por grupo) fijado en una aserción, actualizarlo a 19 es parte de esta fase
+> y debe declararse en el mensaje del commit** —y **sólo** el número: prohibido borrar el assert.
 
 **Flag que la protege:** `STACKY_PIPELINE_WIZARD_ENABLED` (ON) para la sección;
 `STACKY_PIPELINE_WIZARD_COMMIT_ENABLED` (OFF) deshabilita **solo** el acto 2 del Paso 7, **con `title`
@@ -1408,7 +1956,33 @@ export function canTriggerEntry(entry: InventoryEntry, health: DevOpsHealth): Tr
 export function triggerConfirmSummary(entry: InventoryEntry, project: string,
                                       branch: string, vars: Record<string,string>): string[]
 export function defaultBranchFor(entry: InventoryEntry, probeBranch: string): string
+
+// --- [ADICION ARQUITECTO 3] La linea de mayor riesgo del dialogo HITL deja de ser decorado.
+export type DeployWarning =
+  | { kind: 'no_despliega'; text: string }
+  | { kind: 'despliega'; text: string; environments: string[] }
+  | { kind: 'no_se_pudo_determinar'; text: string };
+/** Deriva el aviso de despliegue de la ficha del inventario. NUNCA afirma
+ *  "no despliega" sin evidencia: sin datos devuelve 'no_se_pudo_determinar'. */
+export function deployWarningFor(entry: InventoryEntry): DeployWarning
 ```
+
+> **[ADICIÓN ARQUITECTO 3] — por qué esta función existe.** El wireframe del v1 (§5.9) imprime
+> *"Esta pipeline NO despliega a ningún ambiente"* en la pantalla que **encola una corrida real en el CI
+> del operador**, pero **ninguna fase del v1 calculaba ese dato y ningún test lo verificaba**: era texto
+> fijo. Afirmar "no despliega" cuando la pipeline **sí** despliega es el peor error posible de todo el
+> plan, y es silencioso. Ahora sale de datos reales: el `describe_pipeline` de F2 ya corre
+> `profile_pipeline`, del cual `detect_environments` (`pipeline_profiler.py:485`) es un campo. F10
+> agrega `environments_es: list[str]` al dict de `describe_pipeline` (clave **aditiva**, misma regla
+> R10 que las otras 5) y `deployWarningFor` lo traduce a las **tres** frases honestas:
+>
+> | Estado | Frase exacta |
+> |---|---|
+> | `no_despliega` | "Esta pipeline no despliega a ningún ambiente." |
+> | `despliega` | "**Ojo: esta pipeline despliega a:** \<ambientes\>." |
+> | `no_se_pudo_determinar` | "**No pude determinar si esta pipeline despliega a algún ambiente.** Revisá el archivo antes de ejecutarla." |
+>
+> **El estado por defecto ante la duda es `no_se_pudo_determinar`, nunca `no_despliega`.**
 
 **Reglas de `canTriggerEntry` (R6: cada `false` trae `reason` **y** `fix`):**
 
@@ -1432,11 +2006,34 @@ export function defaultBranchFor(entry: InventoryEntry, probeBranch: string): st
 9. **Gate estructural:** `PipelineInventorySection.tsx` **ya no contiene** `void ctx;`.
 10. **Gate estructural:** `PipelineInventorySection.tsx` **ya no contiene** `PipelineInventory.list(null`.
 11. **Gate estructural:** `PipelineInventorySection.tsx` contiene una `queryKey` con **dos** elementos (el proyecto incluido).
+12. **(NUEVO v2 — [ADICIÓN ARQUITECTO 3])** `deployWarningFor` con `environments_es: []` devuelve
+    `kind: 'no_despliega'`; con `environments_es: ["produccion"]` devuelve `kind: 'despliega'` y su
+    `text` **contiene** `produccion`; con la clave **ausente** o `undefined` devuelve
+    `kind: 'no_se_pudo_determinar'`. **Las tres mitades en el mismo caso: la tercera es la que impide el
+    falso "no despliega".**
+13. **(NUEVO v2 — [ADICIÓN ARQUITECTO 3])** `triggerConfirmSummary` **incluye** el `text` de
+    `deployWarningFor` como una de sus líneas, para las **tres** variantes. *(Sin esto la función existe
+    y el diálogo sigue mintiendo: es el mismo patrón de "código construido y nunca cableado".)*
 
-**Tests backend (agregar a `test_plan294_describe.py`, llevándolo de 11 a 14 casos):**
-12. `GET /api/pipeline-inventory/list` **sin** `describe` → respuesta con las 12 claves y **sin** `purpose` (R10, byte-compatible).
-13. `GET /api/pipeline-inventory/list?describe=1` → las entradas traen `purpose` y `when_es`.
-14. El cache no se cruza: pedir **primero sin** `describe` y **después con** `describe` devuelve fichas en el segundo pedido.
+**Tests backend (agregar a `test_plan294_describe.py`, llevándolo de 11 a 17 casos):**
+14. `GET /api/pipeline-inventory/list` **sin** `describe` → respuesta con las 12 claves y **sin** `purpose` (R10, byte-compatible).
+15. `GET /api/pipeline-inventory/list?describe=1` → las entradas traen `purpose` y `when_es`.
+16. El cache no se cruza: pedir **primero sin** `describe` y **después con** `describe` devuelve fichas en el segundo pedido.
+17. **(NUEVO v2 — [ADICIÓN ARQUITECTO 3])** `describe_pipeline` con un YAML que **sí** declara un
+    `environment` devuelve `environments_es` **no vacío**; con un YAML de sólo build devuelve
+    `environments_es == []`; con `yaml_text=None` devuelve `environments_es == []` **y**
+    `purpose_source == "sin_datos"` (que es lo que el frontend usa para distinguir "no despliega" de "no
+    sé"). **R10: las 12 claves de `make_entry` siguen intactas** (el dict ahora agrega **6** claves, no 5).
+18. **(NUEVO v2 — R10 en las dos direcciones)** `GET /api/pipeline-inventory/list?describe=1` devuelve
+    entradas que **conservan las 12 claves originales** con el mismo nombre y el mismo valor que la
+    misma llamada **sin** `describe`. *(El caso 14 prueba que sin el parámetro nada cambia; este prueba
+    que con el parámetro tampoco se pierde nada. Un `describe_pipeline` que renombrara una clave pasaría
+    el 14 y rompería a los planes 247..252 en silencio.)*
+19. **(NUEVO v2 — degradación honesta)** Con `STACKY_PIPELINE_PROFILER_ENABLED` en `False` en la
+    instancia `_config.config`, `?describe=1` **responde 200** y las entradas traen
+    `purpose_source == "sin_datos"` con las 12 claves intactas. **Nunca 500, nunca 404.** *(El
+    inventario está gateado por su propia flag; la ficha depende de OTRA flag y su ausencia degrada la
+    ficha, no la lista.)*
 
 **Comandos:**
 ```
@@ -1445,10 +2042,12 @@ cd "Stacky Agents/frontend" && npx tsc --noEmit
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_describe.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan246_inventory_endpoint.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan246_inventory_sources.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan247_profiler_core.py" -q
 ```
-**Criterio BINARIO:** `pipelineInventoryActions.test.ts` → **11 passed**; `test_plan294_describe.py` →
-**14 passed**; `tsc --noEmit` → **0 errores**; los 2 tests del 246 → **el mismo conteo que antes de la
-fase**.
+**Criterio BINARIO:** `pipelineInventoryActions.test.ts` → **13 passed**; `test_plan294_describe.py` →
+**17 passed**; `tsc --noEmit` → **0 errores**; los 2 tests del 246 y
+`test_plan247_profiler_core.py` → **el mismo conteo que antes de la fase** (esta fase consume
+`detect_environments`, así que el núcleo del perfilador entra como no-regresión).
 
 **Flag que la protege:** `STACKY_PIPELINE_INVENTORY_ENABLED` (ON) para ver;
 `STACKY_PIPELINE_TRIGGER_ENABLED` (ya ON) para el botón Ejecutar;
@@ -1469,12 +2068,19 @@ sin regresiones y documentado.
 **Archivos a crear:**
 - `Stacky Agents/backend/services/wizard_runtime.py`:
   ```python
-  WIZARD_RUNTIMES: tuple[str, ...] = ("codex", "claude", "copilot")
+  #: Los ids REALES (C4). Copiados de COPILOT_RUNTIMES (pipelineCopilotModel.ts:106-110)
+  #: y del tipo CopilotRuntimeId (:122). NO son "codex"/"claude"/"copilot".
+  WIZARD_RUNTIMES: tuple[str, ...] = ("claude_code_cli", "codex_cli", "github_copilot")
 
   def resolve_wizard_runtime(pedido: str, disponibles: tuple[str, ...]) -> str | None:
       """Devuelve `pedido` si esta disponible, o None. JAMAS otro runtime.
       El None obliga a la UI a pedirle al usuario que elija de nuevo (R4)."""
   ```
+  > **CORRECCIÓN v2 (C4) — en el v1 esta tupla era `("codex","claude","copilot")` y el caso 1 exigía que
+  > coincidiera *elemento a elemento* con los ids de `COPILOT_RUNTIMES`. Era INSATISFACIBLE**: esos tres
+  > strings no existen en el código. Un modelo menor lo "resuelve" cambiando el assert por `len == 3`
+  > ⇒ falso verde y dos vocabularios de runtime en el mismo producto. **Se corrigió el vocabulario, no
+  > el criterio: el caso 1 sigue exigiendo coincidencia elemento a elemento.**
 - `Stacky Agents/backend/tests/test_plan294_runtime_parity.py`
 
 **Archivos a editar:**
@@ -1484,20 +2090,34 @@ sin regresiones y documentado.
 **Ratchets:** registrar `test_plan294_runtime_parity.py` en los DOS.
 
 **Tests — casos exactos:**
-1. `WIZARD_RUNTIMES` tiene **3** entradas y coincide, elemento a elemento, con los `id` de
-   `COPILOT_RUNTIMES` de `frontend/src/components/devops/pipelineCopilotModel.ts` (se lee el `.ts` como
-   texto y se extraen los ids). **Paridad servidor↔cliente verificada, no prometida.**
+1. `WIZARD_RUNTIMES` tiene **3** entradas y coincide, **elemento a elemento y en el mismo orden**, con
+   los `id` de `COPILOT_RUNTIMES` de `frontend/src/components/devops/pipelineCopilotModel.ts:106-110`
+   (se lee el `.ts` como texto y se extraen los ids con `re.findall(r"id:\s*'([a-z_]+)'", ...)`).
+   **Paridad servidor↔cliente verificada, no prometida.** *(Los ids son
+   `claude_code_cli`, `codex_cli`, `github_copilot` — ver §5.7.)*
 2. **R4, exhaustivo:** para los 3 pedidos × los 8 subconjuntos de `disponibles` = **24 casos** recorridos
    con `itertools`, el resultado es `pedido` o `None`. **Nunca** otro string.
-3. `resolve_wizard_runtime("codex", ())` → `None`.
-4. `resolve_wizard_runtime("inexistente", ("codex",))` → `None` (**no** cae al primero disponible).
+3. `resolve_wizard_runtime("codex_cli", ())` → `None`.
+4. `resolve_wizard_runtime("inexistente", ("codex_cli",))` → `None` (**no** cae al primero disponible).
+   **Es el contraste directo de `normalizeCopilotRuntime`, que en el mismo escenario devuelve
+   `'claude_code_cli'`** (`pipelineCopilotModel.ts:127-130`).
 5. **Paridad de capacidad:** `POST /api/pipeline-wizard/draft` con el **mismo** `PipelineIntent` salvo el
-   campo `runtime` (`codex` / `claude` / `copilot`) devuelve **el mismo payload byte a byte**. Esto prueba
-   que **nada del wizard está atado a un runtime**.
-6. **No-regresión de flags:** las 3 keys siguen en `FLAG_REGISTRY`, en `_CATEGORY_KEYS["devops"]` y en `PLAIN_HELP`.
+   campo `runtime` (`claude_code_cli` / `codex_cli` / `github_copilot`) devuelve **el mismo payload byte
+   a byte**. Esto prueba que **nada del wizard está atado a un runtime**.
+6. **No-regresión de flags:** las 3 keys siguen en `FLAG_REGISTRY`, en `_CATEGORY_KEYS["devops"]`, en
+   `PLAIN_HELP` **y en `_health_payload`** (las 3 patas que las mantienen vivas y cableadas).
 7. **Paridad de ratchets:** contar las entradas que matchean `tests/test_plan294_` en
-   `run_harness_tests.ps1` y en `run_harness_tests.sh` y asertar que son **iguales**. (Guarda contra el
-   `_PS1_LAG_MAX = 64` que está exactamente en el límite.)
+   `run_harness_tests.ps1` y en `run_harness_tests.sh` y asertar que son **iguales** (y **9** en cada
+   uno). **Medido el 2026-08-02: `.ps1` tiene 772 entradas, `.sh` tiene 836, diferencia 64, y
+   `_PS1_LAG_MAX = 64` (`test_plan259_ratchet_script_parity.py:46`). Estamos EXACTAMENTE en el límite:
+   registrar 9 en `.sh` y 8 en `.ps1` pone rojo el gate.**
+8. **(NUEVO v2 — C4) Vocabulario único en todo el backend del plan:** grep sobre los fuentes de
+   `services/wizard_runtime.py`, `services/pipeline_intent.py` y `api/pipeline_wizard.py` de las
+   cadenas `'codex'`, `'claude'` y `'copilot'` **entre comillas y solas** = **0 ocurrencias**.
+   *(Impide que los ids inventados del v1 reaparezcan por copiado.)*
+9. **(NUEVO v2 — C7) El mapeo del wizard sobrevive al cierre:** re-asertar aquí, como no-regresión de
+   cierre, las 3 mitades del caso 11 de F6 (`WIZARD_STEP_TO_STATE` total, vocabulario canónico, saltos
+   legales). *(Es el invariante más fácil de romper en las últimas fases, cuando se toca la UI.)*
 
 **Comandos de cierre — los 9 archivos backend del plan, uno por uno:**
 ```
@@ -1511,11 +2131,30 @@ sin regresiones y documentado.
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_trigger_vars.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan294_runtime_parity.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan259_ratchet_script_parity.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_devops_action_ratchet.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_flag_wiring.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan260_trigger_gate.py" -q
 ```
 
-**Criterio BINARIO:** `test_plan294_runtime_parity.py` → **7 passed, 0 failed**; los otros 8 archivos con
-el conteo declarado en su fase; `test_plan259_ratchet_script_parity.py` **verde**; los 5 guardianes del
-arnés con **delta ≤ 0** contra §7.3.
+**Criterio BINARIO — los conteos exactos de cierre (C14: el v1 decía "el conteo declarado en su fase" y
+`test_plan294_describe.py` tenía DOS conteos declarados):**
+
+| Archivo | Conteo exigido al cerrar F11 |
+|---|---|
+| `test_plan294_baseline.py` | **11 passed, 0 failed** |
+| `test_plan294_flags.py` | **9 passed, 0 failed** |
+| `test_plan294_describe.py` | **17 passed, 0 failed** (11 de F2 + 3 de F10 + 3 de la ADICIÓN 3) |
+| `test_plan294_intent.py` | **11 passed, 0 failed** |
+| `test_plan294_wizard_schema.py` | **11 passed, 0 failed** |
+| `test_plan294_project_probe.py` | **9 passed, 0 failed** |
+| `test_plan294_wizard_api.py` | **11 passed, 0 failed** |
+| `test_plan294_trigger_vars.py` | **13 passed, 0 failed** |
+| `test_plan294_runtime_parity.py` | **9 passed, 0 failed** |
+| `test_plan259_ratchet_script_parity.py` | **verde** |
+| `test_devops_action_ratchet.py` | **13 passed** (igual a la línea base) |
+| Los 5 guardianes del arnés + `test_plan260_trigger_gate.py` | **delta ≤ 0** contra §7.3 |
+
+**Total backend del plan: 101 casos en 9 archivos.**
 
 **Flag que la protege:** ninguna nueva.
 **Impacto por runtime:** es la fase que lo prueba, para los 3.
@@ -1550,6 +2189,13 @@ arnés con **delta ≤ 0** contra §7.3.
 | **Inventario SIN pipelines (estado vacío)** | F5 (caso 2) | `test_plan294_project_probe.py` |
 | **Inventario con credenciales caídas (degradación visible)** | F5 (caso 2: `sources` con `available:False` y `reason`) | `test_plan294_project_probe.py` |
 | **Disparo con la flag de variables OFF** | F7 (caso 2: **409**, no 403 — la ruta existe y la flag padre está ON) | `test_plan294_trigger_vars.py` |
+| **(v2) La pipeline que SÍ despliega, antes de disparar** | F10 (casos 12, 13, 17) | `pipelineInventoryActions.test.ts`, `test_plan294_describe.py` |
+| **(v2) El wizard usa la máquina de estados del 279** | F6 (caso 11), F8 (caso 13), F11 (caso 9) | `test_plan294_wizard_api.py`, `pipelineWizardModel.test.ts`, `test_plan294_runtime_parity.py` |
+| **(v2) La sección nueva no rompe el catálogo de acciones** | F9 (casos 11, 12) + `test_devops_action_ratchet.py` corrido en F1, F9 y F11 | `plan294WizardTab.test.ts`, `test_devops_action_ratchet.py` |
+| **(v2) Las 3 flags están CABLEADAS, no sólo registradas** | F1 (casos 8, 9) + `test_flag_wiring.py` en F1 y F9 | `test_plan294_flags.py`, `test_flag_wiring.py` |
+| **(v2) El runtime elegido no cae al normalizador permisivo** | F8 (caso 14), F11 (caso 4) | `pipelineWizardModel.test.ts`, `test_plan294_runtime_parity.py` |
+| **(v2) Los 4 actos del Paso 7 no se encadenan** | F8 (caso 15) + F9 (caso 8) | `pipelineWizardModel.test.ts`, `plan294WizardTab.test.ts` |
+| **(v2) El perfilador apagado degrada la ficha, no la lista** | F10 (caso 19) | `test_plan294_describe.py` |
 
 ---
 
@@ -1588,6 +2234,12 @@ arnés con **delta ≤ 0** contra §7.3.
 | **R-10** | El Paso 1 se vuelve lento en un monorepo con 200 YAML | Media | Medio | `_MAX_DESCRIBED = 25` en F5, verificado por el caso 5 |
 | **R-11** | Se escribe un `.test.tsx` con RTL y reporta "no tests" con exit 0 | Media | Alto (falso verde) | Prohibido explícitamente en F8; §3.4 documenta los 20 archivos hoy inertes |
 | **R-12** | La tabla `_WHEN_ES` se consulta con `[]` y un `kind` nuevo del proveedor la hace lanzar | Media | Medio | F2 obliga a `.get()` y el caso 11 lo prueba con un `kind` fuera de la tabla |
+| **R-13** *(v2, C5)* | **La sección 19 tumba el commit por un ratchet que el v1 no nombraba** | **Alta** | **Alto** | `test_devops_action_ratchet.py` está **verde (13 passed)** y **registrado en los DOS ratchets** ⇒ es trampa de COMMIT, no de edición. F9 edita `devops_action_catalog.py` y el archivo se corre en **F1** (línea base), **F9** (la fase que lo puede romper) y **F11** (cierre) |
+| **R-14** *(v2, C6)* | Una flag registrada sin consumidor deja `test_flag_wiring.py` rojo para siempre | **Alta** | Alto | Las 3 claves entran a `_health_payload` en **F1**; el caso 9 de F1 es la mitad de contraste. El gate se corre en F1 y F9, **nunca** en F6 |
+| **R-15** *(v2, C4)* | **Dos vocabularios de runtime conviviendo** (`codex` vs `codex_cli`) y un test debilitado para taparlo | **Alta** | **Alto (falso verde)** | Los ids reales están fijados en §5.7 y repetidos en F3 caso 11, F8 casos 8-10, F11 casos 1-4; **F11 caso 8 grepea los inventados y exige 0 ocurrencias** |
+| **R-16** *(v2, C7)* | Se construye una segunda máquina de estados y "reusamos el 279" queda en prosa | **Alta** | Medio | El mapeo es un dict exportado (`WIZARD_STEP_TO_STATE`) y **F6 caso 11 + F8 caso 13 + F11 caso 9** lo asertan contra `TRANSITIONS`. **Aparece en el DoD** |
+| **R-17** *(v2, ADICIÓN 3)* | **El diálogo HITL afirma "no despliega" sobre una pipeline que despliega a producción** | Media | **Muy alto** | `deployWarningFor` tiene **tres** estados y el default ante la duda es `no_se_pudo_determinar`; F10 casos 12, 13 y 17 lo prueban en las tres variantes |
+| **R-18** *(v2, C1)* | Alguien "consolida" `TriggerPipelineSection` creyendo el dato falso del v1 (un solo montaje) y rompe 3 superficies vivas | Media | Alto | **F0 caso 10 congela los 4 montajes reales** y nace verde |
 
 ---
 
@@ -1607,6 +2259,11 @@ arnés con **delta ≤ 0** contra §7.3.
 | **Categoría (B)** | La excepción que permite que una flag nazca OFF: escribe en un sistema real del operador |
 | **Mitad de contraste** | Un test que **falla hoy** y pasa al final. Sin él, un gate no prueba nada |
 | **Delta ≤ 0** | Criterio de no-regresión sobre un archivo con rojos de fábrica: no se exige verde, se exige no empeorar |
+| **Los 3 runtimes** | `claude_code_cli`, `codex_cli`, `github_copilot`. **Son los ids REALES** de `COPILOT_RUNTIMES` (`pipelineCopilotModel.ts:106-110`). `"codex"`, `"claude"` y `"copilot"` **no existen en el código** y están prohibidos en todo el código nuevo (F11 caso 8) |
+| **Los DOS registros de una sección** | `DEVOPS_SECTIONS` en `frontend/src/pages/DevOpsPage.tsx:151` **y** `DEVOPS_SECTION_IDS` en `backend/services/devops_action_catalog.py:46`. Falta uno ⇒ ratchet rojo en el **commit** |
+| **Trampa de COMMIT** | Un gate que no rompe la edición ni la fase, pero está registrado en `run_harness_tests.*` y tumba el commit. En este plan: `test_devops_action_ratchet.py` y `test_plan259_ratchet_script_parity.py` |
+| **Degradación de la ficha vs. de la lista** | Si el perfilador falla o está apagado, la **ficha** cae a `purpose_source="sin_datos"`; la **lista** del inventario sigue respondiendo 200 con sus 12 claves. Nunca al revés |
+| **"No despliega" vs. "no sé"** | `environments_es == []` con `purpose_source == "plantilla"` = **no despliega** (afirmación). `purpose_source == "sin_datos"` = **no se pudo determinar** (ignorancia). Confundirlos antes de encolar una corrida real es el peor error del plan |
 
 ---
 
@@ -1622,15 +2279,21 @@ F0 -> F1 -> F2 -> F3 -> F4 -> F5 -> F6 -> F7 -> F8 -> F9 -> F10 -> F11
 - **Después de F7:** todo el backend está listo y testeado; la UI vieja sigue funcionando igual.
 - **Después de F10:** el objetivo del operador está cumplido de punta a punta.
 
+> **NO hay punto de corte entre F8 y F9 (v2, C5).** F9 es la fase que toca los **dos** registros de
+> sección. Parar con `DevOpsPage.tsx` editado y `devops_action_catalog.py` sin editar deja el árbol
+> **imposible de commitear** (`test_devops_action_ratchet.py` rojo, y `--no-verify` está prohibido).
+> **F9 se termina o no se empieza.**
+
 ---
 
 ## 13. Definition of Done
 
 - [ ] Los **9** archivos de test backend del plan corren **uno por uno** con
-      `"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "<ruta>" -q` y dan el conteo declarado
-      en su fase. **Ningún `-k`. Ningún `pytest tests` entero.**
-- [ ] Los **4** archivos de test frontend corren con `npx vitest run <ruta>` y dan el conteo declarado.
-      **Ninguno renderiza React.**
+      `"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "<ruta>" -q` y dan **exactamente** el
+      conteo de la tabla de cierre de F11 (**101 casos en total**). **Ningún `-k`. Ningún `pytest tests`
+      entero.**
+- [ ] Los **4** archivos de test frontend corren con `npx vitest run <ruta>` y dan el conteo declarado
+      (**6 + 15 + 13 + 13 = 47 casos**). **Ninguno renderiza React.**
 - [ ] `npx tsc --noEmit` en `Stacky Agents/frontend` → **0 errores**.
 - [ ] Los **9** archivos de test backend están registrados en **`run_harness_tests.ps1` Y en
       `run_harness_tests.sh`**, con la **misma cantidad** en los dos, y
@@ -1643,6 +2306,21 @@ F0 -> F1 -> F2 -> F3 -> F4 -> F5 -> F6 -> F7 -> F8 -> F9 -> F10 -> F11
 - [ ] Los 5 guardianes del arnés (`test_harness_flags.py`, `test_harness_flags_help.py`,
       `test_flag_wiring.py`, `test_harness_flags_requires.py`, `test_harness_flags_bounds.py`) tienen
       **fallos ≤ la línea base de §7.3**.
+- [ ] **(v2, C6)** Las **3** flags nuevas aparecen como literal en `backend/api/devops.py`
+      (`_health_payload`) y `test_flag_wiring.py` está en **delta ≤ 0**. Ninguna nació inerte.
+- [ ] **(v2, C5)** `Stacky Agents/backend/services/devops_action_catalog.py` tiene **19** ids en
+      `DEVOPS_SECTION_IDS` y `test_devops_action_ratchet.py` da **13 passed** (igual que la línea base).
+- [ ] **(v2, ADICIÓN 1)** El catálogo declara `devops.pipeline_wizard.open` con `effect="read"`,
+      `nav_path="/devops/crear-pipeline"` y **sin `palette-run`** en su `reach`.
+- [ ] **(v2, C7)** `WIZARD_STEP_TO_STATE` cubre `p1..p7`, sus valores están en
+      `PIPELINE_SESSION_STATES` y **todos** los saltos consecutivos son legales según `TRANSITIONS`
+      (F6 caso 11, F8 caso 13, F11 caso 9). **La reutilización del 279 está probada, no prometida.**
+- [ ] **(v2, C4)** El vocabulario de runtime es **`claude_code_cli` / `codex_cli` / `github_copilot`** en
+      todo el código nuevo, y `grep` de `'codex'`, `'claude'`, `'copilot'` sueltos en los 3 módulos
+      backend del wizard = **0** (F11 caso 8).
+- [ ] **(v2, ADICIÓN 2)** `pipelineWizardModel.ts` **no contiene** `normalizeCopilotRuntime` (F8 caso 14).
+- [ ] **(v2, ADICIÓN 3)** El diálogo de disparo muestra el aviso de despliegue **calculado**, con sus
+      **tres** estados, y nunca afirma "no despliega" sin evidencia (F10 casos 12, 13, 17).
 - [ ] `test_plan246_*` (4 archivos) y `test_plan247_endpoint.py` dan **el mismo conteo que antes del
       plan**. Cero regresión sobre el inventario y el perfilador.
 - [ ] `DEVOPS_SECTIONS` tiene **19** entradas y las **18** anteriores siguen ahí con el mismo `id`.

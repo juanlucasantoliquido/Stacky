@@ -76,6 +76,13 @@
       "last_action": "ok",
       "last_errors": []
     },
+    "validation_playbook": {
+      "status": "enriched",
+      "steps": ["verificar el saldo en la grilla"],
+      "sources": ["docs/funcional"],
+      "confidence": 0.8,
+      "degraded_reason": null
+    },
     "harness_telemetry": {
       "runtime": "codex_cli",
       "session_id": "sess-sintetico-0002",

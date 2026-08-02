@@ -369,10 +369,16 @@ def _extract_signals(md: dict) -> list[tuple[str, str, str]]:
         out.append(("contract_fail", check, str(pf.get("detail") or "").strip()))
 
     # validation_playbook: {"status": str, "degraded_reason": str, ...}
+    # OJO: el enum del productor es
+    #   VALID_STATUSES = {"agent_provided", "enriched", "degraded", "disabled"}
+    #   (services/validation_playbook.py)
+    # y "ok" NO EXISTE en él. Una condición `status != "ok"` cosecha como fallo
+    # TODOS los estados, incluido "enriched", que es el estado de ÉXITO — medido:
+    # 15 filas "enriched" contra 6 "degraded". El único estado que significa
+    # fallo es "degraded"; "disabled" es apagado, no fallo.
     vp = _as_dict(md.get("validation_playbook"))
-    vp_status = str(vp.get("status") or "").strip()
-    if vp_status and vp_status != "ok":
-        key = str(vp.get("degraded_reason") or "").strip() or vp_status
+    if str(vp.get("status") or "").strip() == "degraded":
+        key = str(vp.get("degraded_reason") or "").strip() or "degraded"
         out.append(("verifier_fail", key, ""))
 
     # autocorrect: {"attempts": int, "max_retries": int, "last_action": str, ...}
@@ -474,3 +480,61 @@ def harvest_from_execution(
 def register(register_post_hook) -> None:
     """Cableado. Mismo idioma que services/epic_autopublish.register."""
     register_post_hook(harvest_from_execution)
+
+
+# ── F2 — Reinyección como pista barata y podable ─────────────────────────────
+
+# Clave "id" del dict de bloque. NO es "name": los bloques del motor son dicts,
+# no objetos, y la prioridad NO es un campo del bloque — sale del mapa
+# _BLOCK_PRIORITY de context_enrichment vía _block_priority(block).
+HARNESS_PATTERN_BLOCK_ID = "harness-patterns"
+
+_HINT_TITLE = "Fallos recurrentes en este tipo de ticket (pistas, no obligatorias)"
+_HINT_LINE_MAX = 200
+
+
+def build_pattern_hint_block(
+    *,
+    project: str,
+    agent_type: str,
+    ticket_title: str,
+    work_item_type: str | None,
+    max_patterns: int = 5,
+    min_confidence: float = 0.5,
+) -> dict | None:
+    """Bloque dict listo para blocks.append(), o None si no hay nada que decir.
+
+    Devolver None (y no un bloque vacío) es parte del presupuesto: sin patrones
+    el costo adicional del camino caliente es CERO.
+    """
+    if not project:
+        return None
+    kind = classify_ticket_kind(ticket_title or "", work_item_type)
+    pats = list_patterns(
+        project,
+        agent_type=agent_type,
+        ticket_kind=kind,
+        min_confidence=min_confidence,
+        limit=max(0, int(max_patterns or 0)),
+    )
+    if not pats:
+        return None
+
+    lineas = []
+    for p in pats:
+        texto = f"- [{p.signal_kind}] {p.signal_key}"
+        if p.remedy_hint:
+            texto += f" — remedio que funcionó: {p.remedy_hint}"
+        texto += f" (visto {p.occurrences}x)"
+        lineas.append(texto[:_HINT_LINE_MAX])
+
+    return {
+        "kind": "text",
+        "id": HARNESS_PATTERN_BLOCK_ID,
+        "title": _HINT_TITLE,
+        "content": (
+            "Esto ya falló antes en este proyecto para este tipo de ticket. Son "
+            "PISTAS, no requisitos: si el caso actual no aplica, ignoralas.\n"
+            + "\n".join(lineas)
+        ),
+    }

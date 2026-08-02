@@ -544,3 +544,39 @@ def test_dismissed_pattern_is_not_resurrected_by_reharvest(app_ctx):
     assert len(mismo_topic) == 1, (
         f"la re-cosecha creó {len(mismo_topic)} filas para el mismo topic_key"
     )
+
+
+def test_verifier_fail_only_on_degraded_status(app_ctx):
+    """T24 — el playbook sólo es señal de fallo cuando está "degraded".
+
+    Defecto encontrado MIDIENDO, no leyendo: el enum del productor es
+    VALID_STATUSES = {"agent_provided", "enriched", "degraded", "disabled"}
+    (services/validation_playbook.py) y **"ok" NO EXISTE en él**. Una condición
+    `status != "ok"` — la que el plan proponía — cosecha como fallo TODOS los
+    estados, incluido "enriched", que es el de ÉXITO: 15 filas "enriched" contra
+    6 "degraded" en la DB real. Este test se ancla al enum del PRODUCTOR, así que
+    si mañana agrega un estado nuevo, rompe acá y no en silencio.
+    """
+    from services.harness_learning import _extract_signals
+    from services.validation_playbook import VALID_STATUSES
+
+    assert "ok" not in VALID_STATUSES, (
+        'el extractor NO puede compararse contra "ok": no está en el enum'
+    )
+    assert "degraded" in VALID_STATUSES
+
+    def kinds(status, reason=None):
+        md = {"validation_playbook": {"status": status, "degraded_reason": reason}}
+        return {k for k, _key, _r in _extract_signals(md)}
+
+    assert kinds("degraded", "no_grounding") == {"verifier_fail"}
+    for sano in VALID_STATUSES - {"degraded"}:
+        assert "verifier_fail" not in kinds(sano), (
+            f'el estado "{sano}" no es un fallo y se estaba cosechando como tal'
+        )
+
+    # …y la clave usada es el motivo, no el status
+    sigs = _extract_signals(
+        {"validation_playbook": {"status": "degraded", "degraded_reason": "no_grounding"}}
+    )
+    assert ("verifier_fail", "no_grounding", "") in sigs

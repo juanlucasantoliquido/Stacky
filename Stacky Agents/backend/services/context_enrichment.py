@@ -81,6 +81,7 @@ def enrich_blocks(
     ticket_project: str | None = None
     ticket_title: str | None = None
     ticket_description: str | None = None
+    ticket_work_item_type: str | None = None
     ticket_obj = None
     with session_scope() as _sess:
         ticket_obj = _sess.get(Ticket, ticket_id) if ticket_id else None
@@ -89,6 +90,13 @@ def enrich_blocks(
             ticket_project = ticket_obj.project
             ticket_title = ticket_obj.title
             ticket_description = ticket_obj.description
+            # Plan 35 F2 — el tipo se captura DENTRO de la sesión, como el resto
+            # de los escalares: afuera el objeto está detached. Ojo: `Ticket.type`
+            # NO EXISTE — los campos reales son work_item_type y, como fallback
+            # local, local_work_item_type.
+            ticket_work_item_type = (
+                ticket_obj.work_item_type or ticket_obj.local_work_item_type
+            )
 
     project_name = (project_ctx.stacky_project_name if project_ctx else None) or ticket_project
 
@@ -239,6 +247,30 @@ def enrich_blocks(
         blocks=blocks, project_name=project_name, agent_type=agent_type,
         query=_rag_query, log=log,
     )
+    # Plan 35 F2 — pista de fallos recurrentes del propio arnés (prioridad 45,
+    # podable antes que contrato y criterios). Va acá para que entre al dedup y
+    # al presupuesto como un bloque más: bajo presión se descarta primero.
+    from config import config as _cfg35
+
+    if getattr(_cfg35, "STACKY_HARNESS_LEARNING_INJECT_ENABLED", True):
+        try:
+            from services import harness_learning as _hl
+
+            _hint = _hl.build_pattern_hint_block(
+                project=project_name or "",
+                agent_type=agent_type,
+                ticket_title=ticket_title or "",
+                work_item_type=ticket_work_item_type,
+                max_patterns=getattr(_cfg35, "STACKY_HARNESS_LEARNING_INJECT_MAX", 5),
+                min_confidence=getattr(
+                    _cfg35, "STACKY_HARNESS_LEARNING_INJECT_MIN_CONF", 0.5
+                ),
+            )
+            if _hint:
+                blocks.append(_hint)  # dict; la prioridad la resuelve _BLOCK_PRIORITY
+        except Exception as _exc:  # noqa: BLE001 — nunca tumbar el camino caliente
+            log("warn", f"harness-patterns no disponible (continuando): {_exc}")
+
     # I0.1 — dedup léxico entre bloques (antes del budget, OFF default).
     blocks = _dedup_blocks(blocks, project_name=project_name, log=log)
     # F2.4 + I2.1 — presupuesto de contexto con ranking y rerank (OFF default).
@@ -390,6 +422,11 @@ _BLOCK_PRIORITY: dict[str, int] = {
     "filesystem-artifacts-status": 70,
     "glossary-auto": 60,
     "few-shot-approved": 55,     # Q1.2 — media-alta, podable bajo presión
+    # Plan 35 F2 — pista aprendida por el arnés. 45 y NO 50 a propósito: 50 es
+    # _DEFAULT_PRIORITY, así que un bloque olvidado en este mapa lo recibiría por
+    # accidente y el test de prioridad no podría distinguir "registrado" de
+    # "olvidado". Se poda antes que contrato, criterios y few-shot.
+    "harness-patterns": 45,
     "ado-similar-tickets": 40,
     "ado-comments": 30,
     "ado-attachments": 25,

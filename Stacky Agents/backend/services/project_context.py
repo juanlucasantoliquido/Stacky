@@ -99,6 +99,113 @@ def ruteo_estricto_por_tracker() -> bool:
         return True
 
 
+# Plan 286 F1 (C5) — memo {proyecto: (st_mtime_ns, st_size, tipo|None)}.
+# Modulo-level a proposito: el ciclo de vida es el del proceso, igual que el del
+# resto del modulo. `_reset_memo_tracker_declarado()` existe SOLO para los tests
+# (un memo que los tests no pueden vaciar produce falsos verdes por orden).
+_TRACKER_DECLARADO_MEMO: dict[str, tuple[int, int, str | None]] = {}
+
+
+def _reset_memo_tracker_declarado() -> None:
+    """Plan 286 F1 — vacia el memo. Uso: tests. NUNCA en camino de produccion."""
+    _TRACKER_DECLARADO_MEMO.clear()
+
+
+def tracker_declarado_del_proyecto(project_name: str | None) -> str | None:
+    """Plan 286 — Tipo de tracker DECLARADO por el config del proyecto, o None.
+
+    Hermano en minúscula de `tracker_is_azure_devops`: mismo origen de verdad
+    (`issue_tracker.type`, lo que el operador setea por UI), mismo idioma de
+    import local para seguir siendo interceptable con monkeypatch, misma
+    defensa a prueba de todo. La diferencia es el retorno: acá hace falta el
+    NOMBRE del tracker, no un booleano, porque el llamador tiene que rutear a
+    GitLab, no solo descartar ADO.
+
+    Devuelve None (no "azure_devops") cuando no se puede resolver: quien decide
+    qué hacer con la ausencia es `tracker_efectivo_de_ticket`, en un solo lugar.
+    """
+    raw = (project_name or "").strip()
+    if not raw:
+        return None
+    try:
+        import os
+        from project_manager import PROJECTS_DIR, get_project_config as _get_cfg
+
+        # Plan 286 F1 (C5) — memo revalidado por mtime. `get_project_config`
+        # relee y reparsea el JSON entero en cada llamada (medido: 858-1074 us,
+        # project_manager.py:55-62) y este helper corre POR TICKET dentro de un
+        # loop (api/tickets.py:1499). Un `os.stat` cuesta 132 us y NO puede
+        # quedar stale: el operador cambia el tracker por UI, y cualquier
+        # escritura del archivo mueve st_mtime_ns/st_size. NO cambiar por TTL ni
+        # por lru_cache: eso rutearia al tracker viejo, que es el defecto que
+        # este plan mata.
+        try:
+            st = os.stat(PROJECTS_DIR / raw / "config.json")
+            firma = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            firma = None  # sin archivo (o sin permiso) -> camino sin memo
+
+        if firma is not None:
+            cacheado = _TRACKER_DECLARADO_MEMO.get(raw)
+            if cacheado is not None and cacheado[:2] == firma:
+                return cacheado[2]
+
+        cfg = _get_cfg(raw) or {}
+        tracker = cfg.get("issue_tracker") or {}
+        declarado = (tracker.get("type") or "").strip().lower() or None
+
+        if firma is not None:
+            _TRACKER_DECLARADO_MEMO[raw] = (firma[0], firma[1], declarado)
+        return declarado
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def tracker_efectivo_de_ticket(ticket) -> str:
+    """Plan 286 — A qué tracker le corresponde ESCRIBIR este ticket.
+
+    PRECEDENCIA (este orden y no otro):
+
+      1. La columna, SOLO si es EXPLÍCITA. Explícita = valor no vacío Y
+         DISTINTO de `_DEFAULT_TRACKER_TYPE`. Motivo, y es el corazón del plan:
+         `models.py:49` declara `default="azure_devops"`, así que ese valor en
+         la columna es indistinguible de "nadie la seteó". Un valor como
+         "gitlab", "jira", "mantis" o "demo" solo pudo escribirlo un sync a
+         propósito: ese SÍ manda, y por eso gana incluso sobre el config (un
+         ticket importado de Jira dentro de un proyecto ADO sigue siendo de
+         Jira).
+      2. El config del proyecto (`issue_tracker.type`). Es la fuente que el
+         operador controla por UI y la que ya usan los 17 consumidores de
+         `tracker_is_azure_devops`.
+      3. `_DEFAULT_TRACKER_TYPE`. Fail-closed a Azure DevOps, IGUAL que hoy:
+         un ticket sin `stacky_project_name` o de un proyecto sin config
+         resoluble se comporta exactamente como antes de este plan. NO es una
+         regresión y NO se "arregla" acá.
+
+    Kill-switch: apagado `ruteo_estricto_por_tracker()` (Plan 281 F7), devuelve
+    la columna cruda con el default de siempre — camino byte-idéntico al previo
+    a este plan para los cuatro consumidores. No se registra flag nueva.
+
+    NUNCA levanta y NUNCA devuelve cadena vacía.
+    """
+    bruto = getattr(ticket, "tracker_type", None)
+    columna = bruto.strip().lower() if isinstance(bruto, str) else ""
+
+    if not ruteo_estricto_por_tracker():
+        return columna or _DEFAULT_TRACKER_TYPE
+
+    if columna and columna != _DEFAULT_TRACKER_TYPE:
+        return columna
+
+    declarado = tracker_declarado_del_proyecto(
+        getattr(ticket, "stacky_project_name", None)
+    )
+    if declarado:
+        return declarado
+
+    return _DEFAULT_TRACKER_TYPE
+
+
 class ProjectContextError(RuntimeError):
     pass
 

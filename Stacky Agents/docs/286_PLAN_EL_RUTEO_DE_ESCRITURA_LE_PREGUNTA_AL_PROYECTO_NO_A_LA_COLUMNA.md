@@ -15,7 +15,7 @@
 | Fase | Estado | Evidencia real (output pegado) |
 |---|---|---|
 | F0 | **IMPLEMENTADA** | `test_plan286_columna_no_rutea.py` nace **`2 failed, 2 passed`** (4 collected), y las dos patas listan **exactamente** los 4 sitios. Ratchets: parity **12 passed**, meta **4 passed** |
-| F1 | pendiente | |
+| F1 | **IMPLEMENTADA** | Rojo previo real: `ImportError: cannot import name '_reset_memo_tracker_declarado'`. Después: **`14 passed`** (14 collected). En vivo: RIPLEY→`gitlab`, RSPACIFICO→`azure_devops`. Perf **`108 us/llamada`** (bar < 400, línea base sin memo 1.057) |
 | F2 | pendiente | |
 | F3 | pendiente | |
 | F4 | pendiente | |

@@ -1156,8 +1156,9 @@
       "log_pattern": "ADO client build failed.*no usa Azure DevOps",
       "log_guarded": true,
       "killed_by": "plan 282 F1",
-      "killed_commit": null,
+      "killed_commit": "3461d0ce",
       "date_resolved": "2026-08-01",
+      "note": "Plan 286 §2.3(d): la fila 57 de agent_html_publish (2026-08-01 20:24:43) es POSTERIOR al fix — la emitio un backend arrancado antes de 3461d0ce y nunca reiniciado. NO es una reaparicion. La linea base del KPI queda congelada en gate_plan282.K1_CORTE_HISTORICO.",
       "guard_test": "tests/test_plan282_publicacion_comentario.py",
       "self_test": {
         "matches": [
@@ -1165,6 +1166,27 @@
         ],
         "clean": [
           "INFO ado_publisher publish ok tracker=gitlab item=1115 comment_id=99"
+        ]
+      }
+    },
+    {
+      "id": "plan286-columna-tracker-contradice-al-proyecto",
+      "title": "Un ticket declara un tracker distinto del que declara su proyecto",
+      "class": "silent-wrong-destination",
+      "status": "guarded",
+      "log_pattern": "tracker efectivo: proyecto=\\S+ columna=\\S+ efectivo=\\S+ \\(la columna no manda",
+      "log_guarded": true,
+      "killed_by": "plan 286 F1-F4",
+      "killed_commit": null,
+      "date_resolved": null,
+      "guard_test": "tests/test_plan286_tracker_efectivo.py",
+      "note": "No es un error: el ruteo YA lo corrige (tracker_efectivo_de_ticket). Es la senal de que la columna `tickets.tracker_type` sigue naciendo con el default 'azure_devops' en proyectos que no son ADO (models.py:49). Si aparece seguido, el plan que corresponde es el de §7.3 (cambiar el default del esquema), no volver a parchear el ruteo.",
+      "self_test": {
+        "matches": [
+          "INFO stacky_agents.project_context tracker efectivo: proyecto=RIPLEY columna=azure_devops efectivo=gitlab (la columna no manda, Plan 286)"
+        ],
+        "clean": [
+          "INFO stacky_agents.project_context tracker efectivo: proyecto=RIPLEY columna=gitlab efectivo=gitlab"
         ]
       }
     },

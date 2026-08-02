@@ -21,7 +21,7 @@
 | F4 | **IMPLEMENTADA — hito del eje** | Rojo previo real: `#10` y `#12`, los dos `assert 'azure_devops' == 'gitlab'`. Después **`13 passed`**. **F0 pasa a `4 passed`: las DOS patas verdes.** 281 sitios sigue en **18**. Censo `getattr`-extendido **8 → 7**, sin `completion_sync::_resolve_sync_and_project`. El import de `api.tickets` NO creó la base (verificado: el archivo no existe) |
 | F5 | **IMPLEMENTADA** | `test_plan281_ratchet_ado_only.py` **`11 passed`**, `test_plan281_sitios_ado_only.py` **`18 passed`**, y el snippet imprime **`F5 OK`** (`scan_tracker_type_routing() == []` con la exclusión reducida a `project_context.py`). Efecto medido: cero, como predijo el plan |
 | F6 | **IMPLEMENTADA** | `test_plan286_columna_no_rutea.py` **`5 passed`**. BD viva con `mode=ro`: `total historico: 2`, `sobre el corte : 0`. Gate completo **contra una copia**: `"K1": 0`, los 6 KPI en meta, `RESULTADO: exit 0`, **`EXIT=0`** (antes: `no_medible` / `exit 5`) |
-| F7 | pendiente | |
+| F7 | **IMPLEMENTADA (con 1 desvío necesario, ver C13)** | `test_plan286_tracker_efectivo.py` **`16 passed`**, `test_plan286_columna_no_rutea.py` **`6 passed`**, y `test_error_fingerprints_catalog.py` **`3 failed, 5 passed`** — **idéntico** a antes de tocar el JSON |
 
 > **Corrección de baseline medida al implementar (§4.6).** `test_harness_ratchet_meta.py`
 > ya **no** está `1 failed, 3 passed`: da **`4 passed`**. El rojo de fábrica ajeno
@@ -82,6 +82,38 @@ ADO:
 
 Con eso el caso vuelve a probar lo que dice probar y deja de depender del bug. **No lo
 apliqué**: cambia un archivo de otro eje y esa es una decisión de alcance del operador.
+
+### C13 — El `log_pattern` que §5.F7 dicta matchea su PROPIO ejemplo `clean`
+
+El JSON literal de §5.F7 declara:
+
+```
+"log_pattern": "tracker efectivo: proyecto=\\S+ columna=\\S+ efectivo=\\S+"
+"clean":       ["INFO ... tracker efectivo: proyecto=RIPLEY columna=gitlab efectivo=gitlab"]
+```
+
+`columna=gitlab` satisface `columna=\S+`, así que **el patrón matchea la línea limpia**.
+Copiado tal cual, eso rompe dos cosas a la vez: el test 17 que el propio plan pide (*"y **no**
+matchea el `clean[0]`"*) y `test_error_fingerprints_catalog::test_self_test_coherente`
+(`assert not re.search(pat, sample)`), que habría sumado un **4.º** rojo a una suite cuyo
+criterio de F7 es conservar **`3 failed, 5 passed`**.
+
+**Desvío aplicado, mínimo y a favor de la intención:** el patrón se ancla en el marcador que
+el código realmente emite, que es justamente lo que distingue una divergencia real de una
+línea parecida:
+
+```
+"log_pattern": "tracker efectivo: proyecto=\\S+ columna=\\S+ efectivo=\\S+ \\(la columna no manda"
+```
+
+Matchea `matches[0]` y **no** matchea `clean[0]`. Verificado ejecutando: el catálogo quedó en
+`3 failed, 5 passed`, exactamente como antes de tocarlo.
+
+> Los 3 rojos del catálogo son **de fábrica y ajenos**: `PLAN239-OUTLET-EN-BLANCO` no tiene
+> `self_test` (rompe `test_campos_obligatorios` y `test_self_test_coherente`) y
+> `test_status_enum` no acepta `guarded` pese a que el catálogo lo usa. La huella nueva del
+> 286 **sí** trae `self_test`, así que no agrega rojos; su `status: "guarded"` cae en un
+> assert que ya venía fallando y no cambia el conteo.
 
 ---
 

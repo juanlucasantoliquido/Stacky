@@ -207,3 +207,35 @@ def test_el_gate_282_mide_de_verdad_y_respeta_el_corte():
     c.execute("INSERT INTO agent_html_publish VALUES (60,'failed',?, '2026-09-02 00:00:00')",
               (firma,))
     assert c.execute(sql, (gate.K1_CORTE_HISTORICO,)).fetchone()[0] == 1
+
+
+def test_la_huella_del_286_esta_en_el_catalogo():
+    """F7(b) — una huella que MIENTE es peor que una que falta.
+
+    `plan282-...` decia `killed_commit: null` y la BD viva la desmentia: la fila
+    57 tiene esa firma exacta 28 minutos DESPUES del commit del fix. Quien viera
+    esa fila reabriria un bug cerrado.
+    """
+    import json
+    import re
+    from pathlib import Path
+
+    ruta = (Path(__file__).resolve().parents[2]
+            / "docs" / "sistema" / "error_fingerprints.json")
+    catalogo = json.loads(ruta.read_text(encoding="utf-8"))
+    por_id = {f["id"]: f for f in catalogo["fingerprints"]}
+
+    # La huella NUEVA del 286, la que va a agarrar al tercer ticket mentiroso.
+    fp = por_id["plan286-columna-tracker-contradice-al-proyecto"]
+    assert re.search(fp["log_pattern"], fp["self_test"]["matches"][0]), (
+        "el patron no reconoce su propio ejemplo de match"
+    )
+    assert not re.search(fp["log_pattern"], fp["self_test"]["clean"][0]), (
+        "el patron matchea la linea LIMPIA: marcaria como divergencia un ticket "
+        "cuya columna coincide con su proyecto"
+    )
+
+    # La huella del 282 ya no miente sobre cuando murio el defecto.
+    assert por_id[
+        "plan282-comentario-no-llega-al-tracker-gitlab"
+    ]["killed_commit"] == "3461d0ce"

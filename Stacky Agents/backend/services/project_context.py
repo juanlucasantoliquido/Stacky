@@ -111,6 +111,16 @@ def _reset_memo_tracker_declarado() -> None:
     _TRACKER_DECLARADO_MEMO.clear()
 
 
+# Plan 286 F7 — (proyecto, columna, declarado) ya reportados. Acotado por
+# |proyectos| x |valores de tracker|: en esta base, 3 x 3.
+_DIVERGENCIAS_VISTAS: set[tuple[str, str, str]] = set()
+
+
+def _reset_divergencias_vistas() -> None:
+    """Plan 286 F7 — vacia el dedupe del log. Uso: tests."""
+    _DIVERGENCIAS_VISTAS.clear()
+
+
 def tracker_declarado_del_proyecto(project_name: str | None) -> str | None:
     """Plan 286 — Tipo de tracker DECLARADO por el config del proyecto, o None.
 
@@ -197,10 +207,23 @@ def tracker_efectivo_de_ticket(ticket) -> str:
     if columna and columna != _DEFAULT_TRACKER_TYPE:
         return columna
 
-    declarado = tracker_declarado_del_proyecto(
-        getattr(ticket, "stacky_project_name", None)
-    )
+    raw_proyecto = (getattr(ticket, "stacky_project_name", None) or "").strip()
+    declarado = tracker_declarado_del_proyecto(raw_proyecto)
     if declarado:
+        # Plan 286 F7 — la columna decia una cosa y el proyecto otra. Se rutea
+        # bien (arriba) y ademas se DECLARA: una vez por (proyecto, columna,
+        # declarado) por proceso, para que un backlog de 200 tickets no vomite
+        # 200 lineas iguales. INFO, no WARNING: no es un error, es un dato que
+        # hoy solo se consigue abriendo la base a mano.
+        if columna and columna != declarado:
+            clave = (raw_proyecto, columna, declarado)
+            if clave not in _DIVERGENCIAS_VISTAS:
+                _DIVERGENCIAS_VISTAS.add(clave)
+                logger.info(
+                    "tracker efectivo: proyecto=%s columna=%s efectivo=%s "
+                    "(la columna no manda, Plan 286)",
+                    raw_proyecto, columna, declarado,
+                )
         return declarado
 
     return _DEFAULT_TRACKER_TYPE

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from services.project_context import (
+    _reset_divergencias_vistas,
     _reset_memo_tracker_declarado,
     tracker_efectivo_de_ticket,
 )
@@ -19,11 +20,13 @@ from services.project_context import (
 
 @pytest.fixture(autouse=True)
 def _memo_limpio():
-    """El memo de F1 es modulo-level: sin esto, el orden de los tests decide el
-    resultado y aparecen verdes que no significan nada."""
+    """El memo de F1 y el dedupe de F7 son modulo-level: sin esto, el orden de
+    los tests decide el resultado y aparecen verdes que no significan nada."""
     _reset_memo_tracker_declarado()
+    _reset_divergencias_vistas()
     yield
     _reset_memo_tracker_declarado()
+    _reset_divergencias_vistas()
 
 
 def _ticket(tracker_type=None, proyecto=None):
@@ -209,3 +212,40 @@ def test_un_stat_que_explota_cae_al_camino_sin_memo(monkeypatch):
     assert tracker_efectivo_de_ticket(t) == "gitlab"
     assert tracker_efectivo_de_ticket(t) == "gitlab"
     assert len(llamadas) == 2, "sin firma no puede haber memo"
+
+
+# ── F7 — la contradiccion deja RASTRO en vez de corregirse en silencio ───────
+
+def test_la_divergencia_se_loguea_una_sola_vez(monkeypatch, caplog):
+    """Deduplicado por (proyecto, columna, declarado) por proceso: un backlog de
+    200 tickets no puede vomitar 200 lineas iguales."""
+    import logging
+
+    _con_config(monkeypatch, _MAPA)
+    t = _ticket("azure_devops", "RIPLEY")
+    with caplog.at_level(logging.INFO, logger="stacky_agents.project_context"):
+        for _ in range(10):
+            assert tracker_efectivo_de_ticket(t) == "gitlab"
+
+    lineas = [r for r in caplog.records if "la columna no manda" in r.getMessage()]
+    assert len(lineas) == 1, f"esperaba 1 linea deduplicada, hubo {len(lineas)}"
+    msg = lineas[0].getMessage()
+    assert "proyecto=RIPLEY" in msg
+    assert "columna=azure_devops" in msg
+    assert "efectivo=gitlab" in msg
+
+
+def test_sin_divergencia_no_se_loguea_nada(monkeypatch, caplog):
+    """Guarda la PRESENCIA del test anterior: un assert de 'no loguea' solo
+    pasaria igual si el log directamente no existiera."""
+    import logging
+
+    _con_config(monkeypatch, _MAPA)
+    with caplog.at_level(logging.INFO, logger="stacky_agents.project_context"):
+        # La columna coincide con el proyecto: no hay nada que declarar.
+        assert tracker_efectivo_de_ticket(_ticket("gitlab", "RIPLEY")) == "gitlab"
+        assert tracker_efectivo_de_ticket(
+            _ticket("azure_devops", "RSPACIFICO")) == "azure_devops"
+
+    lineas = [r for r in caplog.records if "la columna no manda" in r.getMessage()]
+    assert lineas == [], f"logueo una divergencia que no existe: {lineas}"

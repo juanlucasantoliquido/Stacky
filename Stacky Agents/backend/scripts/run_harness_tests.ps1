@@ -992,7 +992,8 @@ $HarnessTestFiles = @(
   "tests/test_plan290_self_review_no_regresion.py",
   "tests/test_plan290_sitios_clasificados.py",
   "tests/test_plan290_gitlab_switch_ui.py",
-  "tests/test_plan290_base_url_normalizada.py"
+  "tests/test_plan290_base_url_normalizada.py",
+  "tests/test_plan290_defaults_no_mienten.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

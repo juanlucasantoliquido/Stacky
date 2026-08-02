@@ -2208,11 +2208,13 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         key="STACKY_TRACE_PROMPT_TEXT_ENABLED",
         type="bool",
         default=True,  # promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)
-        label="Texto del prompt en trazabilidad (C0/C1, privacidad OFF)",
+        label="Texto del prompt en trazabilidad (C0/C1, privacidad: nace ON)",
         description=(
             "Plan 38 C0/C1 — Si ON, incluye el texto completo del prompt (JSON de "
-            "context_blocks) en la metadata. Privacidad: default OFF. Solo activar "
-            "en ambientes controlados donde el contenido del prompt no es sensible."
+            "context_blocks) en la metadata. Default ON. Solo activar "
+            "en ambientes controlados donde el contenido del prompt no es sensible. "
+            "Hoy nace ON: el texto completo del prompt SÍ queda en la metadata de "
+            "cada ejecución. Apagala si el contenido de tus prompts es sensible."
         ),
         group="global",
     ),
@@ -2641,7 +2643,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 64 — Si ON, inyecta solo los top-K procesos más relevantes al ticket "
             "(TF-IDF puro) en lugar del catálogo completo. "
-            "Reduce ruido de contexto y mejora el grounding. Default OFF."
+            "Reduce ruido de contexto y mejora el grounding. Default ON."
         ),
         group="global",
         pair="STACKY_RAG_CATALOG_TOP_K",
@@ -2658,7 +2660,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "código) y lo expone en GET /api/docs/graph junto a un diagnóstico "
             "de salud documental. Habilita la pestaña 'Cobertura' (y en Plan "
             "111 la pestaña 'Grafo') de la página Docs. No escribe ni modifica "
-            "ningún documento. Default OFF."
+            "ningún documento. Default ON."
         ),
         group="global",
         env_only=False,
@@ -2686,7 +2688,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "expande 1 salto por los links del grafo documental (plan 109) para "
             "traer notas vecinas enlazadas y prioriza las notas muy referenciadas "
             "(hubs). Mejora el recall cuando la respuesta vive en una nota linkeada "
-            "que no contiene la palabra buscada. Default OFF = búsqueda byte-idéntica "
+            "que no contiene la palabra buscada. Default ON = búsqueda byte-idéntica "
             "a hoy. Si el grafo 109 no está disponible, degrada a búsqueda léxica pura."
         ),
         group="global",
@@ -2748,7 +2750,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "formato / incompleta / sana), decide qué trabajo hace falta y deja la doc "
             "creada/corregida en formato Obsidian en una rama git dedicada y revertible "
             "(nunca en la rama de trabajo, nunca push). El operador la revisa como diff y "
-            "la conserva o descarta. No toca docs/sistema/. Default OFF."
+            "la conserva o descarta. No toca docs/sistema/. Default ON."
         ),
         group="global",
         env_only=False,
@@ -2812,7 +2814,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "última edición de la nota, y muestra un chip de advertencia en la nota con "
             "un botón 'Proponer actualización' que encola el Documentador (Plan 113) en "
             "modo ACTUALIZAR acotado a esa sola nota. Señal 100% git, sin LLM en la "
-            "detección; degrada a 'sin staleness' si no hay git. Default OFF."
+            "detección; degrada a 'sin staleness' si no hay git. Default ON."
         ),
         group="global",
         env_only=False,
@@ -3147,7 +3149,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 67 — Si ON, inyecta un bloque 'process-discipline' que decide "
             "REUTILIZAR un proceso existente del catálogo vs CREAR uno nuevo, según "
             "instrucción explícita del ticket y similitud con el catálogo. "
-            "Default OFF = enrich_blocks byte-idéntico al Plan 64."
+            "Default ON = enrich_blocks byte-idéntico al Plan 64."
         ),
         group="contexto_memoria",
         env_only=False,  # editable por UI (Plan 62/63 HarnessFlagsPanel); NO es kill-switch interno
@@ -3187,7 +3189,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 42 F5 — Si ON, habilita GET /api/projects/{project}/autoprofile que "
             "deriva un perfil de proyecto de forma determinista desde los docs locales "
-            "(sin LLM, sin inventar). Default OFF para no exponer un feature incompleto."
+            "(sin LLM, sin inventar). Default ON para no exponer un feature incompleto."
         ),
         env_only=True,  # leído via os.getenv; no es atributo de Config
         group="agents",
@@ -3235,7 +3237,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Nota del operador → memoria",
         description=(
             "Plan 47 — Si ON, la nota humana de una run revisada se guarda como "
-            "memoria operator_note reutilizable. Default OFF."
+            "memoria operator_note reutilizable. Default ON."
         ),
         group="global",
         env_only=True,
@@ -3259,7 +3261,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Pre-vuelo de Intención (41)",
         description=(
             "Plan 41 — Si ON, antes del run genera un Brief de Intención que el "
-            "operador aprueba/corrige. Default OFF (byte-idéntico al actual)."
+            "operador aprueba/corrige. Default ON (byte-idéntico al actual)."
         ),
         group="preflight",
     ),
@@ -3292,7 +3294,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 47 — Si ON, cuando el agente narra en vez de devolver el HTML "
             "de la épica, el backend rescata el artefacto que el agente ya escribió "
-            "en Agentes/outputs y lo publica. Default OFF."
+            "en Agentes/outputs y lo publica. Default ON."
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en autopublish_epic_from_run
@@ -3320,7 +3322,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 48+54 — Si ON, las notas de rechazo del operador (memoria "
             "operator_note) se inyectan como anti-patrones imperativos en el "
             "próximo run del mismo proyecto, en los 3 runtimes "
-            "(copilot/claude_code_cli/codex). Default OFF."
+            "(copilot/claude_code_cli/codex). Default ON."
         ),
         group="global",
         default=True,  # Grupo B — paridad 3 runtimes; tokens marginales; solo actúa si hay rechazos guardados.
@@ -3359,7 +3361,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 50 F3 — Si ON, warning NO bloqueante cuando la épica cita "
             "procesos que no existen en el process_catalog del proyecto. "
-            "Default OFF (evita falsos positivos hasta catálogo curado)."
+            "Default ON (evita falsos positivos hasta catálogo curado)."
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en el flujo de warnings de tickets
@@ -3416,7 +3418,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 51 F3 — Si ON (requiere STACKY_EPIC_GATE_ENABLED), un proceso "
             "citado que no exista en el process_catalog del cliente bloquea el "
-            "autopublish. Opt-in dentro de opt-in. Default OFF."
+            "autopublish. Opt-in dentro de opt-in. Default ON."
         ),
         group="global",
         env_only=True,  # se lee con os.getenv en api/tickets
@@ -3431,7 +3433,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 61 — Si ON, clasifica defectos del pending-task.json antes de crear "
             "la Task en ADO y adjunta el veredicto (decision/defects/blocking) a la "
-            "respuesta. Default OFF."
+            "respuesta. Default ON."
         ),
         group="global",
         env_only=True,
@@ -3444,7 +3446,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 61 — Requiere STACKY_TASK_GATE_ENABLED. Si ON, un defecto de "
             "severidad needs_review impide la creación en ADO (devuelve 400 "
-            "TASK_GATE_BLOCKED). Default OFF."
+            "TASK_GATE_BLOCKED). Default ON."
         ),
         group="global",
         env_only=True,
@@ -3460,7 +3462,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 79 — Stacky aplica el estado-en-progreso (al iniciar) y el "
             "estado-final (al completar) desde la config del proyecto "
             "(tracker_state_machine por agente), ignorando el estado que "
-            "proponga el agente. Default OFF."
+            "proponga el agente. Default ON."
         ),
         group="global",
         env_only=False,
@@ -3572,7 +3574,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 53 — Si ON, ajusta automáticamente modelo y effort según el "
             "confidence del grounding de la épica: bajo confidence → Opus/max; "
             "alto confidence → Sonnet/low. El override manual del operador "
-            "(model/effort en el body) siempre gana. Default OFF."
+            "(model/effort en el body) siempre gana. Default ON."
         ),
         group="agents",
     ),
@@ -3597,7 +3599,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Portafolio N épicas desde un brief (Plan 55, beta)",
         description=(
             "Plan 55 — Si ON, habilita la generación de N épicas en paralelo "
-            "desde un único brief (feature beta, default OFF). "
+            "desde un único brief (feature beta, default ON). "
             "OFF = endpoint devuelve 404 feature_disabled."
         ),
         group="agents",
@@ -3640,7 +3642,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         description=(
             "Plan 59 — Si ON, tras aprobar una épica el operador puede previsualizar "
             "y crear los hijos (Features/Tasks) colgando del Epic. "
-            "Default OFF = solo el Epic, sin desglose hijo."
+            "Default ON = solo el Epic, sin desglose hijo."
         ),
         group="global",
         env_only=True,  # leído con os.getenv en api/tickets en call time
@@ -3676,7 +3678,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         label="Aprender de ediciones en ADO (plan 60)",
         description=(
             "Plan 60 — Si ON, Stacky lee de vuelta las correcciones humanas del WI publicado "
-            "y las materializa como lección en el corpus (plan 54). Pasivo, default OFF."
+            "y las materializa como lección en el corpus (plan 54). Pasivo, default ON."
         ),
         group="global",
         env_only=True,
@@ -4614,7 +4616,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 74 — Habilita la migración segura e idempotente de work items ADO→GitLab. "
             "Expone POST /api/migrator/plan (dry-run) y POST /api/migrator/execute (HITL confirm=True). "
             "La migración es read-only sobre ADO; el dry-run es obligatorio antes de ejecutar. "
-            "Default OFF. Con OFF, los endpoints retornan 503."
+            "Default ON. Con OFF, los endpoints retornan 503."
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'migrador_ado_gitlab')
@@ -4759,7 +4761,7 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "Plan 75 — Si ON, habilita la composición de deep links GitLab (issue, MR, "
             "commit, épica) en el backend. Con OFF, item_url/mr_url/commit_url/epic_url "
             "del provider GitLab devuelven None y el frontend muestra el ID como texto plano. "
-            "Default OFF. Activa cuando el proyecto use GitLab y quieras links clickeables."
+            "Default ON. Activa cuando el proyecto use GitLab y quieras links clickeables."
         ),
         group="global",
         env_only=False,  # editable por UI (categoría 'gitlab_deep_links')

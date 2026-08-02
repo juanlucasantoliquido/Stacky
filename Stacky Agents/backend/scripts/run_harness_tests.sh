@@ -1077,6 +1077,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan290_sitios_clasificados.py
   tests/test_plan290_gitlab_switch_ui.py
   tests/test_plan290_base_url_normalizada.py
+  tests/test_plan290_defaults_no_mienten.py
 )
 
 pass=0

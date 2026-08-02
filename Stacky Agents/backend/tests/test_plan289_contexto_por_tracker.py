@@ -377,3 +377,103 @@ def test_un_provider_sin_fetch_comments_se_declara_no_se_rompe(monkeypatch):
     comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1)
     assert comentarios == []
     assert stats["errors"][0].startswith("capability_missing:")
+
+
+# -- F5 - armador compartido --------------------------------------------------
+
+def test_el_armador_enmascara_un_token_de_gitlab():
+    from services.ado_context import construir_bloques_de_comentarios
+
+    comentarios = [{"author": "A", "date": "2026-01-01",
+                    "text": "el token es glpat-AbCdEf1234567890xyz, probalo",
+                    "is_html": False}]
+    bloques, n = construir_bloques_de_comentarios(comentarios, titulo="X")
+    assert n == 1
+    contenido = bloques[0]["content"]
+    assert "glpat-AbCdEf1234567890xyz" not in contenido
+    assert "<posible-secreto-omitido>" in contenido
+    assert "probalo" in contenido            # el resto del comentario sobrevive
+
+
+def test_el_armador_enmascara_tambien_en_el_camino_ADO():
+    """El endurecimiento es deliberado y vale para los dos trackers."""
+    from services.ado_context import construir_bloques_de_comentarios
+
+    comentarios = [{"author": "A", "date": "2026-01-01",
+                    "text": "<p>usa ghp_ABCDEFGHIJKLMNOPQRSTUV para clonar</p>"}]  # sin is_html
+    bloques, _ = construir_bloques_de_comentarios(comentarios, titulo="Comentarios ADO del ticket")
+    assert "ghp_ABCDEFGHIJKLMNOPQRSTUV" not in bloques[0]["content"]
+
+
+def test_markdown_de_gitlab_no_pasa_por_el_limpiador_de_html():
+    """is_html=False: `List<int>` no se puede perder. Es contexto tecnico."""
+    from services.ado_context import construir_bloques_de_comentarios
+
+    comentarios = [{"author": "A", "date": "2026-01-01",
+                    "text": "revisar el metodo Get<List<int>>() del repositorio", "is_html": False}]
+    bloques, _ = construir_bloques_de_comentarios(comentarios, titulo="X")
+    assert "List<int>" in bloques[0]["content"]
+
+
+def test_html_de_ado_sigue_pasando_por_el_limpiador():
+    """Sin is_html (camino ADO): el HTML se limpia, byte-identico a hoy."""
+    from services.ado_context import construir_bloques_de_comentarios
+
+    comentarios = [{"author": "A", "date": "2026-01-01", "text": "<p>hola</p><p>chau</p>"}]
+    bloques, _ = construir_bloques_de_comentarios(comentarios, titulo="X")
+    assert "<p>" not in bloques[0]["content"]
+    assert "hola" in bloques[0]["content"] and "chau" in bloques[0]["content"]
+
+
+def test_el_titulo_es_el_que_se_le_pasa_y_el_id_NO_cambia():
+    from services.ado_context import construir_bloques_de_comentarios
+
+    bloques, _ = construir_bloques_de_comentarios(
+        [{"author": "A", "date": "", "text": "x", "is_html": False}],
+        titulo="Comentarios del ticket (GitLab)")
+    assert bloques[0]["id"] == "ado-comments"        # NO se renombra: ver Decision 1
+    assert bloques[0]["title"] == "Comentarios del ticket (GitLab)"
+
+
+def test_comentario_que_queda_vacio_tras_limpiar_no_produce_linea():
+    from services.ado_context import construir_bloques_de_comentarios
+
+    bloques, n = construir_bloques_de_comentarios(
+        [{"author": "A", "date": "", "text": "<p></p>"}], titulo="X")
+    assert bloques == [] and n == 0
+
+
+def test_sin_comentarios_no_hay_bloque():
+    from services.ado_context import construir_bloques_de_comentarios
+
+    assert construir_bloques_de_comentarios([], titulo="X") == ([], 0)
+
+
+# -- [ADICION ARQUITECTO] 2 - el bloque declara su procedencia y su recorte ----
+
+def test_el_bloque_lleva_sello_de_procedencia_y_de_recorte():
+    """El sello es la UNICA declaracion que el agente ve aunque la metadata se pierda.
+
+    Con recorte: dice cuantos de cuantos. Sin recorte: dice cuantos y el sentido.
+    """
+    from services.ado_context import construir_bloques_de_comentarios
+
+    coms = [{"author": "A", "date": "2026-01-0%d" % (i + 1), "text": f"c{i}", "is_html": False}
+            for i in range(3)]
+    # El literal es EXACTAMENTE el que produce _bloques_por_proveedor en F6:
+    #   f"GitLab · {n} de {total} comentarios (los mas recientes)" + ", del mas antiguo
+    #   al mas reciente"
+    # (el parentesis de "los mas recientes" cierra ANTES de la coma; el de afuera lo
+    # pone el armador). Ver §11.2 del plan, que trae la cadena renderizada completa.
+    bloques, _ = construir_bloques_de_comentarios(
+        coms, titulo="Comentarios del ticket (GitLab)",
+        sello="GitLab · 3 de 200 comentarios (los mas recientes), del mas antiguo al mas reciente",
+    )
+    contenido = bloques[0]["content"]
+    assert contenido.startswith("_(GitLab · 3 de 200 comentarios")
+    assert "del mas antiguo al mas reciente)_" in contenido
+    assert "c0" in contenido and "c2" in contenido
+    # SIN sello (camino ADO por defecto): el contenido es BYTE-IDENTICO al de hoy.
+    sin, _ = construir_bloques_de_comentarios(coms, titulo="Comentarios ADO del ticket")
+    assert not sin[0]["content"].startswith("_(")
+    assert sin[0]["content"].startswith("**A** (2026-01-01):")

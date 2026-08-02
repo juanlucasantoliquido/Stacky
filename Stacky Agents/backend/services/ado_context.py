@@ -182,6 +182,86 @@ def _format_size(size: int) -> str:
     return f"{size / (1024 * 1024):.1f} MB"
 
 
+def construir_bloques_de_comentarios(
+    raw_comments: list[dict], *, titulo: str, sello: str | None = None,
+) -> tuple[list[dict], int]:
+    """Plan 289 F5 — Arma los bloques de comentarios. UNICO armador, los 2 trackers.
+
+    Entrada: comentarios en forma canonica {author, date, text[, is_html]}.
+      - `is_html` AUSENTE significa True (camino ADO: byte-identico a antes del plan).
+      - `is_html=False` (camino GitLab, Markdown) SALTEA _html_to_text: pasarle
+        Markdown al parser de HTML borra fragmentos como `List<int>`.
+
+    `sello` (Plan 289 v2, [ADICION ARQUITECTO] 2) es una linea de procedencia que se
+    antepone al contenido: de que tracker vienen, cuantos de cuantos son y en que
+    sentido estan ordenados. AUSENTE por defecto => el camino ADO queda BYTE-IDENTICO.
+    Existe porque `enrich` filtra las claves de `stats` por whitelist (§4.10): el
+    sello es la unica declaracion que sobrevive hasta el prompt del agente pase lo
+    que pase con la metadata.
+
+    Devuelve (bloques, cantidad_de_comentarios_renderizados). Los bloques salen en el
+    mismo orden que antes: ado-blocker (si hay) primero, ado-comments despues.
+
+    Plan 289 F5 — todo el texto pasa por mask_token_values ANTES de entrar al bloque.
+    Es un endurecimiento DELIBERADO que tambien alcanza a Azure DevOps.
+    """
+    from services.secret_masking import mask_token_values
+
+    if not raw_comments:
+        return [], 0
+
+    def _texto(c: dict) -> str:
+        crudo = c.get("text") or ""
+        limpio = _html_to_text(crudo) if c.get("is_html", True) else crudo.strip()
+        return mask_token_values(limpio)
+
+    bloques: list[dict] = []
+
+    # ── ado-blocker (Plan 133 F3) — se detecta ANTES para que quede primero.
+    #    CERO fetch extra: reusa la misma lista.
+    try:
+        from config import config as _config
+
+        if getattr(_config, "STACKY_ADO_BLOCKER_BLOCK_ENABLED", False):
+            from services.business_preflight import BLOCKER_MARKER  # lazy: evita ciclos
+
+            con_marca = [c for c in raw_comments if BLOCKER_MARKER in _texto(c)]
+            if con_marca:
+                bloqueante = max(con_marca, key=lambda c: (c.get("date") or ""))
+                bloques.append({
+                    "kind": "text",
+                    "id": "ado-blocker",
+                    "title": "🚫 Bloqueante técnico detectado (server-side)",
+                    "content": (
+                        f"Autor: {bloqueante.get('author', '?')}\n"
+                        f"Fecha: {bloqueante.get('date', '')}\n\n"
+                        f"{_texto(bloqueante)}"
+                    ),
+                    "priority": "high",
+                })
+    except Exception as e:  # noqa: BLE001 — best-effort, nunca bloquea el enrich
+        logger.warning("ado_context — detección de ado-blocker falló: %s", e)
+
+    lineas: list[str] = []
+    for c in raw_comments:
+        texto = _texto(c)
+        if not texto:
+            continue
+        lineas.append(f"**{c.get('author', '?')}** ({c.get('date', '')}):\n{texto}")
+
+    if lineas:
+        cuerpo = "\n\n---\n\n".join(lineas)
+        if sello:                                   # v2, [ADICION ARQUITECTO] 2
+            cuerpo = f"_({sello})_\n\n{cuerpo}"
+        bloques.append({
+            "kind": "text",
+            "id": "ado-comments",
+            "title": titulo,
+            "content": cuerpo,
+        })
+    return bloques, len(lineas)
+
+
 def build_ado_context_blocks(
     ado_id: int,
     *,
@@ -227,52 +307,11 @@ def build_ado_context_blocks(
     # ── Comentarios ──────────────────────────────────────────────────────────
     try:
         raw_comments = client.fetch_comments(ado_id, top=30)
-        if raw_comments:
-            # Plan 133 F3 — detectar el comentario bloqueante ANTES de armar
-            # ado-comments, para que ado-blocker quede ANTES en la lista (orden
-            # de presentación). CERO fetch extra: reusa raw_comments ya en scope.
-            try:
-                from config import config as _config
-
-                if getattr(_config, "STACKY_ADO_BLOCKER_BLOCK_ENABLED", False):
-                    from services.business_preflight import BLOCKER_MARKER  # lazy: evita ciclos
-
-                    with_marker = [
-                        c for c in raw_comments
-                        if BLOCKER_MARKER in _html_to_text(c.get("text") or "")
-                    ]
-                    if with_marker:
-                        blocker_comment = max(with_marker, key=lambda c: (c.get("date") or ""))
-                        blocks.append({
-                            "kind": "text",
-                            "id": "ado-blocker",
-                            "title": "🚫 Bloqueante técnico detectado (server-side)",
-                            "content": (
-                                f"Autor: {blocker_comment.get('author', '?')}\n"
-                                f"Fecha: {blocker_comment.get('date', '')}\n\n"
-                                f"{_html_to_text(blocker_comment.get('text') or '')}"
-                            ),
-                            "priority": "high",
-                        })
-            except Exception as e:  # noqa: BLE001 — best-effort, nunca bloquea el enrich
-                logger.warning("ado_context — detección de ado-blocker falló: %s", e)
-
-            lines: list[str] = []
-            for c in raw_comments:
-                text = _html_to_text(c.get("text") or "")
-                if not text:
-                    continue
-                author = c.get("author", "?")
-                date = c.get("date", "")
-                lines.append(f"**{author}** ({date}):\n{text}")
-            if lines:
-                stats["comments_count"] = len(lines)
-                blocks.append({
-                    "kind": "text",
-                    "id": "ado-comments",
-                    "title": "Comentarios ADO del ticket",
-                    "content": "\n\n---\n\n".join(lines),
-                })
+        nuevos, cantidad = construir_bloques_de_comentarios(
+            raw_comments, titulo="Comentarios ADO del ticket",
+        )
+        blocks.extend(nuevos)
+        stats["comments_count"] = cantidad
     except Exception as e:
         logger.warning("ado_context — fetch_comments(%s) falló: %s", ado_id, e)
         stats["errors"].append(f"fetch_comments_failed: {e}")

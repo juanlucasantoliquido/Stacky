@@ -463,6 +463,7 @@ $HarnessTestFiles = @(
   "tests/test_incident_dev_autocommit.py"
   # Plan 291 - el auto-PR avisa si el arreglo trae un secreto
   "tests/test_plan291_autocommit_redaccion.py"
+  "tests/test_plan291_guardia_repo.py"
   # ===== Plan 154 F1 - reclasificacion de tests sin gatear (verdes aislados) =====
   # Plan 102 - Publicar en un paso
   "tests/test_plan102_one_click_flag.py"

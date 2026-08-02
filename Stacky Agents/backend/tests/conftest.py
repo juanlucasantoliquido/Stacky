@@ -24,14 +24,57 @@ import pytest
 
 
 _REAL_CONNECT = _socket.socket.connect
+_REAL_GETADDRINFO = _socket.getaddrinfo
 _LOOPBACK_HOSTS = ("127.0.0.1", "::1", "localhost")
+
+
+def _hosts_locales() -> frozenset[str]:
+    """Nombres que resuelven a esta misma máquina. Se calculan UNA vez, con el
+    getaddrinfo real, antes de instalar el guard."""
+    nombres = set()
+    for fn in (_socket.gethostname, _socket.getfqdn):
+        try:
+            v = fn()
+        except Exception:  # noqa: BLE001 — best-effort
+            continue
+        if v:
+            nombres.add(str(v).strip().lower().rstrip("."))
+    return frozenset(nombres)
+
+
+_HOSTS_LOCALES = _hosts_locales()
+
+
+def _es_destino_local(host) -> bool:
+    """True para loopback, bind sin host y el nombre de esta máquina."""
+    if host is None:
+        return True                       # getaddrinfo(None, port) = bind pasivo
+    if isinstance(host, bytes):
+        host = host.decode("utf-8", "replace")
+    h = str(host).strip().lower().rstrip(".")
+    if not h:
+        return True
+    if h in _LOOPBACK_HOSTS or h in _HOSTS_LOCALES:
+        return True
+    return h.startswith("127.") or h in ("0.0.0.0", "::", "::1")
 
 
 @pytest.fixture(autouse=True)
 def _no_network_egress(monkeypatch):
-    """Plan 154 F5.i — bajo STACKY_TEST_MODE, todo connect() saliente
-    no-loopback falla con mensaje accionable. Un test que necesite red real
-    no existe en este repo por diseño: mockear el cliente HTTP."""
+    """Plan 154 F5.i — bajo STACKY_TEST_MODE, todo egress no-loopback falla con
+    mensaje accionable. Un test que necesite red real no existe en este repo por
+    diseño: mockear el cliente HTTP.
+
+    Plan 291 [ADICIÓN ARQUITECTO 3] — el guard enganchaba SOLO `socket.connect`,
+    y por ahí se escapaba lo que muere ANTES, en la resolución DNS. Medido el
+    2026-08-02: `tests/test_plan218_tracker_contract.py::[gitlab]` emite un
+    request HTTPS real y revienta en `getaddrinfo` contra `gl.test`, o sea que
+    `connect()` nunca se llega a ejecutar y el guard ni se entera.
+
+    Ahora se enganchan LOS DOS, no se muda uno por el otro: `getaddrinfo` ataja
+    el caso por nombre (que es el 99 % del egress real) y `connect` sigue
+    atajando el destino por IP literal, donde no hay resolución que interceptar.
+    """
     if os.environ.get("STACKY_TEST_MODE", "").strip().lower() not in ("1", "true", "yes"):
         yield
         return
@@ -49,7 +92,16 @@ def _no_network_egress(monkeypatch):
             "Mockea el cliente HTTP (requests/urllib) o usa loopback."
         )
 
+    def _guarded_getaddrinfo(host, port, *args, **kwargs):
+        if _es_destino_local(host):
+            return _REAL_GETADDRINFO(host, port, *args, **kwargs)
+        raise RuntimeError(
+            f"[plan154 guard-red] resolución DNS bloqueada en tests: host {host!r} "
+            f"(puerto {port!r}). Mockea el cliente HTTP (requests/urllib) o usa loopback."
+        )
+
     monkeypatch.setattr(_socket.socket, "connect", _guarded_connect)
+    monkeypatch.setattr(_socket, "getaddrinfo", _guarded_getaddrinfo)
     yield
 
 

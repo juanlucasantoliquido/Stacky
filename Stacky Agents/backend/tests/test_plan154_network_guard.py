@@ -23,6 +23,31 @@ def test_guard_bloquea_egress_no_loopback():
     assert "guard-red" in str(ei.value)
 
 
+def test_guard_bloquea_la_resolucion_dns_no_loopback():
+    """Plan 291 [ADICIÓN ARQUITECTO 3] — el agujero por donde se escapaba.
+
+    Un host inexistente muere en `getaddrinfo` ANTES de llegar a `connect()`,
+    así que el guard original (que solo enganchaba `connect`) ni se enteraba:
+    el request salía de verdad a la red y fallaba con `NameResolutionError`.
+    Medido el 2026-08-02 en `tests/test_plan218_tracker_contract.py::[gitlab]`.
+
+    Ahora el guard corta en la resolución y lo dice con su propio mensaje.
+    """
+    with pytest.raises(RuntimeError) as ei:
+        socket.getaddrinfo("gl.test", 443)
+    assert "guard-red" in str(ei.value)
+    assert "gl.test" in str(ei.value)
+
+
+def test_guard_permite_resolver_loopback_y_la_maquina_local():
+    """MITAD DE CONTRASTE del test de arriba: si el guard bloqueara TODO,
+    aquel pasaría igual y no probaría nada. Esto guarda la PRESENCIA de lo que
+    tiene que seguir funcionando."""
+    assert socket.getaddrinfo("localhost", 0)
+    assert socket.getaddrinfo("127.0.0.1", 0)
+    assert socket.getaddrinfo(socket.gethostname(), 0)
+
+
 def test_guard_permite_loopback():
     """Conectar a un listener local efimero en 127.0.0.1 NO levanta."""
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

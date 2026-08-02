@@ -28,6 +28,7 @@ Cada archivo cubre un área. Abrí solo lo que necesites; no hace falta leer tod
 | [12-devops.md](12-devops.md) | Subsistema DevOps: pipelines GitLab/ADO, servidores, migrador, consola remota, doctores (planes 72-116). |
 | [13-docs-rag-grafo.md](13-docs-rag-grafo.md) | Documentación/RAG/grafo documental: `/api/docs`, `/api/docs-rag`, doc_graph, retrieval TF-IDF (planes 109-115/137). |
 | [14-db-compare.md](14-db-compare.md) | Comparador de BD entre ambientes: diff de esquema/datos, scripts pareados (planes 122-126). |
+| [15-degradacion-declarada.md](15-degradacion-declarada.md) | `metadata["capability_degraded"]`: qué capacidades saltea Stacky en un tracker no-ADO, quién las escribe, los 6 sitios que no declaran y el KPI K1 (plan 290). |
 
 ## Invariantes globales del sistema
 1. **Selector de runtime sin fallback silencioso**: si elegís `codex_cli` o `claude_code_cli`, un error del runner es error real; NUNCA cae a `github_copilot`. [V: agent_runner.py:273-282,347-355]

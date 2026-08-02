@@ -4,13 +4,15 @@
 **Autor:** StackyArchitectaUltraEficientCode. **Serie:** continúa 286 · 289 · 290 · 291 · 292.
 **Juez v2: subagente independiente, misma corrida, contexto limpio.**
 
-> **VEREDICTO (v1): RECHAZADO.** Criterio binario aplicado: **≥ 1 hallazgo BLOQUEANTE ⇒ RECHAZADO**. Se encontraron **9** bloqueantes y **9** importantes (**18** hallazgos). Los cuatro decisivos, todos **medidos ejecutando**, no leídos:
+> **VEREDICTO (v1): RECHAZADO.** Criterio binario aplicado: **≥ 1 hallazgo BLOQUEANTE ⇒ RECHAZADO**. Se encontraron **10** bloqueantes y **9** importantes (**19** hallazgos). Los cuatro decisivos, todos **medidos ejecutando**, no leídos:
 > 1. **C1** — `test_plan218_capability_matrix.py::test_full_y_partial_exigen_evidencia` exige evidencia `archivo.py:DÍGITOS` (`_EVIDENCE_RE = ^[\w/\.]+\.py:\d+$`) para **todo** `full`/`partial`. F2 y F4 convierten **8** entradas a `archivo:símbolo` ⇒ el test rompe con cada una. Y **ya está ROJO** hoy (`2 failed, 8 passed`) por la deuda que el 292 dejó en `tracker.sync.full`. El v1 declaraba ese archivo **verde con 10 passed** y lo usaba como gate de arranque: **el plan se auto-bloqueaba**.
 > 2. **C2** — `_CATEGORY_KEYS["global"]` **no existe** (hay 20 categorías, ninguna se llama así; la del 292 vive en `paridad_proveedores`). El guardián 3 de F10 y el caso 4 de su test daban `KeyError`.
 > 3. **C3** — el plan crea **9** archivos de test de backend y registraba **4**: `test_harness_ratchet_meta.py::test_ratchet_clasifica_todos_los_tests` habría quedado **ROJO al commitear**, y la vía del allowlist está cerrada (`194` entradas contra `_ALLOWLIST_MAX = 197`).
 > 4. **C18** — el gate de arranque de F0 exigía `4 passed` en `test_harness_ratchet_meta.py` y ordenaba, si salía rojo, "resolver eso antes de crear los propios". El archivo sale **`1 failed, 3 passed`** por `tests/test_plan293_commit.py`, **de la sesión paralela**: el gate, tal como estaba escrito, **sólo se satisfacía tocando trabajo ajeno**, que esta corrida tiene prohibido.
 >
-> **La v2 corrige los 18 hallazgos SIN relajar un solo criterio:** se **agrega** una fase (**F2a**), sube el número de casos de aceptación y no se borra ningún assert. El detalle está en `## CHANGELOG v1 -> v2`.
+> **C19 es un bloqueante que la propia v2 se creó:** al agregar `F2a` quedó fuera de las cuatro listas ordenadas del plan (orden de implementación, grafo de dependencias, tabla de paridad de runtimes y conteos de fases). **Una fase que no está en la lista que el implementador sigue es una fase que no existe.** Corregido en las cuatro.
+>
+> **La v2 corrige los 19 hallazgos SIN relajar un solo criterio:** se **agrega** una fase (**F2a**), sube el número de casos de aceptación y no se borra ningún assert. El detalle está en `## CHANGELOG v1 -> v2`.
 > **Conteo de anclajes verificados abriendo los archivos: 149/171 OK · 18 DESFASADOS (corregidos en esta v2, no borrados) · 4 INEXISTENTES.**
 
 > ℹ️ **NUMERACIÓN: COLISIÓN DETECTADA Y RESUELTA — el número definitivo es `295`.**
@@ -41,6 +43,7 @@ Una entrada por hallazgo resuelto. **Nada se resolvió borrando un criterio, un 
 | **C7** | Dos rutas INEXISTENTES sostenían decisiones de "fuera de alcance": `frontend/src/lib/trackerUrls.ts` y `frontend/src/services/__tests__/plan288SuperficieClasificacion.test.ts`. | **BLOQ** | Rutas reales: **`frontend/src/utils/trackerUrls.ts`** (confirmado por `plan282Censo.test.ts:78`) y **`frontend/src/__tests__/plan288SuperficieClasificacion.test.ts`**. |
 | **C8** | F0 declaraba verdes dos archivos que están rojos y el "8 rojos de fábrica" no estaba medido (el real, en los 11 archivos que el plan nombra, es **13 fallos en 6 archivos**: 4+3+1+2+1+2). | **BLOQ** | Tabla de baseline **MEDIDA** en F0 (archivo por archivo, con el venv del repo) y todos los criterios reescritos como delta contra esos números. Actualizado también en el principio 9 de §3, el objetivo de F0, el riesgo R11 y el glosario. |
 | **C18** | **El gate de arranque de F0 le ORDENABA al implementador tocar trabajo ajeno.** Decía que `test_harness_ratchet_meta.py` tiene que salir `4 passed` y que "si sale rojo … hay que resolver eso antes de crear los propios". Re-medido: sale **`1 failed, 3 passed`** por **`tests/test_plan293_commit.py`**, de la **sesión paralela**, creado sin registrar **después** de la primera medición. "Resolverlo" = registrar el test de otro ⇒ violar el alcance. Y era un criterio **absoluto** sobre un archivo con rojo ajeno. | **BLOQ** | Baseline corregido a **`1 failed, 3 passed`** con la causa nombrada, y el gate convertido en **DELTA CON LISTA**: los no clasificados tienen que seguir siendo **exactamente** `['tests/test_plan293_commit.py']` en F0 **y** en F12, con **cero** `test_plan295_*`. Se declara por escrito que **este plan NO arregla ese rojo** y por qué. Riesgos **R13** y **R14** nuevos, y **§10.6** para el operador. |
+| **C19** | **La fase `F2a` que agregó la propia crítica quedó fuera de TODAS las listas ordenadas del plan.** Aparecía en la tabla de estado por fase pero **no** en `### Orden de implementación`, **no** en el grafo de dependencias de §5, **no** en la tabla de paridad de runtimes de F12, y los conteos de fases seguían diciendo 12/13. La lista de orden es **lo que un modelo menor sigue**: habría implementado F2, visto `test_plan218_capability_matrix.py` en rojo, y borrado el assert — **el falso verde que F2a existe para hacer imposible**. Agravante: F2a está escrita **físicamente después** de F2, así que la lectura lineal también se la come. | **BLOQ** | `F2a` insertada **antes de F2** en la lista de orden (con la alternativa de commit único `F2a+F2` y la prohibición explícita de F2 sola), en el grafo de dependencias (con el ⚠️ de que es la única dependencia dura hacia atrás y de que está fuera de orden en el documento a propósito), y en la tabla de paridad de runtimes. **F2 abre con un aviso 🛑 de una frase** que manda a F2a. Conteos corregidos en 5 lugares: §3 principio 8 (13 → 14), valor de F0 (doce → trece), §4 y §D-1 sobre el diferimiento de I3 (13 → 14), y DoD (**12 fases → 14 fases / 13 commits**). |
 | **C9** | El `record_success("gitlab_sync", …)` de F7 **no consultaba el tracker**: corría en todo sync exitoso de `sync-v2`, reintroduciendo en el camino de éxito el acoplamiento cross-proveedor que F8 elimina del de fallo. | IMP | El bloque de éxito se mueve dentro del ruteo por tracker y se agrega el **caso 16**: "sync exitoso de un proyecto ADO ⇒ `gitlab_sync` intacto". |
 | **C10** | `_sesion_para` llamaba `crear_contexto_openssl(ca_bundle)` con el string crudo, salteando `resolver_ca_bundle` ⇒ la sonda **no** habla el TLS del sync si el bundle viene por entorno (`STACKY_GITLAB_CA_BUNDLE` / `REQUESTS_CA_BUNDLE`). | IMP | `_sesion_para` copia el idioma exacto del cliente (`gitlab_client.py:155-181`): `resolver_ca_bundle(...)` y después `crear_contexto_openssl(ruta)`. **Caso 9** nuevo: con el campo vacío y la env apuntando a un `.pem` real, el `mount()` ocurre. |
 | **C11** | El v1 contaba "cuatro `return` tempranos" y listaba cinco, y **olvidaba el `return out` final (`:173`)**: son **SEIS** caminos de salida. | IMP | Los 6 enumerados; el caso 7 asertá `len(checks) == 6` en **6** escenarios (era 5). |
@@ -129,7 +132,7 @@ Este plan cierra el lazo: corrige las dos entradas, **extiende el gate a las tra
 5. **Human-in-the-loop innegociable.** Nada de este plan decide por el operador. La sonda de F5 **informa** que el certificado no cerró; no lo instala. El breaker de F7 **informa** que GitLab está degradado; no reintenta solo. La perilla de F10 le **da** el control del intervalo; no lo cambia por él (el default sigue siendo 45 000).
 6. **Mono-operador sin auth real.** Cero RBAC. Cero multiusuario. Un `403` en este plan significa **flag apagada**, nunca *permiso* (ver `backend/api/setup_guide.py:95-96`, que ya usa esa semántica).
 7. **No degradar. Backward-compatible. Reusar.** Se reusa `services/integration_breaker.py` **tal cual** (F7 no le agrega una función: le agrega dos constantes `REASON_*` y una key), los helpers de `frontend/src/lib/trackerLabels.ts` **tal cual** (F11 no escribe un helper nuevo), el adaptador `_AdaptadorOpenSSL` de `services/gitlab_client.py:60-79` (F5 lo importa, no lo copia), y `services/maintenance.py:17-42` si alguna vez hiciera falta un periódico (**no hace falta en este plan: cero threads nuevos**, ver `backend/app.py:641` "*NO agregar threads nuevos*").
-8. **`services/` no importa de `api/`.** Verificado y respetado en las 13 fases. F5 pone la lógica nueva en `services/gitlab_setup_check.py` y F7 en `services/integration_breaker.py`; los dos siguen sin importar nada de `api/`.
+8. **`services/` no importa de `api/`.** Verificado y respetado en las **14** fases ([v2, C19]: 13 del v1 + F2a). F5 pone la lógica nueva en `services/gitlab_setup_check.py` y F7 en `services/integration_breaker.py`; los dos siguen sin importar nada de `api/`.
 9. **Sin falsos verdes** (gotcha **G7**). Cada fase nombra **archivos de test concretos** y el comando por archivo. **Sin `-k`** (`pytest -k` sin match da **exit 0**). Un archivo inexistente da **exit 4**, así que el criterio siempre exige un conteo de `passed`, nunca "no falló". `pytest tests` completo **no es un veredicto** (contaminación cruzada). **[v2, C8+C18] Hay 13 tests rojos de fábrica repartidos en 6 de los 11 archivos que este plan nombra** (medido, tabla en F0 — el v1 decía "8" sin fuente): todos los criterios de este plan son **delta**, no absolutos. Y **donde el archivo rojo no puede discriminar** —`test_harness_flags_bounds.py`, `test_harness_flags_help.py`— **el criterio se muda a un archivo verde con un assert de contenido** (F10.5.bis), porque "delta cero sobre un archivo rojo" pasa igual con el cableado puesto y sin él.
 
 ---
@@ -168,7 +171,7 @@ I3 necesita un **secreto por proyecto guardado en el auth del proyecto**. Medí 
 - `backend/project_manager.py` — la función que arma el bloque `issue_tracker` de GitLab.
 - `frontend/src/components/NewProjectModal.tsx` y `frontend/src/components/EditProjectModal.tsx` — las dos pantallas.
 
-Y **dos** de esos puntos, si se olvidan, **no dan error**: el campo simplemente vuelve vacío en el siguiente `GET`, y un secreto de webhook vacío convierte la comparación de tiempo constante en un `401` permanente que el operador va a leer como "GitLab no manda nada". Sumado a que I3 abre **superficie HTTP nueva** y a que su flag tendría que nacer `OFF` por excepción **(B)** (quién la configura en GitLab es el operador), el resultado es un plan de 6 fases propias **arriba** de las 13 de este. Trece fases ya es el techo de lo que un modelo menor implementa sin perder el hilo.
+Y **dos** de esos puntos, si se olvidan, **no dan error**: el campo simplemente vuelve vacío en el siguiente `GET`, y un secreto de webhook vacío convierte la comparación de tiempo constante en un `401` permanente que el operador va a leer como "GitLab no manda nada". Sumado a que I3 abre **superficie HTTP nueva** y a que su flag tendría que nacer `OFF` por excepción **(B)** (quién la configura en GitLab es el operador), el resultado es un plan de 6 fases propias **arriba** de las **14** de este ([v2, C19]). Catorce fases ya está en el techo de lo que un modelo menor implementa sin perder el hilo — **razón adicional para NO meter I3 acá**.
 
 **La decisión: el plan 295 deja el terreno preparado y el PLAN DEL WEBHOOK construye I3.** F9 de este plan corrige D5 — la dependencia dura de I3 — así que el PLAN DEL WEBHOOK arranca sin deuda: no habrá un tercer receptor de webhook conviviendo con dos que machean por `ado_id` sin filtro. Ver `## DIFERIDOS` §D-1 para el detalle completo de lo que el PLAN DEL WEBHOOK tiene que construir.
 
@@ -182,16 +185,20 @@ Y **dos** de esos puntos, si se olvidan, **no dan error**: el campo simplemente 
 ```
 F0 (línea base, sin código)
  ├─ F1  QW6 dead code            ── independiente
- ├─ F2  I4a+b matriz             ─→ F3  I4c gate transversal ─→ F4  I4d ratchet evidencias
+ ├─ F2a [v2] guardián del 218 admite SÍMBOLO ─→ F2  I4a+b matriz ─→ F3  I4c gate transversal ─→ F4  I4d ratchet evidencias
  ├─ F5  I1 sonda TLS             ── independiente
  ├─ F6  I2a except TrackerApiError ─→ F7  I2b breaker gitlab_sync ─→ F8  I2c reordenar should_skip
  ├─ F9  D5 webhooks por proyecto ── independiente (prerequisito del PLAN DEL WEBHOOK)
  ├─ F10 I5 intervalo del operador ── independiente
  └─ F11 I6 parcial rótulos       ── independiente
-F12 (paridad de runtimes + docs + no-regresión) ── requiere F1..F11
+F12 (paridad de runtimes + docs + no-regresión) ── requiere F1..F11 y F2a
 ```
 
-Cada fase es **autocontenida y verificable sola**. Un implementador puede parar después de cualquier fase y el repo queda consistente.
+⚠️ **[v2, C19] La rama de la matriz es la ÚNICA con una dependencia dura hacia atrás: `F2a → F2` no se puede invertir.** `F2a` amplía el regex del guardián (`test_plan218_capability_matrix.py`) para que acepte evidencia por símbolo; `F2` y `F4` producen exactamente esa evidencia. **Invertir el orden deja al implementador con un test ajeno en rojo y el incentivo de borrarle el assert.** Se puede hacer en un solo commit `F2a+F2`, pero **nunca F2 sola**.
+
+⚠️ **[v2, C19] `F2a` está escrita FÍSICAMENTE DESPUÉS de F2 en este documento** (se agregó en la crítica y renumerar habría movido F3..F12 y roto los nombres de test y de commit ya citados). **Quien lea el documento en orden lineal se la come.** Por eso aparece antes en el grafo de arriba y antes en la lista de `### Orden de implementación`, y por eso F2 abre con un aviso.
+
+Cada fase es **autocontenida y verificable sola**, **con la excepción declarada de F2, que exige F2a antes o en el mismo commit.** Un implementador puede parar después de cualquier fase y el repo queda consistente.
 
 ---
 
@@ -199,7 +206,7 @@ Cada fase es **autocontenida y verificable sola**. Un implementador puede parar 
 
 **Objetivo:** medir el estado exacto del repo **antes** de tocar nada, para que los criterios de las fases siguientes sean **delta** y no absolutos. Sin esto, los **13 rojos de fábrica medidos** (en 6 archivos) se confunden con daño propio — y peor: **dos de esos archivos rojos no pueden discriminar si el cableado está o no**, así que "delta cero" sobre ellos no es un criterio.
 
-**Valor:** es la fase que hace que las otras doce sean auditables. Sin F0 no hay mitad de contraste creíble.
+**Valor:** es la fase que hace que las otras **trece** sean auditables. Sin F0 no hay mitad de contraste creíble.
 
 **Archivos a crear/editar:** **NINGUNO.** F0 no escribe código. Su entregable es la tabla de abajo, completada con números reales, pegada en este documento en la sección "Estado de implementación por fase" al implementar.
 
@@ -422,6 +429,8 @@ grep -rn "gitlabProfileModel" "Stacky Agents/frontend/src" | grep -v plan295Dead
 ---
 
 ### F2 — I4a+b (= QW1): la matriz deja de mentir en las dos capacidades que el 276 y el 292 construyeron
+
+> 🛑 **EMPEZÁ POR `F2a`, QUE ESTÁ MÁS ABAJO EN ESTE DOCUMENTO (después de esta fase).** F2a amplía el guardián `test_plan218_capability_matrix.py` para que acepte evidencia por símbolo. **Sin ella, todo lo que hace F2 acá deja ese test en rojo.** Se puede hacer F2a+F2 en un solo commit, pero nunca F2 sola. Está fuera de orden en el documento a propósito ([v2, C19]): renumerar habría movido F3..F12 y roto los nombres de test y de commit ya citados.
 
 **Objetivo:** corregir las **dos** entradas de `CAPABILITY_MATRIX["gitlab"]` que declaran ausente o degradada una capacidad **implementada y ON**, y regenerar el documento de paridad.
 
@@ -2795,6 +2804,7 @@ grep -c "Ej: Done, Closed, Resolved" "Stacky Agents/frontend/src/components/Fini
 |---|---|---|---|---|
 | F0 | igual | igual | igual | conteos por `Select-String` si no hay `grep` |
 | F1 | igual | igual | igual | criterio por `grep` si `vitest` no corre |
+| F2a | igual | igual | igual | **[v2, C19]** ninguno (`re.compile` en un archivo de test) |
 | F2 | igual | igual | igual | ninguno (módulo puro) |
 | F3 | igual | igual | igual | ninguno (`importlib` de stdlib) |
 | F4 | igual | igual | igual | ninguno (`re` de stdlib) |
@@ -2925,7 +2935,7 @@ Cada ítem con su **iniciativa de origen** y la **justificación** del diferimie
 8. Gates: firma inválida ⇒ `401` y **CERO** llamadas al sync; firma válida + `object_kind="issue"` ⇒ **exactamente UNA** llamada con `forzar_full=False`; `object_kind` desconocido ⇒ `202` y **CERO** llamadas.
 9. KPI sin credenciales: `omitidos_cerrados_desconocidos` y `bytes_recibidos`, que el 292 ya emite (`services/gitlab_sync.py:504-505`).
 
-**Por qué se parte (la razón medida, no el costo):** I3 necesita un **secreto por proyecto** y ese campo **no existe**. Agregarlo son **seis** puntos de escritura —`backend/api/projects.py:35`, `:187`, `:467`, `:477`, `:652`, `:662`, más `backend/project_manager.py`, más los dos modales— y **dos de ellos, si se olvidan, no dan error**: el campo vuelve vacío en el siguiente `GET` y un secreto vacío convierte la comparación de tiempo constante en un `401` permanente que el operador lee como "GitLab no manda nada". **Sumar eso a las 13 fases de este plan es el patrón exacto que hundió los cinco planes de la serie 286-292: asumir una capacidad que no se verificó.**
+**Por qué se parte (la razón medida, no el costo):** I3 necesita un **secreto por proyecto** y ese campo **no existe**. Agregarlo son **seis** puntos de escritura —`backend/api/projects.py:35`, `:187`, `:467`, `:477`, `:652`, `:662`, más `backend/project_manager.py`, más los dos modales— y **dos de ellos, si se olvidan, no dan error**: el campo vuelve vacío en el siguiente `GET` y un secreto vacío convierte la comparación de tiempo constante en un `401` permanente que el operador lee como "GitLab no manda nada". **Sumar eso a las 14 fases de este plan ([v2, C19]) es el patrón exacto que hundió los cinco planes de la serie 286-292: asumir una capacidad que no se verificó.**
 
 **Estado de la dependencia dura:** **PAGADA por F9 de este plan.** El PLAN DEL WEBHOOK arranca sin deuda.
 
@@ -2994,6 +3004,7 @@ Cada ítem con su **iniciativa de origen** y la **justificación** del diferimie
 ```
 F0  →  medir y anotar                                (sin commit propio)
 F1  →  feat(plan-295): F1 - se borra el dead code de gitlabProfileModel
+F2a →  fix(plan-295): F2a - el guardian del 218 admite evidencia por SIMBOLO
 F2  →  fix(plan-295): F2 - la matriz deja de mentir en incremental y clamp
 F3  →  test(plan-295): F3 - el gate anti-mentira cubre las transversales
 F4  →  refactor(plan-295): F4 - ratchet de evidencias por simbolo
@@ -3007,6 +3018,14 @@ F11 →  fix(plan-295): F11 - los rotulos de dos pantallas dejan de decir Featur
 F12 →  test(plan-295): F12 - paridad de los tres runtimes, docs y no-regresion
 ```
 
+> 🛑 **[v2, C19] `F2a` VA ANTES QUE `F2`, y esa posición NO es negociable.** Es la única fase de este plan que aparece en la lista de orden **fuera** del orden en que está escrita en el documento (F2a está físicamente **después** de F2, porque se agregó en la crítica v2 y renumerar habría movido F3..F12).
+>
+> **Qué pasa si se implementa F2 primero:** F2 convierte dos evidencias a `archivo:símbolo`, el implementador corre `test_plan218_capability_matrix.py`, lo ve **rojo** con `evidencia inválida … (se espera 'ruta/archivo.py:linea')` — y la salida barata es **borrar el assert**. Eso es exactamente el falso verde que F2a existe para hacer imposible.
+>
+> **Alternativa permitida:** un **commit único** `F2a+F2` (`fix(plan-295): F2a+F2 - el guardian admite simbolos y la matriz deja de mentir`). Lo que **no** está permitido es F2 sin F2a. El criterio de cierre es el mismo en los dos casos: `test_plan218_capability_matrix.py` pasa de `2 failed, 8 passed` a `10 passed`.
+>
+> **Las 14 fases producen 13 commits:** F0 no tiene commit propio (sólo mide y anota en la tabla de estado).
+
 **Reglas de commit, no negociables:**
 - **Pathspec EXPLÍCITO siempre.** `git commit -- "<ruta>" "<ruta>"`. **Nunca `git add -A`**: hay una sesión paralela viva y le robaría el trabajo.
 - **`git commit -m` va ANTES del `--`.** Después del `--` todo es pathspec.
@@ -3018,7 +3037,7 @@ F12 →  test(plan-295): F12 - paridad de los tres runtimes, docs y no-regresion
 ### Definition of Done
 
 - [ ] **F0** medido y anotado: B1..B6 con números reales + baseline de los 7 archivos + baseline de `tsc --noEmit`.
-- [ ] Las **12** fases con su commit propio, en orden.
+- [ ] **[v2, C19]** Las **14** fases en orden, produciendo **13 commits** (F0 no tiene commit propio). **`F2a` va ANTES que `F2`** — o las dos en un commit único `F2a+F2`. **Nunca F2 sola.**
 - [ ] Los **9** archivos de test nuevos del backend, verdes con el conteo declarado.
 - [ ] Los **4** archivos de test nuevos del frontend, verdes.
 - [ ] **[v2, C3]** Los **9** archivos de test nuevos **del backend** registrados en **`run_harness_tests.sh` Y `run_harness_tests.ps1`** (la tabla literal de F12.bis), y `test_plan259_ratchet_script_parity.py` **verde** (brecha `solo_en_sh` = **64**, el máximo).

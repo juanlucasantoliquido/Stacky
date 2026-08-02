@@ -452,6 +452,23 @@ export const Tickets = {
   // P2.3 — adjuntos del ticket (portado de WS2)
   attachments: (id: number) =>
     api.get<{ attachments: TicketAttachment[]; error?: string }>(`/api/tickets/${id}/attachments`),
+
+  // ── Plan 287 — la ficha del ticket a pantalla completa ────────────────────
+  // Las dos leen del puerto TrackerProvider, igual para Azure DevOps y GitLab.
+  historial: (id: number) =>
+    api.get<{
+      historial: {
+        fecha: string | null; autor: string | null; campo: string | null;
+        de: string | null; a: string | null;
+      }[];
+      tracker: string;
+      capacidad: { clave: string; estado: string; perdida: string };
+    }>(`/api/tickets/${id}/historial`),
+  capacidades: () =>
+    api.get<{
+      tracker: string;
+      capacidades: Record<string, { estado: string; perdida: string }>;
+    }>(`/api/tickets/capacidades`),
   attachmentContent: (id: number, url: string, name: string) =>
     api.get<{ content: string | null; ok: boolean; binary?: boolean; error?: string }>(
       `/api/tickets/${id}/attachments/content?url=${encodeURIComponent(url)}&name=${encodeURIComponent(name)}`

@@ -1,0 +1,262 @@
+/* Plan 287 F6 — la ficha del ticket a pantalla completa.
+ *
+ * RESTRICCION DURA: archivo NUEVO => no esta en uiDebtBaseline.json => su
+ * `allowedBase` es 0 y CUALQUIER color hex (#rrggbb) lo pone en rojo el ratchet
+ * src/__tests__/uiDebtRatchet.test.ts. Solo tokens de theme.css.
+ *
+ * Tokens verificados (NO existe ningun `--color-*` salvo --color-scheme: escribir
+ * var(--color-primary) DEGRADA EN SILENCIO, no rompe).
+ * Para texto informativo se usa --text-muted, NUNCA el token de texto mas tenue
+ * del tema: ese quedo fuera de contraste accesible (auditoria 2026-07-29).
+ * (No se nombra literal a proposito: un gate futuro que lo prohiba grepea el
+ *  TEXTO del archivo y un comentario lo rompe igual que un uso real.)
+ */
+
+.ficha {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  z-index: var(--z-dialog);
+  overflow: hidden;
+}
+
+/* ── Cabecera ─────────────────────────────────────────────────────────────── */
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex: 0 0 auto;
+}
+
+.identidad {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.titulo {
+  flex: 1 1 auto;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.accionesCabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+/* ── Tres columnas de densidad alta ───────────────────────────────────────── */
+
+.cuerpo {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(320px, 2.2fr) minmax(220px, 1fr);
+  gap: 1px;
+  background: var(--border-muted);
+  overflow: hidden;
+}
+
+.columna {
+  background: var(--bg-base);
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+@media (max-width: 1100px) {
+  .cuerpo {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .columna {
+    overflow-y: visible;
+  }
+}
+
+/* ── Paneles ──────────────────────────────────────────────────────────────── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.panelTitulo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.panelCuerpo {
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.botonPanel {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-2xs);
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+.botonPanel:hover {
+  border-color: var(--accent);
+}
+
+.botonPanel:focus-visible {
+  outline: var(--focus-ring);
+}
+
+/* ── El aviso de perdida: LA funcionalidad que ni ADO ni GitLab dan ───────── */
+
+.aviso {
+  border: 1px solid var(--status-warning-border);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+}
+
+.avisoAusente {
+  border: 1px solid var(--status-neutral-border);
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font-size: var(--text-2xs);
+}
+
+.error {
+  border: 1px solid var(--status-danger-border);
+  background: var(--status-danger-bg);
+  color: var(--status-danger-text);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  font-size: var(--text-2xs);
+}
+
+.vacio {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+/* ── Jerarquia navegable ──────────────────────────────────────────────────── */
+
+.saltos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.salto {
+  appearance: none;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-2xs);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.salto:hover {
+  background: var(--bg-elev);
+  border-color: var(--border);
+}
+
+.salto:focus-visible {
+  outline: var(--focus-ring);
+}
+
+.motivoHuerfano {
+  border-left: 2px solid var(--warn);
+  padding-left: var(--space-2);
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+/* ── Historial ────────────────────────────────────────────────────────────── */
+
+.tablaHistorial {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-2xs);
+}
+
+.tablaHistorial th {
+  text-align: left;
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.tablaHistorial td {
+  padding: var(--space-1);
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: top;
+  font-family: var(--font-mono);
+}
+
+/* ── Ficha lateral ────────────────────────────────────────────────────────── */
+
+.datos {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-2);
+  font-size: var(--text-2xs);
+}
+
+.datoClave {
+  color: var(--text-muted);
+}
+
+.datoValor {
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.acciones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}

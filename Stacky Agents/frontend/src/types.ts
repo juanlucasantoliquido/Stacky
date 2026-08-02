@@ -128,6 +128,8 @@ export interface Ticket {
 
 export interface TicketNode extends Ticket {
   children: TicketNode[];
+  /** Plan 287 — solo viaja en `orphans` (backend: api/tickets.py:810). Opcional a proposito. */
+  motivo_huerfano?: string | null;
 }
 
 export interface TicketHierarchy {

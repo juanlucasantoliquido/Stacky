@@ -122,3 +122,33 @@ describe("round-trip (Plan 165 F1)", () => {
     expect(tabFromSegments(["team"])).toBe("team");
   });
 });
+
+// ── Plan 287 F5 — ?ticket=<id>, espejo exacto de ?exec= ──────────────────────
+// El operador tiene que poder pegarse a sí mismo el enlace de un ticket, igual
+// que hoy con una ejecución. `parseRoute` corre SÍNCRONO en el useState inicial
+// de App.tsx, antes de cualquier sonda de flag: el enlace no puede morir.
+
+describe("?ticket= (Plan 287 F5)", () => {
+  it("parse_ticket_canonico", () => {
+    expect(parseRoute("/", "?ticket=1234").ticket).toBe(1234);
+  });
+
+  it("parse_ticket_no_numerico", () => {
+    const r = parseRoute("/", "?ticket=abc");
+    expect(r.ticket).toBeUndefined();
+    // Y NO se cuela en `query`: si no, el round-trip lo duplicaría.
+    expect(r.query.ticket).toBeUndefined();
+  });
+
+  it("parse_ticket_vacio_y_formas_raras", () => {
+    for (const raro of ["?ticket=", "?ticket=0x10", "?ticket=1.5", "?ticket=-3"]) {
+      expect(parseRoute("/", raro).ticket).toBeUndefined();
+    }
+  });
+
+  it("serialize_ticket_roundtrip", () => {
+    // Si el volcado verbatim de `query` no excluyera "ticket", acá saldría
+    // "/?ticket=7&ticket=7" o similar: es el gate del punto 3 de F5.
+    expect(serializeRoute(parseRoute(...split("/?ticket=7")))).toBe("/?ticket=7");
+  });
+});

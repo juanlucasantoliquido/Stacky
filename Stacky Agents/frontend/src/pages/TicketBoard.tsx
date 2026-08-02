@@ -27,6 +27,10 @@ import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
 import IncidentResolverModal from "../components/IncidentResolverModal";
 import IncidentInboxEntryButton from "../components/IncidentInboxEntryButton"; // Plan 238
+import { Maximize2 } from "lucide-react";                                      // Plan 287 F7
+import TicketFullView from "../components/ticket/TicketFullView";              // Plan 287 F6/F7
+import { readCachedBoolFlag } from "../services/flagGate";                     // Plan 287 F7
+import { parseRoute, serializeRoute } from "../services/routes";               // Plan 287 F7
 import { useRunningStatus } from "../hooks/useRunningStatus";
 import { useLocalStorageState } from "../hooks/useLocalStorageState";
 import { getAgentType } from "../services/preferences";
@@ -299,9 +303,12 @@ interface TicketCardProps {
   devResolverEnabled?: boolean;
   /** Plan 177 — dev_pr_enabled del mismo Incidents.status(); muestra el checkbox "Abrir PR". */
   devPrEnabled?: boolean;
+  /** Plan 287 F7 — abre la ficha a pantalla completa. El gesto que el operador ya
+   *  conoce (click = desplegar la tarjeta) NO cambia: esto SUMA un botón. */
+  onAbrirFicha?: (id: number) => void;
 }
 
-function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent, devResolverEnabled, devPrEnabled }: TicketCardProps) {
+function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowConfigMap, indent, devResolverEnabled, devPrEnabled, onAbrirFicha }: TicketCardProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -525,6 +532,23 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
           <p className={styles.cardTitle}>{ticket.title}</p>
 
           <div className={styles.cardActions} onClick={(e) => e.stopPropagation()}>
+            {/* Plan 287 F7 — "Abrir ficha". Va acá, hermano del .map de quickActions
+                e inmediatamente ANTES, porque este contenedor YA frena la
+                propagación en su propia línea de apertura: el botón queda protegido
+                del onClick que despliega la tarjeta sin sumar un freno nuevo (por eso
+                el conteo de frenos del archivo tiene que quedar en 12, sin cambio; el
+                nombre literal del método NO se escribe acá justamente porque el gate
+                de F7 es un grep sobre el texto y un comentario lo inflaría igual).
+                Y NO va DENTRO de quickActions: esa lista sale del catálogo de
+                acciones con doble cerrojo y daría de alta una acción en el catálogo. */}
+            {onAbrirFicha && (
+              <IconButton
+                size="sm"
+                label="Abrir ficha"
+                icon={<Maximize2 size={14} />}
+                onClick={() => onAbrirFicha(ticket.id)}
+              />
+            )}
             {/* Plan 175 F4 — solo las acciones SEGURAS: quickActions filtra con
                 doble cerrojo (quick Y safe), así que nada con efecto puede
                 aparecer a un click de distancia en la tarjeta. */}
@@ -772,9 +796,11 @@ interface EpicGroupProps {
   devResolverEnabled?: boolean;
   /** Plan 177 — dev_pr_enabled del mismo Incidents.status(); muestra el checkbox "Abrir PR". */
   devPrEnabled?: boolean;
+  /** Plan 287 F7 — se propaga hasta TicketCard para el boton "Abrir ficha". */
+  onAbrirFicha?: (id: number) => void;
 }
 
-function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap, devResolverEnabled, devPrEnabled }: EpicGroupProps) {
+function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConfigMap, devResolverEnabled, devPrEnabled, onAbrirFicha }: EpicGroupProps) {
   const qc = useQueryClient();
   const agentRuntime = useWorkbench((s) => s.agentRuntime);
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
@@ -908,6 +934,7 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
                 flowConfigMap={flowConfigMap}
                 indent
                 devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
+                onAbrirFicha={onAbrirFicha}
               />
               </div>
             ))
@@ -920,8 +947,31 @@ function EpicGroup({ epic, runningByTicket, vsCodeAgents, memoryBadges, flowConf
 
 // ─── TicketBoard (página principal) ──────────────────────────────────────────
 
-export default function TicketBoard() {
+export default function TicketBoard({ ticket = null }: { ticket?: number | null } = {}) {
   const qc = useQueryClient();
+  // ── Plan 287 F7 — la ficha del ticket a pantalla completa ─────────────────
+  // El default `null` mantiene la compatibilidad con cualquier otro montaje.
+  const [fichaTicketId, setFichaTicketId] = useState<number | null>(ticket);
+  // C4 — sincronización con `popstate`: `route` es ESTADO VIVO en App (no un ref
+  // congelado), así que el botón Atrás del navegador cambia `route.ticket` y la
+  // prop llega. Sin este efecto la ficha se quedaría mostrando el ticket previo.
+  useEffect(() => { setFichaTicketId(ticket); }, [ticket]);
+  // Síncrono y fail-open a ON: el enlace directo no puede morir esperando una sonda.
+  const fullViewOn = readCachedBoolFlag("STACKY_TICKET_FULLVIEW_ENABLED");
+
+  /** Navegar NO cierra la ficha; la URL sigue al foco sin ensuciar el historial. */
+  const irAFicha = useCallback((id: number | null) => {
+    setFichaTicketId(id);
+    try {
+      const actual = parseRoute(window.location.pathname, window.location.search);
+      const destino = serializeRoute({ ...actual, ticket: id ?? undefined });
+      // replaceState y NO pushState: no queremos una entrada de historial por
+      // cada salto de jerarquía.
+      window.history.replaceState({}, "", destino);
+    } catch {
+      /* la navegación de la ficha nunca puede tumbar el tablero */
+    }
+  }, []);
   // Persistencia local de UX (plan 2026-05-27): filtros/checkboxes/preferencias
   // de la vista se rehidratan desde localStorage sin reconfiguración manual.
   const [search, setSearch] = useLocalStorageState<string>("ticketBoard.search", "");
@@ -1342,6 +1392,7 @@ export default function TicketBoard() {
                   memoryBadges={memoryBadges}
                   flowConfigMap={flowConfigMap}
                   devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
+                  onAbrirFicha={irAFicha}
                 />
               ))}
               {filteredOrphans.length > 0 && (
@@ -1360,6 +1411,7 @@ export default function TicketBoard() {
                         memoryBadge={memoryBadges[String(t.id)] ?? null}
                         flowConfigMap={flowConfigMap}
                         devResolverEnabled={devResolverEnabled} devPrEnabled={devPrEnabled}
+                        onAbrirFicha={irAFicha}
                       />
                     ))}
                   </div>
@@ -1382,11 +1434,25 @@ export default function TicketBoard() {
                 vsCodeAgents={vsCodeAgents ?? []}
                 runningByTicket={runningByTicket}
                 memoryBadges={memoryBadges}
+                onAbrirFicha={irAFicha}
               />
             )}
           </>
         )}
       </main>
+
+      {/* ── Plan 287 F7 — la ficha, montada UNA sola vez para toda la pantalla ──
+          v2/C6 — `jerarquia={hierarchy}`, el árbol CRUDO. NUNCA `displayHierarchy`,
+          que está filtrado por "mías": con el filtro puesto, un hijo o un hermano
+          de otra persona no estaría en el árbol y la navegación moriría muda. */}
+      {fullViewOn && fichaTicketId != null && (
+        <TicketFullView
+          ticketId={fichaTicketId}
+          jerarquia={hierarchy}
+          onCerrar={() => irAFicha(null)}
+          onCambiarFoco={(id) => irAFicha(id)}
+        />
+      )}
     </div>
   );
 }

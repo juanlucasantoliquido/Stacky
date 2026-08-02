@@ -321,7 +321,7 @@ export class NodeErrorBoundary extends React.Component {
 
 // ─── TicketNode Card ──────────────────────────────────────────────────────────
 
-function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map(), flowConfigMap = new Map(), memoryBadges = {} }) {
+function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgents = [], runningByTicket = new Map(), flowConfigMap = new Map(), memoryBadges = {}, onAbrirFicha = null }) {
   // Plan 282 F4/F6 — tracker del ticket con FALLBACK al del proyecto.
   const ttTicket = trackerEfectivo(ticket?.tracker_type, useWorkbench((s) => s.activeProject?.tracker_type ?? null));
   const qc = useQueryClient();
@@ -410,6 +410,19 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
         {/* Header */}
         <div className={styles.nodeHeader}>
           <div className={styles.nodeTopRow}>
+            {/* Plan 287 F7 — ASIMETRICO respecto del tablero a proposito: aca la
+                cabecera del nodo NO tiene contenedor que frene la propagacion y la
+                tarjeta entera lleva el onClick que expande, asi que el boton trae
+                el suyo (misma forma que el boton de run de este mismo archivo). */}
+            {onAbrirFicha && (
+              <button
+                className={styles.runBtnCompact}
+                title="Abrir ficha"
+                onClick={e => { e.stopPropagation(); onAbrirFicha(ticket.id); }}
+              >
+                ⛶
+              </button>
+            )}
             {isEpic && <span className={styles.epicBadge}>⚡ EPIC</span>}
             <span className={styles.nodeAdoId} style={{ color: colors.text }}>{refDeTicket(ttTicket, ticket.ado_id)}</span>
             <span className={styles.nodeStateBadge} style={{ color: colors.text, borderColor: colors.border }}>
@@ -600,7 +613,7 @@ function computeLines(containerRef) {
   return newLines;
 }
 
-function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flowConfigMap, memoryBadges = {} }) {
+function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flowConfigMap, memoryBadges = {}, onAbrirFicha = null }) {
   const containerRef = useRef(null);
   const [lines, setLines] = useState([]);
 
@@ -633,7 +646,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
       {/* Epic node */}
       <div data-role="epic-node" className={styles.epicNodeWrap}>
         <NodeErrorBoundary adoId={epic.ado_id}>
-          <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} memoryBadges={memoryBadges} />
+          <TicketNodeCard ticket={epic} inferMap={inferMap} onInfer={onInfer} isEpic vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} memoryBadges={memoryBadges} onAbrirFicha={onAbrirFicha} />
         </NodeErrorBoundary>
         <span className={styles.childrenCount}>{epic.children.length} ticket{epic.children.length !== 1 ? "s" : ""}</span>
       </div>
@@ -644,7 +657,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
           {epic.children.map(child => (
             <div data-role="child-node" key={child.id} className={styles.childNodeWrap}>
               <NodeErrorBoundary adoId={child.ado_id}>
-                <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} memoryBadges={memoryBadges} />
+                <TicketNodeCard ticket={child} inferMap={inferMap} onInfer={onInfer} vsCodeAgents={vsCodeAgents} runningByTicket={runningByTicket} flowConfigMap={flowConfigMap} memoryBadges={memoryBadges} onAbrirFicha={onAbrirFicha} />
               </NodeErrorBoundary>
             </div>
           ))}
@@ -656,7 +669,7 @@ function EpicGroup({ epic, inferMap, onInfer, vsCodeAgents, runningByTicket, flo
 
 // ─── TicketGraphView (exportado) ──────────────────────────────────────────────
 
-export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map(), memoryBadges = {} }) {
+export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncError, vsCodeAgents = [], runningByTicket = new Map(), memoryBadges = {}, onAbrirFicha = null }) {
   const activeProjectName = useWorkbench((s) => s.activeProject?.name ?? null);
   // Plan 276 F7 — tracker del proyecto activo, para el rótulo del botón de sync.
   const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
@@ -719,8 +732,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
                 vsCodeAgents={vsCodeAgents}
                 runningByTicket={runningByTicket}
                 flowConfigMap={flowConfigMap}
-                memoryBadges={memoryBadges}
-              />
+                memoryBadges={memoryBadges} onAbrirFicha={onAbrirFicha} />
             ))}
           </div>
         </section>
@@ -741,6 +753,7 @@ export default function TicketGraphView({ hierarchy, onSync, isSyncing, syncErro
                   runningByTicket={runningByTicket}
                   flowConfigMap={flowConfigMap}
                   memoryBadges={memoryBadges}
+                  onAbrirFicha={onAbrirFicha}
                 />
               </NodeErrorBoundary>
             ))}

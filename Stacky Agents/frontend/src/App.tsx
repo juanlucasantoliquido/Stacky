@@ -409,7 +409,10 @@ export default function App() {
   const pages = (
     <>
       {tab === "team"     && sections.team && <TeamScreen />}
-      {tab === "tickets"  && <TicketBoard />}
+      {/* Plan 287 F7/C4 — espejo exacto de la línea de `?exec=` de más abajo. Sin
+          esta prop el enlace directo `?ticket=` queda CONSTRUIDO Y JAMÁS CABLEADO:
+          el router lo parsea y nadie lo lee. NO agrega ningún gate de pantalla. */}
+      {tab === "tickets"  && <TicketBoard ticket={route.ticket ?? null} />}
       {tab === "review"   && <ReviewInboxPage />}
       {tab === "unblocker" && <UnblockerPage />}
       {tab === "pm"       && sections.pm   && <PMCommandCenter />}

@@ -43,4 +43,25 @@ describe("deep-links de subestado (Plan 165 F3)", () => {
       tab: "settings", subtab: "harness", query: { flag: "STACKY_X" },
     });
   });
+
+  // ── Plan 287 F5 — la ficha del ticket ─────────────────────────────────────
+
+  it("deeplink_ticket_en_raiz", () => {
+    // El caso soportado de punta a punta: ?ticket= EN LA RAÍZ, que ya es el
+    // tablero (TAB_PATHS.tickets === "/"), donde la ficha se monta.
+    expect(parseRoute("/", "?ticket=88")).toMatchObject({
+      tab: "tickets", ticket: 88,
+    });
+  });
+
+  it("deeplink_ticket_convive_con_exec", () => {
+    // v2/C14 — LÍMITE HONESTO: esto verifica la SUPERVIVENCIA del parámetro, NO
+    // la apertura de la ficha. `normalizeInitial` fuerza tab:"history" cuando hay
+    // exec, y la ficha vive en el tablero: con este URL TicketBoard ni se monta.
+    // El caso que sí abre la ficha es ?ticket= en la raíz (test de arriba).
+    const r = parseRoute("/", "?exec=5&ticket=9");
+    expect(r.tab).toBe("history");     // manda la regla vigente de exec
+    expect(r.ticket).toBe(9);          // pero el parámetro NO se pierde…
+    expect(r.query.ticket).toBeUndefined();  // …ni degrada a query verbatim
+  });
 });

@@ -26,6 +26,7 @@ export interface RouteState {
   tab: Tab;
   subtab?: string;                 // 2do segmento del path (hoy solo Settings lo usa)
   exec?: number;                   // ?exec=<id> — drawer de ejecución (clave canónica)
+  ticket?: number;                 // ?ticket=<id> — ficha del ticket (Plan 287)
   query: Record<string, string>;   // TODO otro query param, preservado verbatim
 }
 
@@ -73,10 +74,21 @@ export function parseRoute(pathname: string, search: string): RouteState {
               // la segunda se ignora y NO pasa a query (ambas están en EXEC_KEYS).
     }
   }
-  const query: Record<string, string> = {};
-  sp.forEach((v, k) => { if (!EXEC_KEYS.includes(k as typeof EXEC_KEYS[number])) query[k] = v; });
+  // Plan 287 F5 — ?ticket=<id>, con la MISMA expresión estricta que exec: "?ticket="
+  // vacío, "0x10" y "1.5" quedan en undefined (Number("") === 0 abriría la ficha 0).
+  let ticket: number | undefined;
+  const ticketRaw = sp.get("ticket");
+  if (ticketRaw != null && /^\d+$/.test(ticketRaw)) ticket = parseInt(ticketRaw, 10);
 
-  return normalizeInitial({ tab, subtab, exec, query });
+  const query: Record<string, string> = {};
+  // Plan 287 F5 punto 3 — "ticket" se excluye del volcado verbatim: si no, el
+  // round-trip lo emitiría dos veces (una por `query`, otra por serializeRoute).
+  sp.forEach((v, k) => {
+    if (k === "ticket") return;
+    if (!EXEC_KEYS.includes(k as typeof EXEC_KEYS[number])) query[k] = v;
+  });
+
+  return normalizeInitial({ tab, subtab, exec, ticket, query });
 }
 
 /** Backward-compat: el backend emite `/?exec=` en la RAÍZ, pero el drawer vive en
@@ -119,6 +131,7 @@ export function serializeRoute(s: RouteState): string {
   // query preservada primero, con claves ordenadas (round-trip estable/determinista)
   Object.keys(s.query).sort().forEach((k) => sp.set(k, s.query[k]));
   if (s.exec != null) sp.set("exec", String(s.exec));     // SIEMPRE clave canónica "exec"
+  if (s.ticket != null) sp.set("ticket", String(s.ticket)); // Plan 287 F5 — ficha del ticket
   const qs = sp.toString();
   return qs ? `${path}?${qs}` : path;
 }

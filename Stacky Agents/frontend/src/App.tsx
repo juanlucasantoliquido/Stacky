@@ -4,6 +4,7 @@ import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
 import IncidentInboxPage from "./pages/IncidentInboxPage"; // Plan 238
 import MeetingsPage from "./pages/MeetingsPage"; // Plan 283
+import WorkbenchPage from "./pages/WorkbenchPage"; // Plan 293
 import { INCIDENT_ICON } from "./utils/workItemTypeColor"; // Plan 238 (reuso)
 import UnblockerPage from "./pages/UnblockerPage";
 import SystemLogsPage from "./pages/SystemLogsPage";
@@ -133,6 +134,7 @@ export default function App() {
   const [evolutionGate, setEvolutionGate] = useState<GateState>("unknown");
   const [incidentInboxGate, setIncidentInboxGate] = useState<GateState>("unknown"); // Plan 238
   const [meetingsGate, setMeetingsGate] = useState<GateState>("unknown"); // Plan 283
+  const [publicarGate, setPublicarGate] = useState<GateState>("unknown"); // Plan 293
   // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
   const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
@@ -207,6 +209,9 @@ export default function App() {
     // sobreviva; el flag_enabled del cuerpo es el veredicto.
     void probeFlagHealth("/api/meetings/health").then((v) => {
       if (alive) setMeetingsGate((prev) => gateStateFromVerdict(prev, v));
+    });
+    void probeFlagHealth("/api/workbench/health").then((v) => {   // Plan 293
+      if (alive) setPublicarGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/search/health").then((v) => {
       if (alive) setDeepSearchEnabled((prev) => nextEnabledState(prev, v));
@@ -375,7 +380,8 @@ export default function App() {
     else if (tab === "evolution" && shouldRedirectAway(evolutionGate)) avisarYSalir("evolution");
     else if (tab === "incidencias" && shouldRedirectAway(incidentInboxGate)) avisarYSalir("incidencias");
     else if (tab === "reuniones" && shouldRedirectAway(meetingsGate)) avisarYSalir("reuniones"); // Plan 283
-  }, [tab, sectionsReady, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorGate, devopsGate, dbCompareGate, costCenterGate, planesGate, evolutionGate, incidentInboxGate, meetingsGate]);
+    else if (tab === "publicar" && shouldRedirectAway(publicarGate)) avisarYSalir("publicar"); // Plan 293
+  }, [tab, sectionsReady, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorGate, devopsGate, dbCompareGate, costCenterGate, planesGate, evolutionGate, incidentInboxGate, meetingsGate, publicarGate]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
@@ -393,6 +399,8 @@ export default function App() {
     evolutionEnabled: isGateOn(evolutionGate),
     incidentInboxEnabled: isGateOn(incidentInboxGate), // Plan 238
     meetingsEnabled: isGateOn(meetingsGate), // Plan 283
+    publicarEnabled: isGateOn(publicarGate), // Plan 293 — isGateOn, NUNCA el string
+                                             // suelto: "off" es TRUTHY.
   });
 
   // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
@@ -446,6 +454,9 @@ export default function App() {
       {tab === "reuniones" && (isGateResolving(meetingsGate)
         ? <Skeleton lines={3} />
         : isGateOn(meetingsGate) && <MeetingsPage />)} {/* Plan 283 */}
+      {tab === "publicar" && (isGateResolving(publicarGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(publicarGate) && <WorkbenchPage />)} {/* Plan 293 */}
     </>
   );
 

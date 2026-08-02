@@ -6,7 +6,8 @@ export type ShellTab =
   | "team" | "tickets" | "review" | "unblocker" | "pm" | "logs"
   | "settings" | "docs" | "memory" | "diagnostics" | "history"
   | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes"
-  | "evolution" | "incidencias" | "reuniones";
+  | "evolution" | "incidencias" | "reuniones"
+  | "publicar";  // Plan 293 — NO "trabajo": ese id ya es el del grupo (ver SHELL_NAV_GROUPS)
 
 export interface ShellTabMeta {
   label: string;
@@ -18,6 +19,7 @@ export const TAB_META: Record<ShellTab, ShellTabMeta> = {
   tickets:     { label: "Tickets ADO",   iconName: "ClipboardList" },
   incidencias: { label: "Incidencias",   iconName: "Ambulance" },
   reuniones:   { label: "Reuniones",     iconName: "CalendarDays" },  // Plan 283
+  publicar:    { label: "Publicar mi trabajo", iconName: "Send" },    // Plan 293
   review:      { label: "Revisión",      iconName: "Inbox" },
   unblocker:   { label: "Desatascador",  iconName: "Wrench" },
   pm:          { label: "PM",            iconName: "LayoutDashboard" },
@@ -42,7 +44,9 @@ export interface ShellNavGroup {
 }
 
 export const SHELL_NAV_GROUPS: ShellNavGroup[] = [
-  { id: "trabajo",        label: "Trabajo",        tabs: ["team", "tickets", "incidencias", "reuniones", "review", "unblocker"] },
+  // OJO: el id de ESTE grupo es "trabajo". Por eso el tab del plan 293 se llama
+  // "publicar" y no "trabajo": la colisión sería invisible para tsc.
+  { id: "trabajo",        label: "Trabajo",        tabs: ["team", "tickets", "incidencias", "reuniones", "publicar", "review", "unblocker"] },
   { id: "observabilidad", label: "Observabilidad", tabs: ["pm", "logs", "history", "diagnostics", "costcenter", "planes", "evolution"] },
   { id: "conocimiento",   label: "Conocimiento",   tabs: ["docs", "memory"] },
   { id: "plataforma",     label: "Plataforma",     tabs: ["devops", "migrador", "dbcompare"] },
@@ -59,6 +63,7 @@ export interface VisibilityInput {
   evolutionEnabled: boolean;
   incidentInboxEnabled?: boolean;   // Plan 238 — undefined => oculto
   meetingsEnabled?: boolean;        // Plan 283 — undefined => oculto
+  publicarEnabled?: boolean;        // Plan 293 — undefined => oculto
 }
 
 // Tabs SIEMPRE visibles (espejo del render actual de App.tsx: no dependen de gate).
@@ -82,6 +87,7 @@ export function computeVisibleTabs(input: VisibilityInput): Set<ShellTab> {
   if (input.evolutionEnabled) v.add("evolution");
   if (input.incidentInboxEnabled) v.add("incidencias");   // Plan 238 — NO va a ALWAYS_VISIBLE
   if (input.meetingsEnabled) v.add("reuniones");          // Plan 283 — idem
+  if (input.publicarEnabled) v.add("publicar");           // Plan 293 — idem
   return v;
 }
 

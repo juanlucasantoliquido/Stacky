@@ -13,14 +13,15 @@ const ALL_TABS = [
   "docs", "memory", "diagnostics", "history", "migrador", "devops", "dbcompare",
   "costcenter", "planes", "evolution", "incidencias",
   "reuniones", // Plan 283
+  "publicar", // Plan 293 — NO "trabajo": ese id ya es el del GRUPO
 ] as const;
 
 describe("shellNav — modelo de navegación", () => {
-  it("TAB_META cubre exactamente los 19 tabs", () => {
+  it("TAB_META cubre exactamente los 20 tabs", () => {
     expect(Object.keys(TAB_META).sort()).toEqual([...ALL_TABS].sort());
   });
 
-  it("cada tab aparece en exactamente un grupo (cobertura 16, sin duplicados)", () => {
+  it("cada tab aparece en exactamente un grupo (cobertura 20, sin duplicados)", () => {
     const flat = SHELL_NAV_GROUPS.flatMap((g) => g.tabs);
     expect(flat.slice().sort()).toEqual([...ALL_TABS].sort());
     expect(new Set(flat).size).toBe(flat.length);
@@ -68,6 +69,7 @@ describe("shellNav — modelo de navegación", () => {
       costCenterEnabled: true, planesEnabled: true, evolutionEnabled: true,
       incidentInboxEnabled: true,
       meetingsEnabled: true, // Plan 283
+      publicarEnabled: true, // Plan 293
     });
     expect([...v].sort()).toEqual([...ALL_TABS].sort());
   });

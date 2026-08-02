@@ -6,7 +6,11 @@ export type Tab =
   | "team" | "tickets" | "review" | "unblocker" | "pm" | "logs"
   | "settings" | "docs" | "memory" | "diagnostics" | "history"
   | "migrador" | "devops" | "dbcompare" | "costcenter" | "planes" | "evolution"
-  | "incidencias" | "reuniones";
+  | "incidencias" | "reuniones"
+  // Plan 293 — el tab se llama "publicar" y NO "trabajo": ese id YA existe como
+  // grupo de la barra lateral (shellNav.ts SHELL_NAV_GROUPS), y la colisión es
+  // invisible para tsc. Era la decisión D6 del plan.
+  | "publicar";
 
 // MOVIDO desde App.tsx (fuente única). App.tsx pasará a importarlo (F3).
 // La vista índice (raíz "/") es TICKETS: al abrir la app se aterriza en el
@@ -20,6 +24,7 @@ export const TAB_PATHS: Record<Tab, string> = {
   costcenter: "/costcenter", planes: "/planes", evolution: "/evolution", // Plan 167
   incidencias: "/incidencias", // Plan 238
   reuniones: "/reuniones", // Plan 283
+  publicar: "/publicar", // Plan 293 — tablero de trabajo
 };
 
 export interface RouteState {

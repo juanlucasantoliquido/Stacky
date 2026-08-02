@@ -18,7 +18,9 @@ import type { FlagHealthVerdict } from "../../utils/flagHealth";
 
 const APP_TSX = readFileSync(resolve(__dirname, "../../App.tsx"), "utf8");
 
-/** Los 7 gates de tab por flag. `deepSearch` y `shellV2` NO se convierten. */
+/** Los 9 gates de tab por flag. `deepSearch` y `shellV2` NO se convierten.
+ *  El de reuniones (plan 283) faltaba y este archivo estaba ROJO DE FABRICA por eso;
+ *  el de publicar es del plan 293. */
 const GATES = [
   "migrador",
   "devops",
@@ -27,6 +29,8 @@ const GATES = [
   "planes",
   "evolution",
   "incidentInbox",
+  "meetings",   // Plan 283 — faltaba
+  "publicar",   // Plan 293
 ] as const;
 
 describe("plan273 F7 — la maquina de tres estados", () => {
@@ -81,9 +85,9 @@ describe("plan273 F7 — gates de texto sobre App.tsx", () => {
     expect(offenders, `ramas de redireccion que siguen usando el booleano:\n${offenders.join("\n")}`).toEqual([]);
   });
 
-  it("App_declara_los_7_gates_como_GateState", () => {
+  it("App_declara_los_9_gates_como_GateState", () => {
     const n = (APP_TSX.match(/useState<GateState>\("unknown"\)/g) ?? []).length;
-    expect(n, `hay ${n} declaraciones useState<GateState>("unknown"), se esperaban 7`).toBe(7);
+    expect(n, `hay ${n} declaraciones useState<GateState>("unknown"), se esperaban 9`).toBe(9);
   });
 
   it("no_se_redirige_por_seccion_sin_hidratar", () => {
@@ -107,7 +111,7 @@ describe("plan273 F7 — gates de texto sobre App.tsx", () => {
 
   it("el_gate_sin_resolver_pinta_esqueleto", () => {
     const n = (APP_TSX.match(/isGateResolving\(/g) ?? []).length;
-    expect(n, `hay ${n} usos de isGateResolving(, se esperaban 7`).toBe(7);
+    expect(n, `hay ${n} usos de isGateResolving(, se esperaban 9`).toBe(9);
     expect(
       /import \{[^}]*\bSkeleton\b[^}]*\} from "\.\/components\/ui"/.test(APP_TSX),
       "App.tsx no importa Skeleton del barrel components/ui"

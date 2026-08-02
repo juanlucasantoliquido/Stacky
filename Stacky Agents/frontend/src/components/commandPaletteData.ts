@@ -98,6 +98,10 @@ export const NAV_COMMANDS: NavCommandSpec[] = [
   { id: "nav-history", path: "/history", label: "Ir a Historial", icon: "🕘" },
   { id: "nav-migrador", path: "/migrador", label: "Ir a Migrador", icon: "🔀" },
   { id: "nav-devops", path: "/devops", label: "Ir a DevOps", icon: "🛠️" },
+  // Plan 293 — pata EXTRA de un tab nuevo: la paleta es una lista aparte de
+  // TAB_META y no se deriva de ella, así que hay que agregarlo a mano o el tab
+  // existe pero no se puede llegar con Ctrl+K.
+  { id: "nav-publicar", path: "/publicar", label: "Ir a Publicar mi trabajo", icon: "📤" },
 ];
 
 /** Plan 282 F4 — el catálogo de navegación con el rótulo del tracker activo.

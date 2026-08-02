@@ -1076,6 +1076,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan290_self_review_no_regresion.py
   tests/test_plan290_sitios_clasificados.py
   tests/test_plan290_gitlab_switch_ui.py
+  tests/test_plan290_base_url_normalizada.py
 )
 
 pass=0

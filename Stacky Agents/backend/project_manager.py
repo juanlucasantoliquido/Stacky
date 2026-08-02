@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -629,6 +630,48 @@ def write_mantis_auth(
 
 DEFAULT_GITLAB_AUTH_FILE = "auth/gitlab_auth.json"
 
+_RE_API_V = re.compile(r"/api/v[0-9]+$", re.IGNORECASE)
+_RE_ORIGEN = re.compile(r"^(https?://[^/]+)(/.*)?$", re.IGNORECASE)
+
+
+def _normalizar_base_url_gitlab(raw: str) -> str:
+    """Plan 290 F6 — puerto server-side de `normalizeGitlabUrl`.
+
+    Hasta acá la normalización vivía SOLO en el cliente
+    (`frontend/src/projects/newProjectGitlabModel.ts:37`) y el servidor se
+    limitaba a `url.rstrip("/")`. Cualquier alta que no pasara por ese formulario
+    -importación, edición manual del JSON, un cliente futuro- dejaba
+    `https://host/grupo/proyecto` como base y todas las llamadas salían a
+    `.../grupo/proyecto/api/v4/...` -> 404.
+
+    Deja SOLO el origen: saca barras finales, un `/api/vN` pegado y cualquier
+    path. Un valor sin esquema se devuelve limpio de barras finales y nada más:
+    acá no corresponde inventar un origen (`validateGitlabFields` ya lo rechaza
+    antes).
+
+    Ojo con el ORDEN: la barra final se saca ANTES de intentar el `/api/vN`,
+    porque `https://host/api/v4/` no matchea `/api/v[0-9]+$` con la barra puesta.
+
+    PARIDAD CLIENTE/SERVIDOR — mismo input, mismo output. Estos 10 pares los
+    verifica `tests/test_plan290_base_url_normalizada.py`, que además compara su
+    tabla contra ESTE docstring: el día que el cliente cambie, la divergencia se
+    ve en rojo en vez de descubrirse con un 404 en producción.
+
+        https://gitlab.com                     -> https://gitlab.com
+        https://gitlab.com/                    -> https://gitlab.com
+        https://gitlab.com///                  -> https://gitlab.com
+        https://gitlab.com/api/v4              -> https://gitlab.com
+        https://gitlab.com/api/v4/             -> https://gitlab.com
+        https://git.interno/grupo/proyecto     -> https://git.interno
+        https://git.interno:8443/grupo/proy    -> https://git.interno:8443
+        HTTP://GitLab.com/API/V4               -> HTTP://GitLab.com
+                                               ->
+        gitlab.com/grupo                       -> gitlab.com/grupo
+    """
+    limpio = _RE_API_V.sub("", (raw or "").strip().rstrip("/"))
+    m = _RE_ORIGEN.match(limpio)
+    return m.group(1) if m else limpio
+
 
 def initialize_gitlab_project(
     name: str,
@@ -667,7 +710,7 @@ def initialize_gitlab_project(
     )
     tracker: dict = {
         "type":      "gitlab",
-        "base_url":  url.rstrip("/"),
+        "base_url":  _normalizar_base_url_gitlab(url),
         "project":   project_path.strip(),
         "auth_file": resolved_auth,
     }

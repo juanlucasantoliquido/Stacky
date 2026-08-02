@@ -30,6 +30,7 @@ Cada archivo cubre un área. Abrí solo lo que necesites; no hace falta leer tod
 | [14-db-compare.md](14-db-compare.md) | Comparador de BD entre ambientes: diff de esquema/datos, scripts pareados (planes 122-126). |
 | [15-degradacion-declarada.md](15-degradacion-declarada.md) | `metadata["capability_degraded"]`: qué capacidades saltea Stacky en un tracker no-ADO, quién las escribe, los 6 sitios que no declaran y el KPI K1 (plan 290). |
 | [auto_pr_dev_resolutor.md](auto_pr_dev_resolutor.md) | Auto-PR del Dev Resolutor: pasos exactos para activar la creación de rama en GitLab, el humo del operador y qué NO se puede prometer (plan 291). |
+| [16-sync-incremental-gitlab.md](16-sync-incremental-gitlab.md) | El sync de GitLab pide sólo lo que cambió: los dos modos, las DOS barreras de correctitud (la regla de ausencia y la de admisión), la marca monótona con la hora del servidor y por qué el daemon quedó fuera (plan 292). |
 
 ## Invariantes globales del sistema
 1. **Selector de runtime sin fallback silencioso**: si elegís `codex_cli` o `claude_code_cli`, un error del runner es error real; NUNCA cae a `github_copilot`. [V: agent_runner.py:273-282,347-355]
@@ -51,3 +52,4 @@ Cada archivo cubre un área. Abrí solo lo que necesites; no hace falta leer tod
 - Cambió `api/db_compare.py` o `services/dbcompare_*` → revisar **14-db-compare.md**.
 - Se agregó un doc `docs/NN_*` o cambió el estado de un plan → revisar **11-estado-planes.md**.
 - Se agregó/quitó un NODO o subsistema del sistema → revisar **10-grafo.md** (mantener R7: Mermaid == tabla == YAML).
+- Cambió `services/gitlab_sync.py`, `services/gitlab_sync_watermark.py` o alguno de los tres llamadores de `sync_gitlab_tickets` (`app.py`, `api/tickets.py`, `services/completion_sync.py`) → revisar **16-sync-incremental-gitlab.md**.

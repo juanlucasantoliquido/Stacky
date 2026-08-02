@@ -1087,6 +1087,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan292_sync_incremental.py
   tests/test_plan292_watermark_store.py
   tests/test_plan292_flags.py
+  tests/test_plan292_paridad_runtimes.py
 )
 
 pass=0

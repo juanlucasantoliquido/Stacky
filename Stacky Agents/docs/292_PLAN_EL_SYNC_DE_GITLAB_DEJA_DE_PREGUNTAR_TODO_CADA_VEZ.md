@@ -1,6 +1,30 @@
 # Plan 292 — El sync de GitLab deja de preguntar todo cada vez
 
-**Estado:** **v2 — CORREGIDO tras crítica adversarial. Veredicto de la v1: RECHAZADO (4 bloqueantes).** No implementado.
+**Estado:** **v2 — IMPLEMENTADO (F0..F6, todas las fases IMPLEMENTADA).** 2026-08-02, rama `docs/plan-279`, sin push.
+
+## Estado de implementación por fase
+
+| Fase | Estado | Commit | Evidencia |
+|---|---|---|---|
+| **F0** — baselines y ratchets | **IMPLEMENTADA** | (verificación, sin commit propio) | los **21** baselines de §4 re-corridos y **coincidentes uno por uno**; brecha 831 − 767 = **64**; `FLAG_REGISTRY` = **493**; el array del `.ps1` **cargado** (no grepeado) = 767 |
+| **F1** — `TrackerQuery.updated_after` | **IMPLEMENTADA** | `7db4b8d3` | 3 passed (rojo previo: `TypeError` por el kwarg inexistente) |
+| **F2** — el store de la marca | **IMPLEMENTADA** | `5314f5c3` | **17** passed (rojo previo: `ModuleNotFoundError`). Mitad de contraste de la marca monótona **ejecutada y fallando** |
+| **F3+F4** — las opciones y su consumidor | **IMPLEMENTADA** | `50496f73` | flags 12 passed (rojo previo 11F/1P); `FLAG_REGISTRY` 493 → **495**; grep de las 2 keys en `app.py` = **0** |
+| **F5** — el gate de correctitud | **IMPLEMENTADA** | `94a6245d` | **22** passed. **Las CINCO mitades de contraste ejecutadas y fallando**, parches revertidos (`git diff` vacío) |
+| **F6** — paridad, docs y no-regresión | **IMPLEMENTADA** | `7e5b1c4a` | 6 passed + **5 mitades de contraste propias**; delta cero en los 14 baselines verdes y los 7 rojos de fábrica medibles |
+
+**Desvíos respecto del plan, medidos al implementar (ninguno cambia el alcance):**
+
+1. **`bytes_recibidos` con la tanda vacía daba 2, no 0.** `json.dumps([])` son los dos bytes de `"[]"`, que son **envoltorio y no carga**: el criterio `== 0` de §F5 caso 20 era **insatisfacible** tal como estaba escrito el snippet de §F4.6. Se cuenta 0 cuando no hay ítems, y queda documentado en el código.
+2. **La barrera pagaba un `SELECT` por ítem también en modo COMPLETO** (63 por sync en RIPLEY) para una respuesta que `admitir_del_delta` no mira. El propio plan declaraba el costo como *"sólo en modo parcial"*; el código quedó gateado para que eso sea cierto.
+3. **Contaminación de `backend/data/` NO prevista por el plan.** `tests/test_plan276_gitlab_sync.py` ejercita el sync entero y aísla la BD por `DATABASE_URL`, pero **no** aísla `data_dir()`: apenas el sync empezó a guardar la marca, esa suite **ajena** dejó un `gitlab_sync_watermark.json` **real** en la carpeta del operador (medido). No alcanzaba con *"es gitignored y degrada a completo"*: una marca escrita por un test podía quedar lo bastante **fresca** como para que la primera corrida real del operador saliera **parcial** apoyada en un reloj inventado — eso es correctitud, no higiene. Se agregó un guard de modo test (idioma de `services/error_fingerprints.py:95-100`) y su caso ⇒ F2 pasa de **16** a **17** casos.
+4. **F5 da 22 passed, no 21.** La tabla de casos de §F5 lista **22 tests nombrados** (numera 1..21 con un `4b` intercalado). No falta ni sobra ningún caso; el número de la DoD estaba corrido en uno.
+5. **F6 sumó 5 mitades de contraste que el plan no pedía.** Los 6 casos de paridad pasaron **en verde a la primera** —el molde clásico del falso verde—, así que se corrió cada invariante contra su defecto: un runner nombrando `gitlab`, el arranque sin forzar, el pedido manual sin forzar, el poll forzando, y un **cuarto llamador por alias**. Los cinco fallaron como debían.
+
+**Pendiente del operador: ninguno.**
+
+---
+
 **Versión:** v1 → v2 (2026-08-02). Ver el **CHANGELOG v1→v2** al final (§11).
 **Fecha:** 2026-08-02
 **Rama en la que se escribió:** `docs/plan-279`

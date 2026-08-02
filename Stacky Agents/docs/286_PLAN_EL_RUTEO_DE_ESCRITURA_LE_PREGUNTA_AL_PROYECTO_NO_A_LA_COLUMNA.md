@@ -16,7 +16,7 @@
 |---|---|---|
 | F0 | **IMPLEMENTADA** | `test_plan286_columna_no_rutea.py` nace **`2 failed, 2 passed`** (4 collected), y las dos patas listan **exactamente** los 4 sitios. Ratchets: parity **12 passed**, meta **4 passed** |
 | F1 | **IMPLEMENTADA** | Rojo previo real: `ImportError: cannot import name '_reset_memo_tracker_declarado'`. Después: **`14 passed`** (14 collected). En vivo: RIPLEY→`gitlab`, RSPACIFICO→`azure_devops`. Perf **`108 us/llamada`** (bar < 400, línea base sin memo 1.057) |
-| F2 | pendiente | |
+| F2 | **IMPLEMENTADA** | Rojo previo real, los 2 predichos: `#1 assert 'ado_client' == 'provider'`, `#5 assert 'azure_devops' == 'gitlab'`. Después **`6 passed`** (6 collected). No-regresión exacta: 270→**14**, 271→**13**, ratchet 270→**6**, 281 sitios→**18**. Ratchets: parity **12**, meta **4 passed** |
 | F3 | pendiente | |
 | F4 | pendiente | |
 | F5 | pendiente | |

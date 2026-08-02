@@ -1017,6 +1017,7 @@ HARNESS_TEST_FILES=(
   # Plan 286 - El ruteo de escritura le pregunta al proyecto, no a la columna.
   tests/test_plan286_columna_no_rutea.py
   tests/test_plan286_tracker_efectivo.py
+  tests/test_plan286_ruteo_de_escritura.py
 
   tests/test_plan266_summary_shape.py
   tests/test_plan266_flag_cableado.py

@@ -911,6 +911,7 @@ $HarnessTestFiles = @(
   # Plan 286 - El ruteo de escritura le pregunta al proyecto, no a la columna.
   "tests/test_plan286_columna_no_rutea.py",
   "tests/test_plan286_tracker_efectivo.py",
+  "tests/test_plan286_ruteo_de_escritura.py",
 
 
   # Plan 266 - Cero pantalla rota en el comparador de BD (forma garantizada del summary)

@@ -45,31 +45,36 @@ def routing_enabled() -> bool:
     return bool(getattr(_cfg, "STACKY_TRACKER_STATE_WRITE_ROUTING_ENABLED", True))
 
 
-def _norm_tracker_type(ticket) -> str:
-    raw = getattr(ticket, "tracker_type", None)
-    if not isinstance(raw, str):
-        return ""
-    return raw.strip().lower()
-
-
 def resolve_state_writer(ticket) -> StateWriter:
     """Devuelve el escritor correcto para `ticket`, o levanta.
 
-    - tracker_type ausente / "azure_devops" -> StateWriter(kind="ado_client")
-      construido con services.project_context.build_ado_client(...).
-    - tracker_type == "gitlab" -> get_tracker_provider(stacky_project_name)
+    Plan 286 F2 — el tracker NO sale de la columna `ticket.tracker_type`, sale
+    de `services.project_context.tracker_efectivo_de_ticket(ticket)`, que aplica
+    la precedencia *columna explícita > config del proyecto > default*. Motivo:
+    la columna tiene default `"azure_devops"` en el ORM (models.py:49), así que
+    ese valor es indistinguible de "nadie la seteó" y MIENTE para todo ticket
+    creado sin ese campo en un proyecto que no es Azure DevOps.
+
+    - tracker efectivo "azure_devops" (o sin resolver) -> StateWriter(
+      kind="ado_client") construido con
+      services.project_context.build_ado_client(...).
+    - tracker efectivo "gitlab" -> get_tracker_provider(stacky_project_name)
       (services/tracker_provider.py:125). Si esa fábrica levanta
       TrackerConfigError (p.ej. STACKY_GITLAB_ENABLED=false,
       config.py:1185-1186), se RE-LEVANTA como CapabilityUnavailable — NO se
       cae a ADO.
-    - cualquier otro tracker_type -> CapabilityUnavailable.
+    - cualquier otro tracker efectivo -> CapabilityUnavailable.
 
-    REGLA DURA: nunca devuelve kind == "ado_client" cuando el tracker_type
-    normalizado no es "azure_devops" (ni cadena vacía/None).
+    REGLA DURA: nunca devuelve kind == "ado_client" cuando el tracker efectivo
+    no es "azure_devops" (ni cadena vacía/None).
     """
     from services.tracker_provider import CapabilityUnavailable, TrackerConfigError
 
-    ttype = _norm_tracker_type(ticket)
+    # Import local, como el resto del archivo (`:70`, `:78`, `:87`): no liga la
+    # referencia al importar el módulo y sigue siendo interceptable.
+    from services.project_context import tracker_efectivo_de_ticket
+
+    ttype = tracker_efectivo_de_ticket(ticket)
 
     if ttype in _ADO_TRACKER_TYPES:
         # Importado como MÓDULO (no `from ... import build_ado_client`) para que
@@ -179,7 +184,11 @@ def preview_state_write(*, ticket, requested_state: str) -> dict:
     """
     from services.tracker_provider import CapabilityUnavailable
 
-    ttype = _norm_tracker_type(ticket) or "azure_devops"
+    # Plan 286 F2 — el dry-run le reportaba "azure_devops" al operador para un
+    # ticket de un proyecto GitLab. Ahora reporta el tracker EFECTIVO.
+    from services.project_context import tracker_efectivo_de_ticket
+
+    ttype = tracker_efectivo_de_ticket(ticket)
     try:
         writer, target = _resolve_destination(ticket, requested_state)
     except CapabilityUnavailable as exc:

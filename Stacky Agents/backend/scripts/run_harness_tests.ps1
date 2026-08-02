@@ -15,6 +15,7 @@ $HarnessTestFiles = @(
   "tests/test_harness_flags.py",
   "tests/test_harness_health.py",
   "tests/test_harness_h8_kpis.py",
+  "tests/test_harness_learning.py",
   "tests/test_model_policy.py",
   "tests/test_run_contract.py",
   "tests/test_runaway_guard.py",

@@ -20,7 +20,7 @@
 | F3 | **IMPLEMENTADA, con UN rojo ajeno declarado (ver C12)** | Rojo previo real: `#7 assert 'ado_client' == 'gitlab_adapter'`. Después **`9 passed`** (9 collected). **PERO** `test_plan282_publicacion_comentario.py` pasa de **`7 passed`** a **`1 failed, 6 passed`** — y el que falla estaba **congelando el defecto**. No se tocó. Ver C12 |
 | F4 | **IMPLEMENTADA — hito del eje** | Rojo previo real: `#10` y `#12`, los dos `assert 'azure_devops' == 'gitlab'`. Después **`13 passed`**. **F0 pasa a `4 passed`: las DOS patas verdes.** 281 sitios sigue en **18**. Censo `getattr`-extendido **8 → 7**, sin `completion_sync::_resolve_sync_and_project`. El import de `api.tickets` NO creó la base (verificado: el archivo no existe) |
 | F5 | **IMPLEMENTADA** | `test_plan281_ratchet_ado_only.py` **`11 passed`**, `test_plan281_sitios_ado_only.py` **`18 passed`**, y el snippet imprime **`F5 OK`** (`scan_tracker_type_routing() == []` con la exclusión reducida a `project_context.py`). Efecto medido: cero, como predijo el plan |
-| F6 | pendiente | |
+| F6 | **IMPLEMENTADA** | `test_plan286_columna_no_rutea.py` **`5 passed`**. BD viva con `mode=ro`: `total historico: 2`, `sobre el corte : 0`. Gate completo **contra una copia**: `"K1": 0`, los 6 KPI en meta, `RESULTADO: exit 0`, **`EXIT=0`** (antes: `no_medible` / `exit 5`) |
 | F7 | pendiente | |
 
 > **Corrección de baseline medida al implementar (§4.6).** `test_harness_ratchet_meta.py`

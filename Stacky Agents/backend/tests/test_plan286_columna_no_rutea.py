@@ -170,3 +170,40 @@ def test_el_centinela_no_se_calla_si_la_funcion_desaparece(tmp_path):
     assert archivos_sin_anclaje((("limpio.py", None),), backend=tmp_path) == []
     assert archivos_sin_anclaje(
         (("limpio.py", "resolver"),), backend=tmp_path) == []
+
+
+def test_el_gate_282_mide_de_verdad_y_respeta_el_corte():
+    """El defecto no era el TEXTO, era que la query no CORRIA. Asi que se corre.
+    Contra SQLite en memoria: no importa `db`, no toca la base del operador."""
+    import importlib.util, sqlite3
+    from pathlib import Path
+
+    ruta = Path(__file__).resolve().parents[1] / "scripts" / "gate_plan282.py"
+    spec = importlib.util.spec_from_file_location("gate_plan282_bajo_test", ruta)
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+
+    # PRESENCIA (lo que TIENE que estar), guardada junto a la ausencia: un assert
+    # de ausencia solo pasaria igual si la query se borrara entera.
+    assert "error_message LIKE" in gate.K1_SQL
+    assert "published_at > :corte" in gate.K1_SQL
+    assert "reason LIKE" not in gate.K1_SQL
+
+    c = sqlite3.connect(":memory:")
+    c.execute("CREATE TABLE agent_html_publish "
+              "(id INTEGER, status TEXT, error_message TEXT, published_at TEXT)")
+    firma = ("ADO client build failed: AdoConfigError: El proyecto 'RIPLEY' "
+             "no usa Azure DevOps (tracker_type=gitlab).")
+    c.executemany("INSERT INTO agent_html_publish VALUES (?,?,?,?)", [
+        (56, "failed", firma, "2026-08-01 16:16:42.530521"),   # historica
+        (57, "failed", firma, "2026-08-01 20:24:43.801697"),   # historica
+        (58, "failed", "otro error cualquiera", "2026-09-01 00:00:00"),
+        (59, "ok",     firma,                    "2026-09-01 00:00:00"),
+    ])
+    sql = gate.K1_SQL.replace(":corte", "?")
+    assert c.execute(sql, (gate.K1_CORTE_HISTORICO,)).fetchone()[0] == 0
+
+    # Y ahora la mitad que de verdad importa: una REGRESION tiene que contar.
+    c.execute("INSERT INTO agent_html_publish VALUES (60,'failed',?, '2026-09-02 00:00:00')",
+              (firma,))
+    assert c.execute(sql, (gate.K1_CORTE_HISTORICO,)).fetchone()[0] == 1

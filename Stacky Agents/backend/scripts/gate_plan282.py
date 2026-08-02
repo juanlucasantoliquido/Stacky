@@ -30,6 +30,31 @@ FRONTEND_SRC = BACKEND.parent / "frontend" / "src"
 NO_MEDIBLE = object()
 
 
+# Plan 286 F6 — Corte historico de K1. Las dos publicaciones fallidas que hay en
+# la base del operador (ids 56 y 57, ado_id 1116 y 1120) son ANTERIORES a que el
+# fix del Plan 282 estuviera CORRIENDO: la 57 es de un backend arrancado antes
+# del commit 3461d0ce y nunca reiniciado (Plan 286 §2.3(d)). Sus tickets tienen
+# la columna CORRECTA, asi que no las causo el defecto del Plan 286 y el Plan 286
+# PROHIBE borrarlas (§7.2). Sin este corte, arreglar el nombre de la columna
+# dejaria K1 en 2 contra la meta 0 de `main()` y este gate quedaria en exit 2
+# para siempre. El corte es POSTERIOR a la ultima falla historica conocida
+# (2026-08-01 20:24:43): toda fila con esta firma despues de este instante es una
+# regresion real del eje y TIENE que contar.
+K1_CORTE_HISTORICO = "2026-08-01 21:00:00"
+
+# La query VIVE aca, como constante, para que el test la EJECUTE en vez de
+# copiarla: un test que copia el SQL queda verde con el gate roto.
+K1_SQL = (
+    "SELECT COUNT(*) FROM agent_html_publish "
+    # `error_message` es la columna real. `reason` es el campo del dataclass
+    # PublishResult (ado_publisher.py:459), NO la columna: con `reason` esto
+    # tiraba `OperationalError: no such column` y K1 devolvia NO MEDIBLE SIEMPRE,
+    # tapado por el `except Exception` de mas abajo.
+    "WHERE status = 'failed' AND error_message LIKE '%no usa Azure DevOps%' "
+    "AND published_at > :corte"
+)
+
+
 # ── K2: allowlist ESPEJO de la del censo de vitest ───────────────────────────
 # Si divergen, el gate y el test dirian cosas distintas del mismo repo. La
 # comprobacion de que el espejo sigue siendo fiel esta en `_verificar_espejo`.
@@ -196,13 +221,11 @@ def k1_publicaciones_fallidas():
 
     try:
         with session_scope() as s:
-            filas = s.execute(
-                text(
-                    "SELECT COUNT(*) FROM agent_html_publish "
-                    "WHERE status = 'failed' AND reason LIKE '%no usa Azure DevOps%'"
-                )
-            ).scalar()
-        return int(filas or 0), []
+            filas = s.execute(text(K1_SQL), {"corte": K1_CORTE_HISTORICO}).scalar()
+        return int(filas or 0), [
+            f"corte historico {K1_CORTE_HISTORICO}: las 2 fallas previas "
+            f"(Plan 286 §2.3(d)) no cuentan y NO se borran"
+        ]
     except Exception as exc:  # noqa: BLE001
         return NO_MEDIBLE, [f"la base no respondio: {type(exc).__name__}"]
 

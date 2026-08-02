@@ -1014,6 +1014,9 @@ HARNESS_TEST_FILES=(
   tests/test_plan282_fabrica_unica.py
   tests/test_plan282_assignee_no_borra.py
 
+  # Plan 286 - El ruteo de escritura le pregunta al proyecto, no a la columna.
+  tests/test_plan286_columna_no_rutea.py
+
   tests/test_plan266_summary_shape.py
   tests/test_plan266_flag_cableado.py
   tests/test_plan266_harness_runner_paridad.py

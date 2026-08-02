@@ -10,6 +10,33 @@
 
 ---
 
+## ESTADO DE IMPLEMENTACIÓN (v2, rama `docs/plan-279`, 2026-08-02)
+
+| Fase | Estado | Evidencia real (output pegado) |
+|---|---|---|
+| F0 | **IMPLEMENTADA** | `test_plan286_columna_no_rutea.py` nace **`2 failed, 2 passed`** (4 collected), y las dos patas listan **exactamente** los 4 sitios. Ratchets: parity **12 passed**, meta **4 passed** |
+| F1 | pendiente | |
+| F2 | pendiente | |
+| F3 | pendiente | |
+| F4 | pendiente | |
+| F5 | pendiente | |
+| F6 | pendiente | |
+| F7 | pendiente | |
+
+> **Corrección de baseline medida al implementar (§4.6).** `test_harness_ratchet_meta.py`
+> ya **no** está `1 failed, 3 passed`: da **`4 passed`**. El rojo de fábrica ajeno
+> (`test_allowlist_no_se_solapa_con_ratchet`, `tests/test_docs_api.py` duplicado) lo saldó
+> el Plan 285 en `91e461fa` *("saldo del 4to rojo de fabrica")*, **posterior** a la medición
+> de la v2. El criterio de este eje sobre esa suite pasa a ser **`4 passed`** — más
+> estricto, no más laxo. §7.12 sigue valiendo: no se tocó nada de eso acá.
+>
+> **Baseline extra medido:** `test_error_fingerprints_catalog.py` = **`3 failed, 5 passed`**
+> de fábrica (`test_campos_obligatorios` y `test_self_test_coherente` por
+> `PLAN239-OUTLET-EN-BLANCO` sin `self_test`; `test_status_enum` porque `guarded` **no está**
+> en el enum del test aunque sí esté en uso en el catálogo). F7 debe conservar ese número.
+
+---
+
 ## CHANGELOG v1 -> v2
 
 Las cinco afirmaciones medibles de la v1 se **reprodujeron ejecutando**, y las cinco

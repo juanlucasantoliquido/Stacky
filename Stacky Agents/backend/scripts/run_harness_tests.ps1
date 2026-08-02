@@ -908,6 +908,9 @@ $HarnessTestFiles = @(
   "tests/test_plan282_fabrica_unica.py",
   "tests/test_plan282_assignee_no_borra.py",
 
+  # Plan 286 - El ruteo de escritura le pregunta al proyecto, no a la columna.
+  "tests/test_plan286_columna_no_rutea.py",
+
 
   # Plan 266 - Cero pantalla rota en el comparador de BD (forma garantizada del summary)
   "tests/test_plan266_summary_shape.py",

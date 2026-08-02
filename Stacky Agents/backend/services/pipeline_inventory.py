@@ -624,9 +624,20 @@ def _scan_reliable(meta_scan: dict) -> bool:
     return True
 
 
-def build_inventory(project: str | None = None, *, refresh: bool = False) -> dict:
-    """Arma el inventario COMPLETO. NUNCA LANZA. Devuelve siempre un dict valido."""
-    cache_key = project or ""
+def build_inventory(project: str | None = None, *, refresh: bool = False,
+                    describe: bool = False) -> dict:
+    """Arma el inventario COMPLETO. NUNCA LANZA. Devuelve siempre un dict valido.
+
+    Plan 294 F10 — `describe` es ADITIVO: sin el parametro la salida es
+    byte-identica a la de siempre (R10). Con el, cada entrada pasa por
+    `describe_pipeline` y suma sus 6 claves de ficha; las 12 originales quedan
+    intactas.
+
+    LA CLAVE DEL CACHE INCLUYE `describe` A PROPOSITO: si no, un pedido SIN
+    ficha envenena durante los 5 minutos del TTL al pedido CON ficha, y el bug
+    reaparece con otra cara.
+    """
+    cache_key = f"{project or ''}|{int(bool(describe))}"
     if not refresh:
         cached = _CACHE.get(cache_key)
         if cached and time.monotonic() < cached[0]:
@@ -751,6 +762,19 @@ def build_inventory(project: str | None = None, *, refresh: bool = False) -> dic
         elif entry["category"] == CATEGORY_FILE_NOT_REGISTERED:
             entry["hints"] = nearest_repo_paths(entry.get("yaml_path"), reg_paths)
 
+    salida = entries
+    if describe:
+        # Plan 294 F10 — la ficha se calcula DESPUES de reconciliar, sobre las
+        # entradas ya armadas: no toca `reconcile` ni el shape de `make_entry`.
+        salida = []
+        for entry in entries:
+            texto = None
+            try:
+                texto, _ = get_pipeline_yaml(entry.get("key") or "")
+            except Exception:      # noqa: BLE001 — sin archivo legible: sin ficha
+                texto = None
+            salida.append(describe_pipeline(entry, texto))
+
     payload = {
         "ok": True,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -759,7 +783,174 @@ def build_inventory(project: str | None = None, *, refresh: bool = False) -> dic
         "project": project or "",
         "counts": counts(entries),
         "sources": [src_prov, src_scan],   # SIEMPRE 2, nunca 3  [v2 - C3]
-        "pipelines": entries,
+        "pipelines": salida,
     }
     _CACHE[cache_key] = (time.monotonic() + _CACHE_TTL_SEC, payload)
     return payload
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Plan 294 F2 — El inventario habla castellano (y se cierra el bug vivo GAP-6)
+#
+# NADA DE ACA REESCRIBE LO DE ARRIBA. Son DOS funciones ADITIVAS:
+#   · get_pipeline_yaml  — la funcion que api/pipeline_profiler.py:32 YA importa
+#                          y que nunca existio (por eso el perfil por pipeline_id
+#                          devolvia 501 SIEMPRE).
+#   · describe_pipeline  — enriquece UNA entrada con la ficha en castellano que
+#                          services/pipeline_profiler.py ya sabe generar, sin
+#                          gastar un token. AGREGA claves; jamas toca las 12.
+# ═════════════════════════════════════════════════════════════════════════════
+
+#: Tabla CERRADA de traduccion del disparador. Se consulta SIEMPRE con .get():
+#: el vocabulario del proveedor es ABIERTO y un lookup con [] lanzaria KeyError.
+#: Como describe_pipeline atrapa todo, un proyecto sano apareceria SIN ficha.
+_WHEN_ES: dict[str, str] = {
+    "ci": "cuando alguien sube algo a {ramas}",
+    "default": "cuando alguien sube algo a la rama principal",
+    "none": "solo cuando lo pedis a mano",
+    "unknown": "no se pudo determinar cuando se ejecuta",
+}
+
+
+def _frase_de_trigger(trigger: dict | None) -> str:
+    """Traduce el bloque `trigger` del inventario a castellano. NUNCA lanza."""
+    trig = trigger if isinstance(trigger, dict) else {}
+    kind = str(trig.get("kind") or "unknown").strip().lower()
+    plantilla = _WHEN_ES.get(kind)
+    if plantilla is None:
+        return _WHEN_ES["unknown"]
+    if "{ramas}" not in plantilla:
+        return plantilla
+    ramas = [str(r) for r in (trig.get("branches") or []) if str(r).strip()]
+    if not ramas:
+        return _WHEN_ES["default"]
+    return plantilla.format(ramas=", ".join(ramas))
+
+
+def get_pipeline_yaml(pipeline_key: str, project: str | None = None) -> tuple[str, str]:
+    """Devuelve (yaml_text, source_path) para una `key` del inventario.
+
+    Cierra GAP-6: es la funcion que api/pipeline_profiler.py ya importaba y que
+    no existia. SOLO lee del WORKSPACE local (nunca de red). Si la key no
+    resuelve a un archivo legible dentro del workspace, lanza KeyError (el
+    endpoint lo mapea a 404).
+
+    `project` se acepta para que la firma sea la del contrato publicado; hoy el
+    workspace activo ya esta resuelto por runtime_paths y no se usa para elegir
+    otra raiz. Se ignora a proposito en vez de fingir un ruteo que no existe.
+    """
+    from pathlib import Path                              # noqa: PLC0415
+    from runtime_paths import _active_workspace_root      # noqa: PLC0415
+
+    _ = project  # ver docstring: parte del contrato, sin efecto hoy
+    root = _active_workspace_root()
+    if not root:
+        raise KeyError("sin_workspace_activo")
+    raiz = Path(str(root)).resolve()
+
+    # la key es "<provider>::<ruta normalizada>"  (identity_key)
+    if "::" not in (pipeline_key or ""):
+        raise KeyError("clave_invalida")
+    _prov, _, rel = pipeline_key.partition("::")
+    if not rel or rel.startswith("#"):   # "#def123" / "#desconocida": no hay archivo
+        raise KeyError("sin_archivo_en_repo")
+
+    ruta = (raiz / rel).resolve()
+    # ANTI PATH TRAVERSAL — el archivo tiene que colgar de la raiz del workspace.
+    if raiz != ruta and raiz not in ruta.parents:
+        raise KeyError("fuera_del_workspace")
+    if not ruta.is_file():
+        raise KeyError("archivo_inexistente")
+    if ruta.stat().st_size > _MAX_YAML_BYTES:   # reusa el cap que YA existe arriba
+        raise KeyError("archivo_demasiado_grande")
+    return ruta.read_text(encoding="utf-8", errors="replace"), rel
+
+
+def _fases_es(perfil) -> list[str]:
+    """Etapas afirmadas por el perfilador, en castellano y EN ORDEN. Solo las
+    que el perfil declara `True`: una fase ausente no se inventa."""
+    from services.pipeline_profiler import PHASE_IDS, _PHASE_VERBS  # noqa: PLC0415
+
+    fases = perfil.phases or {}
+    out: list[str] = []
+    for pid in PHASE_IDS:
+        campo = fases.get(pid)
+        if campo is not None and campo.value is True:
+            out.append(str(_PHASE_VERBS.get(pid, pid)))
+    return out
+
+
+def _artefactos_es(perfil) -> list[str]:
+    valores = perfil.artifacts_published.value or ()
+    return [str(a) for a in valores]
+
+
+def _entornos_es(perfil) -> list[str]:
+    """[ADICION ARQUITECTO 3] Lista de ambientes a los que la pipeline despliega.
+
+    Lista VACIA con purpose_source == "plantilla" es una AFIRMACION ("no
+    despliega"). purpose_source == "sin_datos" es IGNORANCIA ("no se pudo
+    determinar"). La UI NUNCA debe confundir esos dos casos: afirmar "no
+    despliega" sobre una pipeline que despliega a produccion es el peor error
+    posible antes de encolar una corrida real.
+    """
+    refs = perfil.environments.value or ()
+    out: list[str] = []
+    for ref in refs:
+        nombre = getattr(ref, "name", "")
+        if getattr(ref, "resolved", True):
+            out.append(str(nombre))
+        else:
+            out.append("(no se pudo resolver el nombre del ambiente)")
+    return out
+
+
+def describe_pipeline(entry: dict, yaml_text: str | None) -> dict:
+    """Enriquece UNA entrada del inventario con la ficha en castellano.
+
+    AGREGA 6 claves; NUNCA quita ni renombra las 12 de make_entry (R10):
+      purpose, purpose_source, stages_es, when_es, artifacts_es, environments_es.
+    Si `yaml_text` es None o no parsea: purpose_source == "sin_datos" y el resto
+    vacio. NUNCA LANZA: la ficha degrada, el inventario no se rompe.
+    """
+    out = dict(entry if isinstance(entry, dict) else {})
+    out["purpose"] = ""
+    out["purpose_source"] = "sin_datos"
+    out["stages_es"] = []
+    out["artifacts_es"] = []
+    out["environments_es"] = []
+    out["when_es"] = _frase_de_trigger(out.get("trigger"))
+    if not yaml_text:
+        return out
+    # La LISTA del inventario esta gateada por su propia flag; la FICHA depende
+    # del perfilador, que tiene la suya. Que falte la segunda degrada la ficha a
+    # "no se pudo determinar", nunca la lista. Nunca al reves.
+    try:
+        import config as _config                            # noqa: PLC0415
+
+        if not getattr(_config.config, "STACKY_PIPELINE_PROFILER_ENABLED", False):
+            return out
+    except Exception:            # noqa: BLE001 — sin config legible, se degrada igual
+        return out
+    try:
+        from services.pipeline_profiler import (            # noqa: PLC0415
+            build_purpose_template,
+            profile_pipeline,
+        )
+
+        perfil = profile_pipeline(yaml_text, source_path=out.get("yaml_path") or "")
+        if perfil.parse_error:
+            # el YAML no se pudo leer: es IGNORANCIA, no una afirmacion.
+            return out
+        out["purpose"] = build_purpose_template(perfil)  # determinista, <=200, SIN modelo
+        out["purpose_source"] = "plantilla"
+        out["stages_es"] = _fases_es(perfil)
+        out["artifacts_es"] = _artefactos_es(perfil)
+        out["environments_es"] = _entornos_es(perfil)
+    except Exception:            # noqa: BLE001 — la ficha degrada, el inventario nunca rompe
+        out["purpose"] = ""
+        out["purpose_source"] = "sin_datos"
+        out["stages_es"] = []
+        out["artifacts_es"] = []
+        out["environments_es"] = []
+    return out

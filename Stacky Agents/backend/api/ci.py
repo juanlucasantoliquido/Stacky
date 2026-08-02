@@ -8,13 +8,16 @@ Endpoints:
 Blueprint registrado en api/__init__.py con url_prefix="/ci" sobre api_bp
 (url_prefix="/api") → rutas finales /api/ci/... (C1, sin doble prefijo).
 
-Flag STACKY_PIPELINE_TRIGGER_ENABLED: default OFF, leída per-request (C2').
-Si OFF → guard 404 per-request; el blueprint siempre está registrado.
+Flag STACKY_PIPELINE_TRIGGER_ENABLED: default ON (operador 2026-07-05), leída
+per-request (C2'). El default efectivo vive en config.py; su FlagSpec declara
+default=True. Si la flag está apagada → guard 404 per-request; el blueprint
+siempre está registrado.
 """
 from __future__ import annotations
 
 import concurrent.futures as _fut
 import hashlib
+import re as _re
 import time
 from dataclasses import replace as _dc_replace
 from pathlib import Path
@@ -70,6 +73,50 @@ def _record_trigger(tracker_type: str, ref: str, sha: str, pipeline_id: str) -> 
         "pipeline_id": pipeline_id,
         "ts": time.time(),
     }
+
+
+#: Plan 294 F7 — tope y forma de las variables por corrida.
+_MAX_TRIGGER_VARS = 25
+_TRIGGER_VAR_KEY_RE = _re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+class TriggerVarsInvalid(ValueError):
+    """Plan 294 F7 — el cuerpo trae variables mal formadas. Siempre 400, nunca 500."""
+
+
+def _validar_variables(crudo):
+    """Plan 294 F7 — dict[str, str] acotado, o `None` si no vino nada.
+
+    Lanza TriggerVarsInvalid (que la ruta traduce a 400, nunca a 500) si el
+    cuerpo no tiene la forma esperada. El tope y el patron de la clave existen
+    porque esto termina en una corrida REAL del sistema del operador: una clave
+    rara o un diccionario gigante son un error del llamador, no algo que haya
+    que reenviar al proveedor.
+    """
+    if crudo is None:
+        return None
+    if not isinstance(crudo, dict):
+        raise TriggerVarsInvalid(
+            "las variables por corrida tienen que venir como un objeto de nombre y valor"
+        )
+    if len(crudo) > _MAX_TRIGGER_VARS:
+        raise TriggerVarsInvalid(
+            f"demasiadas variables por corrida ({len(crudo)}); el maximo es "
+            f"{_MAX_TRIGGER_VARS}"
+        )
+    out: dict[str, str] = {}
+    for k, v in crudo.items():
+        if not isinstance(k, str) or not _TRIGGER_VAR_KEY_RE.match(k):
+            raise TriggerVarsInvalid(
+                f"el nombre de variable {k!r} no es valido: se admiten letras, "
+                f"numeros y guion bajo, y no puede empezar con un numero"
+            )
+        if not isinstance(v, (str, int, bool)):
+            raise TriggerVarsInvalid(
+                f"el valor de {k!r} tiene que ser texto, numero entero o si/no"
+            )
+        out[k] = str(v)
+    return out
 
 
 def _read_pat_scopes(provider) -> set[str] | None:
@@ -289,6 +336,22 @@ def trigger_pipeline_route(project: str):
                 "hint": "cargá los valores en Variables, o reintentá con acknowledge_missing=true",
             }), 409
 
+    # Plan 294 F7 — variables de ESTA corrida. Va DESPUES del guard de confirm y
+    # DESPUES del gate del plan 260, y ANTES de la idempotencia: no consume la
+    # ventana de 60 s con un disparo que el gate ya iba a rechazar.
+    variables = None
+    if getattr(_config.config, "STACKY_PIPELINE_TRIGGER_VARS_ENABLED", False):
+        try:
+            variables = _validar_variables(body.get("variables"))
+        except TriggerVarsInvalid as exc:
+            return jsonify({"error": str(exc), "kind": "trigger_vars_invalid"}), 400
+    elif body.get("variables"):
+        # 409 y no 403: la ruta existe y la flag madre esta encendida. Es un
+        # conflicto de configuracion, no un permiso (aca no hay permisos).
+        return jsonify({"error": "las variables por corrida estan desactivadas",
+                        "kind": "trigger_vars_disabled",
+                        "hint": "Activala en Configuracion -> Arnes, categoria DevOps."}), 409
+
     # Idempotencia
     recent = _recent_triggers(provider.name, ref_value)
     fire, existing = should_trigger(ref_value, body.get("sha", ""), recent, window_seconds=60)
@@ -306,7 +369,15 @@ def trigger_pipeline_route(project: str):
         ref=ref_value,
     )
     try:
-        result = provider.trigger_pipeline(item_ref, ref_value)
+        # R10 — sin variables, el llamado es BYTE-IDENTICO al de siempre: se pasan
+        # DOS argumentos, no tres con None. No es cosmetica: hay proveedores y
+        # dobles vivos cuya firma sigue siendo (item_ref, ref), y mandarles un
+        # tercer posicional los rompe con 500 (medido: rompia
+        # test_plan72_trigger_endpoint::test_trigger_uses_provider_name_for_item_ref).
+        if variables:
+            result = provider.trigger_pipeline(item_ref, ref_value, variables)
+        else:
+            result = provider.trigger_pipeline(item_ref, ref_value)
     except TrackerApiError as exc:
         return jsonify({"error": str(exc), "kind": exc.kind}), exc.status
     except NotImplementedError as exc:

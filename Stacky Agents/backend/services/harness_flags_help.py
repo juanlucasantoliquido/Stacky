@@ -2222,6 +2222,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagas: el copiloto llega hasta el borrador revisado y te lleva a la pantalla para crearlo vos mismo.",
         example="Es la diferencia entre que te dejen el plano listo y que ademas te levanten la pared: lo segundo se pide aparte.",
     ),
+    # ── Plan 294 — Asistente guiado para crear pipelines ──────────────────
+    "STACKY_PIPELINE_WIZARD_ENABLED": PlainHelp(
+        what="Agrega un asistente que arma tu pipeline paso a paso, sin que tengas que escribir el archivo a mano.",
+        on_effect="Si la activas: aparece la seccion 'Crear pipeline', que mira tu proyecto, te muestra en castellano las pipelines que ya tenes y te prepara el borrador con pocas preguntas.",
+        off_effect="Si la apagas: el panel de automatizaciones queda como hoy, con el constructor grafico y las demas secciones intactas.",
+        example="Es la diferencia entre que te den un formulario de veintiocho casilleros y que te pregunten cuatro cosas de a una.",
+    ),
+    "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED": PlainHelp(
+        what="Decide si el asistente puede crear el archivo de la pipeline en tu repositorio de verdad, o si solo te muestra el borrador.",
+        on_effect="Si la activas: despues de que confirmes, el asistente escribe el archivo en la rama que elegiste de tu repositorio real.",
+        off_effect="Si la apagas: el asistente llega hasta el borrador revisado y te lo ofrece para que lo copies y lo crees vos.",
+        example="Es la diferencia entre que te dejen el plano listo y que ademas te levanten la pared: lo segundo se pide aparte.",
+    ),
+    "STACKY_PIPELINE_TRIGGER_VARS_ENABLED": PlainHelp(
+        what="Decide si al ejecutar una pipeline desde aca podes mandarle valores que valen solo para esa corrida.",
+        on_effect="Si la activas: antes de confirmar la ejecucion podes cargar pares de nombre y valor que esa corrida va a usar, por ejemplo a que ambiente apunta.",
+        off_effect="Si la apagas: al ejecutar se manda unicamente la rama, exactamente como hasta hoy, y el campo de valores aparece atenuado.",
+        example="Es como pedir el mismo viaje pero indicando otro destino solo por esta vez.",
+    ),
     # ── Plan 268 — Explorador del grafo documental ────────────────────────
     "STACKY_DOCS_GRAPH_EXPLORER_ENABLED": PlainHelp(
         what="Agrega herramientas para explorar el mapa de documentos: filtros, buscador que salta al resultado, foco en los vecinos de una nota y vista previa.",

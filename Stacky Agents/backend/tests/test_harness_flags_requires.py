@@ -391,6 +391,14 @@ _REQUIRES_MAP_FROZEN = {
     "STACKY_MEETINGS_PUBLISH_ENABLED": "STACKY_MEETINGS_ENABLED",
     "STACKY_MEETINGS_GRAPH_TENANT": "STACKY_MEETINGS_ENABLED",
     "STACKY_MEETINGS_GRAPH_CLIENT_ID": "STACKY_MEETINGS_ENABLED",
+    # Plan 294: las 2 hijas de escritura del asistente guiado. Profundidad 1 en
+    # los dos casos y ninguna madre declara `requires` (R4). La primera cuelga
+    # del propio asistente; la segunda cuelga del disparo de pipelines, que es
+    # quien de verdad la habilita (mandar variables sin poder disparar no
+    # significa nada). Las aristas son INFORMATIVAS para la UI: cada guard
+    # chequea sus flags por su cuenta.
+    "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED": "STACKY_PIPELINE_WIZARD_ENABLED",
+    "STACKY_PIPELINE_TRIGGER_VARS_ENABLED": "STACKY_PIPELINE_TRIGGER_ENABLED",
 }
 
 

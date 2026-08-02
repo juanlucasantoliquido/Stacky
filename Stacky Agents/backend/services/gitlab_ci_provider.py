@@ -61,12 +61,31 @@ class GitLabCIProvider:
         """Plan 72 F1 — Delega a delegate.poll_pipeline."""
         return self._delegate.poll_pipeline(pipeline_id)
 
-    def trigger_pipeline(self, item_ref: "ItemRef", ref: str) -> dict:
+    def trigger_pipeline(self, item_ref: "ItemRef", ref: str,
+                         variables: dict | None = None) -> dict:
         """Plan 72 F2 — Delega a delegate.trigger_pipeline(ref).
 
         item_ref se pasa por contrato del Protocol pero el delegate solo necesita ref.
+
+        Plan 294 F7 — `variables` viaja con la forma de la API de GitLab
+        ([{"key": ..., "value": ...}]). Si el delegate de este deploy es viejo y
+        no acepta el argumento, el disparo IGUAL ocurre y el resultado declara
+        `variables_applied: False`: degradacion VISIBLE, nunca silenciosa.
+        Sin `variables`, el llamado es byte-identico al de antes.
         """
-        return self._delegate.trigger_pipeline(ref)
+        if not variables:
+            return self._delegate.trigger_pipeline(ref)
+
+        payload = [{"key": str(k), "value": str(v)} for k, v in variables.items()]
+        try:
+            out = self._delegate.trigger_pipeline(ref, variables=payload)
+        except TypeError:
+            out = dict(self._delegate.trigger_pipeline(ref) or {})
+            out["variables_applied"] = False
+            return out
+        out = dict(out or {})
+        out.setdefault("variables_applied", True)
+        return out
 
     def last_pipeline_for_ref(self, ref: str) -> dict | None:
         """Plan 72 F4 — preview HITL: devuelve el primer pipeline del ref o None.

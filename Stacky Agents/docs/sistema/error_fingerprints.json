@@ -1210,6 +1210,27 @@
           "INFO meeting_minutes reunion 42 minutes_state = done"
         ]
       }
+    },
+    {
+      "id": "pipeline_profiler_inventory_unavailable_501",
+      "title": "Perfilar una pipeline por su identificador devolvia 501 SIEMPRE",
+      "class": "import-error",
+      "status": "resolved",
+      "log_pattern": "\"error\"\\s*:\\s*\"inventory_unavailable\"",
+      "log_guarded": false,
+      "killed_by": "plan 294 F2 (get_pipeline_yaml en services/pipeline_inventory.py)",
+      "date_resolved": "2026-08-02",
+      "guard_test": "tests/test_plan294_describe.py::test_get_pipeline_yaml_se_puede_importar",
+      "evidence": "backend/api/pipeline_profiler.py:31-38; backend/services/pipeline_inventory.py (get_pipeline_yaml, plan 294 F2)",
+      "note": "El plan 247 programo contra services.pipeline_inventory.get_pipeline_yaml, que el plan hermano (246) nunca expuso: el import fallaba SIEMPRE y el camino pipeline_id respondia 501 'inventory_unavailable' de forma permanente. El test que lo cubria forzaba el ImportError con monkeypatch de builtins.__import__, asi que congelaba el 501 como comportamiento esperado y el bug nunca se veia. El 294 F2 crea la funcion. El test del 247 sigue pasando a proposito: prueba la degradacion, no la ausencia.",
+      "self_test": {
+        "matches": [
+          "POST /api/pipeline-profiler/profile -> 501 {\"error\": \"inventory_unavailable\", \"detail\": \"el registro de pipelines (plan 246) no esta instalado; envia yaml_text\"}"
+        ],
+        "clean": [
+          "POST /api/pipeline-profiler/profile -> 200 {\"ok\": true, \"profile\": {\"purpose\": \"Compila y testea para .NET Core.\"}}"
+        ]
+      }
     }
   ]
 }

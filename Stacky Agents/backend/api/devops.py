@@ -120,6 +120,15 @@ def _health_payload() -> dict:
         "pipeline_copilot_commit_enabled": bool(
             getattr(cfg, "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED", False)
         ),  # Plan 279 — crear la pipeline en el repo REAL (default OFF)
+        "pipeline_wizard_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_WIZARD_ENABLED", False)
+        ),  # Plan 294 — asistente guiado de 7 pasos (solo lectura y propuesta)
+        "pipeline_wizard_commit_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED", False)
+        ),  # Plan 294 — el asistente escribe en el repo REAL (default OFF)
+        "pipeline_trigger_vars_enabled": bool(
+            getattr(cfg, "STACKY_PIPELINE_TRIGGER_VARS_ENABLED", False)
+        ),  # Plan 294 — variables por corrida en el disparo (default OFF)
     }
 
 

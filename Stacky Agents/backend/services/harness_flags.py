@@ -308,6 +308,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_PIPELINE_SECRET_COMMIT_GATE_ENABLED",  # Plan 260 — bloquear commit con secreto
         "STACKY_PIPELINE_COPILOT_ENABLED",  # Plan 279 — copiloto de pipelines (lee, planea, explica)
         "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED",  # Plan 279 — crear la pipeline en el repo REAL (nace OFF)
+        "STACKY_PIPELINE_WIZARD_ENABLED",  # Plan 294 — asistente guiado de 7 pasos (lee y propone)
+        "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED",  # Plan 294 — el asistente escribe en el repo REAL (nace OFF)
+        "STACKY_PIPELINE_TRIGGER_VARS_ENABLED",  # Plan 294 — variables por corrida en el disparo (nace OFF)
     ),
     "flujo_funcional": (
         "STACKY_TASK_GATE_ENABLED", "STACKY_TASK_GATE_BLOCKING",
@@ -6838,6 +6841,62 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
         requires="STACKY_DEVOPS_ACTION_CATALOG_ENABLED",
+    ),
+    # ── Plan 294 — El pipeline se crea sin saber YAML: wizard guiado ───────
+    FlagSpec(
+        key="STACKY_PIPELINE_WIZARD_ENABLED",
+        default=True,  # Plan 294 — lee, pregunta, previsualiza y explica: nace ON
+        type="bool",
+        label="Asistente guiado para crear pipelines",
+        description=(
+            "Plan 294 - Agrega al panel DevOps un asistente de 7 pasos que arma tu "
+            "pipeline sin que escribas YAML: mira el proyecto, te muestra las pipelines "
+            "que ya tenes explicadas en castellano, te hace pocas preguntas y prepara el "
+            "borrador. NO escribe nada por su cuenta: crear el archivo lo gatea "
+            "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED. OFF: el panel DevOps queda "
+            "exactamente como hoy y la seccion 'Crear pipeline' se atenua."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_WIZARD_COMMIT_ENABLED",
+        # SIN default= A PROPOSITO. Una flag OFF no lo declara: la volveria
+        # default_is_known() y test_default_known_only_for_curated exige que ese
+        # conjunto sea EXACTAMENTE _CURATED_DEFAULTS_ON, donde una OFF no entra.
+        # El OFF vive SOLO en config.py. NO va en _CURATED_DEFAULTS_ON.
+        # Excepcion dura (B): ESCRIBE el archivo de pipeline en el repositorio REAL
+        # (repo_writer.commit_file, implementado en ado_provider y gitlab_provider).
+        type="bool",
+        label="El asistente puede crear el archivo en tu repositorio",
+        description=(
+            "Plan 294 - Decide si el asistente guiado puede escribir el archivo de "
+            "pipeline en la rama que elijas de tu repositorio real, o si solo puede "
+            "mostrarte el borrador. Nace APAGADA: aun encendida exige tu confirmacion "
+            "explicita. OFF: el asistente llega hasta el borrador revisado y te ofrece "
+            "copiarlo para que lo crees vos."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        requires="STACKY_PIPELINE_WIZARD_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_PIPELINE_TRIGGER_VARS_ENABLED",
+        # SIN default= A PROPOSITO (mismo motivo que la de arriba).
+        # Excepcion dura (B): INYECTA VALORES EN UNA CORRIDA REAL DEL CI DEL OPERADOR.
+        # Hoy el disparo manda SOLO la rama; mandar variables cambia QUE HACE esa
+        # ejecucion (puede apuntarla a otro ambiente o a otro destino de despliegue).
+        type="bool",
+        label="Mandar variables al ejecutar una pipeline",
+        description=(
+            "Plan 294 - Decide si al ejecutar una pipeline desde Stacky podes mandarle "
+            "valores solo para esa corrida (por ejemplo, a que ambiente apunta). Nace "
+            "APAGADA porque cambia lo que hace esa ejecucion en tu sistema real. OFF: "
+            "el disparo manda unicamente la rama, exactamente como hasta hoy."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        requires="STACKY_PIPELINE_TRIGGER_ENABLED",
     ),
     # ── Plan 268 — Explorador del grafo documental ────────────────────────
     FlagSpec(

@@ -2572,6 +2572,25 @@ class Config:
         "STACKY_PIPELINE_COPILOT_COMMIT_ENABLED", "false"
     ).strip().lower() == "true"
 
+    # ── Plan 294 — Wizard guiado de creacion de pipelines ────────────────────
+    # Lectura, preguntas, borrador y explicacion. NO escribe nada. Default ON:
+    # no enciende loop/daemon/barrido (no es (A)) y no toca sistemas del
+    # operador (no es (B)). Todas las llamadas salen de un clic del usuario.
+    STACKY_PIPELINE_WIZARD_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_WIZARD_ENABLED", "true"
+    ).strip().lower() == "true"
+    # Excepcion dura (B): el paso 7 ESCRIBE el archivo de pipeline en el
+    # repositorio REAL (repo_writer.commit_file). Nace APAGADA. Ese default OFF
+    # vive SOLO aca; su FlagSpec NO declara default= (services/harness_flags.py).
+    STACKY_PIPELINE_WIZARD_COMMIT_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED", "false"
+    ).strip().lower() == "true"
+    # Excepcion dura (B): manda VARIABLES a una corrida REAL del CI del operador;
+    # pueden cambiar a que ambiente apunta esa ejecucion. Nace APAGADA.
+    STACKY_PIPELINE_TRIGGER_VARS_ENABLED: bool = os.getenv(
+        "STACKY_PIPELINE_TRIGGER_VARS_ENABLED", "false"
+    ).strip().lower() == "true"
+
     # ── Plan 268 — Explorador del grafo documental (default ON, editable UI) ───
     STACKY_DOCS_GRAPH_EXPLORER_ENABLED: bool = os.getenv(
         "STACKY_DOCS_GRAPH_EXPLORER_ENABLED", "true"

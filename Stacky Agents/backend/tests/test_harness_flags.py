@@ -1135,6 +1135,16 @@ _CURATED_DEFAULTS_ON = {
     # STACKY_WORKBENCH_PUSH_ENABLED) NO figuran aca a proposito: nacen APAGADAS
     # por la excepcion (B) y por eso tampoco declaran default= en su FlagSpec.
     "STACKY_WORKBENCH_ENABLED",
+    # Plan 294 — el asistente guiado NACE ENCENDIDO porque solo LEE y PROPONE:
+    # mira el proyecto, describe el inventario que ya existe, arma preguntas y
+    # previsualiza el borrador con el motor de render que ya estaba. No cae en
+    # (A): no enciende loop, daemon, barrido ni llamada a modelo — todo sale de
+    # un clic del usuario. No cae en (B): no escribe en ningun sistema real.
+    # Sus dos hermanas de escritura (STACKY_PIPELINE_WIZARD_COMMIT_ENABLED y
+    # STACKY_PIPELINE_TRIGGER_VARS_ENABLED) NO figuran aca a proposito: nacen
+    # APAGADAS por la excepcion (B) y por eso tampoco declaran default= en su
+    # FlagSpec.
+    "STACKY_PIPELINE_WIZARD_ENABLED",
 }
 
 

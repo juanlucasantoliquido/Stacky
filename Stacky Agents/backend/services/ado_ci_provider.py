@@ -51,7 +51,8 @@ class AdoCIProvider:
                 message=f"Error monitoreando pipeline ADO {pipeline_id}: {e}",
             ) from e
 
-    def trigger_pipeline(self, item_ref: "ItemRef", ref: str) -> dict:
+    def trigger_pipeline(self, item_ref: "ItemRef", ref: str,
+                         variables: dict | None = None) -> dict:
         """Plan 95 F1.c — Runs API. Resuelve la definition (find_yaml_definition;
         si None lanza TrackerApiError(status=409, kind='ado_definition_missing')).
         POST {base_proj}/_apis/pipelines/{definitionId}/runs?api-version=7.1.
@@ -86,6 +87,15 @@ class AdoCIProvider:
                 }
             }
         }
+        # Plan 294 F7 — variables de ESTA corrida, con la forma de la Runs API.
+        # Si `variables` es None o vacio el cuerpo queda BYTE-IDENTICO al de antes.
+        # isSecret=False a proposito: por aca no viaja ningun secreto; los secretos
+        # se cargan en la caja fuerte del proveedor y el asistente solo los NOMBRA.
+        if variables:
+            body["variables"] = {
+                str(k): {"value": str(v), "isSecret": False}
+                for k, v in variables.items()
+            }
 
         try:
             run = client._request("POST", url, body=body)

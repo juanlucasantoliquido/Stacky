@@ -91,8 +91,12 @@ class CIProvider(Protocol):
     def monitor_pipeline(self, pipeline_id: str) -> dict:
         ...
 
-    def trigger_pipeline(self, item_ref: ItemRef, ref: str) -> dict:
+    def trigger_pipeline(self, item_ref: ItemRef, ref: str,
+                         variables: dict | None = None) -> dict:
         ...  # Plan 72 F1 — dispara pipeline sobre ref; requiere scope api en GitLab
+        # Plan 294 F7 — `variables` es OPCIONAL con default None: todo llamador
+        # existente sigue funcionando igual y el cuerpo enviado al proveedor es
+        # byte-identico cuando no se pasa. CI_PORT_METHODS NO cambia.
 
 
 # Contrato congelado — no renombrar sin actualizar centinela del Plan 71/72

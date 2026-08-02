@@ -253,6 +253,40 @@ def traer():
     return jsonify(res.to_dict())
 
 
+@bp.post("/proponer")
+def proponer():
+    """El UNICO paso que va por REST: abrir una propuesta de cambio no tiene
+    equivalente en git. Todo el formulario se renderiza dentro de `description`
+    porque `create_merge_request` acepta cuatro parametros y nada mas."""
+    if not _flags()["lectura"]:
+        return _apagado()
+    datos = _cuerpo()
+    if datos.get("confirm") is not True:
+        return _sin_confirmacion()
+
+    raiz, proyecto, motivo = _workspace()
+    if raiz is None:
+        return jsonify({"ok": False, "codigo": "repo_no_disponible", "mensaje": motivo}), 200
+
+    from services import change_proposal as cp
+    from services import git_workbench as gw
+
+    vista = gw.repo_overview(raiz)
+    rama_origen = (datos.get("rama") or "").strip() or (vista.get("repo") or {}).get("branch") or ""
+    archivos = datos.get("archivos") or [a["path"] for a in (vista.get("archivos") or [])]
+
+    _auditar("proponer", proyecto=proyecto, cantidad=len(archivos))
+    return jsonify(cp.abrir_propuesta(
+        raiz=raiz,
+        rama_origen=rama_origen,
+        titulo=(datos.get("titulo") or "")[:200],
+        resumen=(datos.get("resumen") or "")[:_MAX_MENSAJE],
+        archivos=list(archivos)[:_MAX_RUTAS],
+        pruebas=(datos.get("pruebas") or "")[:_MAX_MENSAJE],
+        project=proyecto,
+    ))
+
+
 @bp.post("/rama")
 def rama():
     if not _flags()["lectura"]:

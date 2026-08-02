@@ -1145,6 +1145,29 @@ _CURATED_DEFAULTS_ON = {
     # APAGADAS por la excepcion (B) y por eso tampoco declaran default= en su
     # FlagSpec.
     "STACKY_PIPELINE_WIZARD_ENABLED",
+    # Plan 295 F6/F7/F8 — NACE ENCENDIDA porque solo cambia COMO se cuenta un
+    # error que ya ocurria: traduce TrackerApiError a 502 + kind + copy accionable
+    # en vez de 500 "unexpected". No cae en (A): no enciende loop, daemon, barrido
+    # ni llamada a modelo. No cae en (B): no escribe en ningun sistema real del
+    # operador (el breaker que alimenta es un JSON en la carpeta de datos local).
+    # Su hermana numerica STACKY_TICKET_SYNC_INTERVAL_MS NO figura aca a
+    # proposito: es numerica y por eso NO declara default= en su FlagSpec.
+    "STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED",
+    # Plan 296 — el copiloto conversacional del perfil NACE ENCENDIDO porque
+    # solo LEE y PROPONE: lee el perfil que ya existe, calcula qué falta, arma
+    # el banco de preguntas y muestra el diff. No cae en (A): no enciende loop,
+    # daemon, barrido ni llamada a modelo — el motor es DETERMINISTA y todo sale
+    # de un turno que manda el operador. No cae en (B): no escribe en ningun
+    # sistema real. Su hermana de escritura (STACKY_PROFILE_COPILOT_APPLY_ENABLED)
+    # NO figura aca a proposito: nace APAGADA por la excepcion (B) y por eso
+    # tampoco declara default= en su FlagSpec.
+    "STACKY_PROFILE_COPILOT_ENABLED",
+    # Plan 295 F9 — NACE ENCENDIDA porque ON ES EL COMPORTAMIENTO DE HOY:
+    # api/phase6.py ya auto-creaba el ticket placeholder. La flag agrega la opcion
+    # NUEVA de que el webhook devuelva 404 en vez de crear. No cae en (A). No cae
+    # en (B): escribe en la BD LOCAL de Stacky, su propio almacen, y solo cuando un
+    # webhook externo se lo pide explicitamente.
+    "STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED",
 }
 
 

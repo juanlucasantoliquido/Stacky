@@ -314,8 +314,14 @@ def run_agent(
     # - codex_cli: Codex CLI runner. Requiere vscode_agent_filename (validado en endpoint).
     #              Si el CLI no está instalado, el error llega al operador como "error" de ejecución,
     #              no como fallback silencioso.
-    # - claude_code_cli: bloqueado en endpoint (HTTP 501). Nunca debería llegar aquí.
-    #              Si llega (p.ej. llamada directa al runner), se marca la ejecución como error.
+    # - claude_code_cli: Plan 296 — los TRES runtimes de _VALID_RUNTIMES
+    #              (api/agents.py:337) llegan acá. claude_code_cli se despacha más
+    #              abajo, con su propio runner. NO hay ningún 501 en api/agents.py
+    #              (verificado por test_plan296_paridad_runtimes.py). El comentario
+    #              anterior afirmaba que el endpoint lo rechazaba con 501 y era
+    #              FALSO: planificar sobre él producía un supuesto de capacidad
+    #              inexistente. El texto viejo NO se transcribe acá a propósito:
+    #              el gate que lo vigila es un grep y lo volvería a encontrar.
     if runtime == "codex_cli":
         try:
             from services.codex_cli_runner import start_codex_cli_run

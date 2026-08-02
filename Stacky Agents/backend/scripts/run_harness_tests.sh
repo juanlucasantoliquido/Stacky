@@ -1111,6 +1111,24 @@ HARNESS_TEST_FILES=(
   tests/test_plan293_api.py
   tests/test_plan293_propuesta.py
   tests/test_plan293_evidencias.py
+  # Plan 296 - el perfil del cliente se configura conversando
+  tests/test_plan296_flags.py
+  tests/test_plan296_runtime_profile.py
+  tests/test_plan296_completitud.py
+  tests/test_plan296_session.py
+  tests/test_plan296_propuesta.py
+  tests/test_plan296_apply.py
+  tests/test_plan296_paridad_runtimes.py
+  # Plan 295 - la integracion con GitLab deja de mentir sobre si misma
+  tests/test_plan295_matriz_no_miente.py
+  tests/test_plan295_gate_transversal.py
+  tests/test_plan295_ratchet_evidencias.py
+  tests/test_plan295_sonda_tls.py
+  tests/test_plan295_errores_gitlab.py
+  tests/test_plan295_breaker_gitlab.py
+  tests/test_plan295_webhooks_por_proyecto.py
+  tests/test_plan295_flag_intervalo.py
+  tests/test_plan295_paridad_runtimes.py
 )
 
 pass=0

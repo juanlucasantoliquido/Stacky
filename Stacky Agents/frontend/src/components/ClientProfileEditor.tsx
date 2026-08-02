@@ -16,6 +16,7 @@ import {
 } from "../api/endpoints";
 import { useWorkbench } from "../store/workbench";
 import { useConfirm, Input, Select } from "./ui";
+import ClientProfileCopilotPanel from "./ClientProfileCopilotPanel";  // Plan 296
 import styles from "./ClientProfileEditor.module.css";
 
 // ── Helpers de acceso inmutable (round-trip seguro) ──────────────────────────
@@ -910,6 +911,16 @@ export default function ClientProfileEditor() {
 
   return (
     <div className={styles.root}>
+      {/* Plan 296 — el copiloto vive DENTRO de esta pantalla (un tab nuevo tiene
+          trece patas y solo dos las exige tsc). Con la flag maestra apagada el
+          endpoint da 404 y el panel devuelve null: esta pantalla se renderiza
+          byte a byte como antes del plan. */}
+      <ClientProfileCopilotPanel
+        projectName={projectName}
+        onProfileChanged={() => {
+          void qc.invalidateQueries({ queryKey: ["client-profile", projectName] });
+        }}
+      />
       {/* ── Header ── */}
       <div className={styles.card}>
         <div className={styles.cardHeader}>

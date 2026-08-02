@@ -93,6 +93,7 @@ from .pipeline_copilot import bp as pipeline_copilot_bp  # Plan 279 — sesión 
 from .meetings import bp as meetings_bp  # Plan 283 — reuniones, minutas y pendientes
 from .meetings_publish import bp as meetings_publish_bp  # Plan 283 — publicar un pendiente
 from .workbench import bp as workbench_bp  # Plan 293 — tablero de trabajo: git guiado
+from .profile_copilot import bp as profile_copilot_bp  # Plan 296 — copiloto del perfil de cliente
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -151,6 +152,10 @@ api_bp.register_blueprint(adoption_bp)
 api_bp.register_blueprint(docs_rag_bp)
 api_bp.register_blueprint(config_transfer_bp)
 api_bp.register_blueprint(client_profile_bp)
+# Plan 296 — copiloto del perfil. url_prefix="" (igual que client_profile_bp):
+# las rutas del decorador NUNCA llevan "/api", api_bp ya lo pone. El apagado por
+# flag vive DENTRO de cada ruta (404), no en el registro.
+api_bp.register_blueprint(profile_copilot_bp)
 api_bp.register_blueprint(db_query_bp)
 api_bp.register_blueprint(ci_bp)  # Plan 72 — url_prefix="/ci" → /api/ci/...
 api_bp.register_blueprint(pipeline_generator_bp)  # Plan 73 — url_prefix="/pipeline-generator" → /api/pipeline-generator/...

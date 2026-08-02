@@ -1,0 +1,217 @@
+/* Plan 296 F6 — panel del copiloto del perfil de cliente.
+   REGLA DURA (C14): CERO colores hex en este archivo. Solo var(--...).
+   uiDebtRatchet.test.ts congela por archivo la cantidad de #hex y la deuda solo
+   puede BAJAR. Tokens verificados que SI existen en el tema:
+   --accent, --accent-active, --bg-base, --bg-elev, --bg-panel, --border,
+   --border-muted, --danger, --text-primary, --focus-ring, --card-radius.
+   --color-* NO EXISTE: usarlo deja el estilo mudo. */
+
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  color: var(--text-primary);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.step {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.intro {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.9;
+}
+
+.progress {
+  font-size: 12px;
+  margin-bottom: 12px;
+  padding: 6px 10px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--card-radius);
+}
+
+.runtimeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.runtimeCard {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--card-radius);
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.runtimeCard:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.runtimeCardSelected {
+  border-color: var(--accent);
+}
+
+.runtimeCard:disabled {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.runtimeName {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.runtimeField {
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 2px 0;
+  opacity: 0.9;
+}
+
+.runtimeFieldLabel {
+  font-weight: 600;
+  opacity: 1;
+}
+
+.unavailable {
+  color: var(--danger);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.question {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--card-radius);
+  padding: 10px;
+  margin-bottom: 12px;
+  background: var(--bg-base);
+}
+
+.questionText {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.questionWhy {
+  font-size: 12px;
+  margin: 0 0 8px;
+  opacity: 0.8;
+}
+
+.input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--card-radius);
+  background: var(--bg-elev);
+  color: var(--text-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.action:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.actionReason {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 2px;
+  display: block;
+}
+
+.actionSlot {
+  display: flex;
+  flex-direction: column;
+  max-width: 260px;
+}
+
+.notice {
+  font-size: 12px;
+  margin-top: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--card-radius);
+  background: var(--bg-elev);
+}
+
+.warning {
+  color: var(--danger);
+}
+
+.diff {
+  margin-top: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--card-radius);
+  padding: 10px;
+  background: var(--bg-base);
+  overflow-x: auto;
+}
+
+.diffRow {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.diffRow:last-child {
+  border-bottom: none;
+}
+
+.diffSensitive {
+  color: var(--danger);
+  font-weight: 600;
+}

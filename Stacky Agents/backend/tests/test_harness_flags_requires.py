@@ -399,6 +399,10 @@ _REQUIRES_MAP_FROZEN = {
     # chequea sus flags por su cuenta.
     "STACKY_PIPELINE_WIZARD_COMMIT_ENABLED": "STACKY_PIPELINE_WIZARD_ENABLED",
     "STACKY_PIPELINE_TRIGGER_VARS_ENABLED": "STACKY_PIPELINE_TRIGGER_ENABLED",
+    # Plan 296: la hija de escritura del copiloto del perfil. Profundidad 1 y la
+    # madre no declara `requires` (R4). La arista es INFORMATIVA para la UI: el
+    # guard del endpoint de apply chequea las DOS flags por su cuenta.
+    "STACKY_PROFILE_COPILOT_APPLY_ENABLED": "STACKY_PROFILE_COPILOT_ENABLED",
 }
 
 

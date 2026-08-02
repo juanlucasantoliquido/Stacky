@@ -2763,6 +2763,42 @@ class Config:
         os.getenv("STACKY_GITLAB_SYNC_FULL_CADA_N", "10")
     )
 
+    # ── Plan 295 — la integracion con GitLab deja de mentir sobre si misma ────
+    # F6/F7/F8. Nace ON. No cae en (A): no enciende loop, daemon, barrido ni
+    # llamada a modelo — TRADUCE un error que ya ocurre a una respuesta HTTP mas
+    # honesta (502 + kind + copy accionable) en vez de 500 "unexpected". No cae
+    # en (B): no escribe en ningun sistema real del operador. Curada en
+    # _CURATED_DEFAULTS_ON. Con OFF el `except` re-lanza y el fallo vuelve a caer
+    # en `except Exception`: byte-identico a antes del plan.
+    STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # F9. Nace ON porque ON ES EL COMPORTAMIENTO DE HOY: api/phase6.py ya auto-crea
+    # un ticket placeholder cuando el webhook de CI nombra uno que no existe. La
+    # flag existe para darle al operador la opcion NUEVA de que su webhook NO cree
+    # placeholders. No cae en (A): no enciende loop, daemon ni llamada a modelo. No
+    # cae en (B): escribe en la BD LOCAL de Stacky (su propio almacen), y solo
+    # cuando un webhook externo se lo pide. Curada en _CURATED_DEFAULTS_ON.
+    # OJO: el CORAZON del arreglo de F9 (filtrar por proyecto y escribir la
+    # identidad completa) NO esta detras de esta flag: va siempre, porque es la
+    # correccion del bug. La flag solo gobierna si se CREA o se devuelve 404.
+    STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED: bool = os.getenv(
+        "STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # F10 — cada cuantos milisegundos el frontend pide un sync automatico.
+    # El plan 292 MIDIO que subirlo de 45 s a 180 s baja el trafico contra el
+    # GitLab del operador un 75 %. Hasta ahora aplicar esa recomendacion exigia
+    # editar frontend/src/hooks/useTicketSync.ts:40 y recompilar: era una perilla
+    # FANTASMA (se publicaba en /api/tickets/config/frontend y nadie la leia).
+    # El default se conserva en 45000: este plan da el CONTROL, no cambia la
+    # conducta. Cambiarlo por el operador seria decidir por el sobre el trafico
+    # contra el servidor de su empresa.
+    STACKY_TICKET_SYNC_INTERVAL_MS: int = int(
+        os.getenv("STACKY_TICKET_SYNC_INTERVAL_MS", "45000")
+    )
+
     # ── Plan 293 — Tablero de trabajo: git guiado para quien no sabe git ──────
     # Nace ON. Solo LECTURA: estado del repositorio, diferencias, historial y
     # ramas. No cae en (A) ni en (B). Curada en _CURATED_DEFAULTS_ON.
@@ -2782,5 +2818,24 @@ class Config:
     STACKY_WORKBENCH_PUSH_ENABLED: bool = os.getenv(
         "STACKY_WORKBENCH_PUSH_ENABLED", "false"
     ).strip().lower() in ("1", "true", "yes")
+
+    # ── Plan 296 — El perfil del cliente se configura CONVERSANDO ────────────
+    # Copiloto conversacional del client_profile. Default ON: conversa, detecta
+    # faltantes, recomienda y MUESTRA el diff. No escribe nada y no consume
+    # tokens en reposo (no hay loop, daemon, barrido, polling ni prefetch: solo
+    # responde a turnos que el operador manda). No cae en (A) ni en (B).
+    # Curada en _CURATED_DEFAULTS_ON y espejada con default=True en la FlagSpec.
+    STACKY_PROFILE_COPILOT_ENABLED: bool = os.getenv(
+        "STACKY_PROFILE_COPILOT_ENABLED", "true"
+    ).lower() in ("1", "true", "yes")
+
+    # Plan 296 — Aplicar el diff propuesto sobre el client_profile real.
+    # Default OFF — causal (B): escribe projects/<NAME>/config.json, la config
+    # real del proyecto del operador (gobierna el ruteo de agentes y el contexto
+    # inyectado a todo agente). NO va en _CURATED_DEFAULTS_ON (solo default ON)
+    # y su FlagSpec NO declara default=.
+    STACKY_PROFILE_COPILOT_APPLY_ENABLED: bool = os.getenv(
+        "STACKY_PROFILE_COPILOT_APPLY_ENABLED", "false"
+    ).lower() in ("1", "true", "yes")
 
 config = Config()

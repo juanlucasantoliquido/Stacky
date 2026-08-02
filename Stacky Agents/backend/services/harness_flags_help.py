@@ -2533,6 +2533,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si bajás el número: se pide la lista completa más seguido, así que se nota antes un ítem borrado pero se le da más trabajo al servidor de la empresa.",
         example="Con 10, una de cada diez consultas trae la lista entera y las otras nueve traen sólo lo que cambió. Además se pide todo si pasaron más de 24 horas desde la última vez.",
     ),
+    # ── Plan 295 — la integración con GitLab deja de mentir sobre sí misma ────
+    "STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED": PlainHelp(
+        what="Cuando GitLab rechaza un pedido, Stacky te dice con palabras qué pasó y qué hacer, en vez de mostrar una falla interna sin explicación.",
+        on_effect="Si la activás: ves mensajes como 'el token venció, renovalo en la configuración del proyecto', y si GitLab sigue fallando por lo mismo Stacky deja de insistir un rato para no cargar el servidor de la empresa.",
+        off_effect="Si la apagás: los rechazos de GitLab vuelven a aparecer como una falla interna genérica, sin decir cuál fue el motivo ni qué hacer.",
+        example="Con un token vencido, antes salía 'error inesperado'. Ahora dice que el token venció o fue revocado y que hay que renovarlo en la configuración del proyecto.",
+    ),
+    "STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED": PlainHelp(
+        what="Cuando tu servidor de compilación avisa que algo falló y ese ítem todavía no está en el tablero, Stacky lo crea como marcador de posición.",
+        on_effect="Si la activás: el aviso siempre encuentra dónde anotarse, porque si el ítem no está se crea uno nuevo en el proyecto que corresponde. Es como venía funcionando.",
+        off_effect="Si la apagás: el aviso responde que ese ítem no existe en el proyecto y no se crea nada. Sirve si no querés que aparezcan ítems que no cargaste vos.",
+        example="Si tu compilación falla para el ítem 42 y el 42 no está en el tablero, con esto activado aparece un ítem 42 nuevo en el proyecto correcto; apagado, el aviso queda sin efecto y te lo dice.",
+    ),
+    "STACKY_TICKET_SYNC_INTERVAL_MS": PlainHelp(
+        what="Cada cuántos milisegundos el tablero de tickets busca novedades del tracker por su cuenta, sin que apretes Sincronizar.",
+        on_effect="Si subís el número: Stacky consulta menos seguido, así que le da menos trabajo al servidor de la empresa y las novedades tardan un poco más en aparecer.",
+        off_effect="Si bajás el número: las novedades aparecen antes, pero Stacky consulta más seguido y el servidor de la empresa trabaja más.",
+        example="Con 45000 consulta cada 45 segundos, que es como venía. Con 180000 consulta cada 3 minutos: se hacen cuatro veces menos consultas y las novedades siguen llegando solas.",
+    ),
     # ── Plan 293 — Tablero de trabajo ─────────────────────────────────────────
     "STACKY_WORKBENCH_ENABLED": PlainHelp(
         what="Muestra una pantalla para ver en qué carpeta estás trabajando, qué archivos cambiaste y en qué se diferencian, sin usar la consola.",
@@ -2551,6 +2570,19 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         on_effect="Si la activás: aparece el paso final que sube tu trabajo al servidor y crea la propuesta con tu descripción, tus pruebas y tus capturas.",
         off_effect="Si la apagás: podés guardar y ver todo en tu máquina, pero nada sale de ella. Es el valor de fábrica, porque lo enviado lo ve todo el equipo.",
         example="Después de guardar tres archivos enviás, y se crea una propuesta con el resumen de los cambios y las dos capturas que adjuntaste como prueba.",
+    ),
+    # ── Plan 296 — El perfil del cliente se configura conversando ─────────────
+    "STACKY_PROFILE_COPILOT_ENABLED": PlainHelp(
+        what="Agrega un copiloto que te ayuda a completar el perfil del proyecto preguntándote en castellano, en vez de que llenes un formulario largo sabiendo de antemano qué va en cada casillero.",
+        on_effect="Si la activás: arriba del formulario del perfil aparece el copiloto, que te muestra qué falta, qué ya está, cuánto llevás, y prepara la propuesta de cambio para que la revises antes de aplicarla. También te muestra la ficha completa de cada motor de ejecución.",
+        off_effect="Si la apagás: la pantalla del perfil del cliente queda exactamente como hoy, con el formulario de siempre y sin el panel del copiloto.",
+        example="En vez de adivinar qué poner en «máquina de estados del tracker», el copiloto te ofrece los estados reales de tu proyecto para que elijas.",
+    ),
+    "STACKY_PROFILE_COPILOT_APPLY_ENABLED": PlainHelp(
+        what="Decide si el copiloto del perfil puede guardar por vos la propuesta que te mostró, o si sólo puede mostrártela para que la apliques a mano.",
+        on_effect="Si la activás: después de que confirmes, el copiloto guarda los cambios en la configuración real del proyecto; para las secciones delicadas te pide una confirmación aparte por cada una.",
+        off_effect="Si la apagás: el copiloto conversa, detecta lo que falta y te muestra el cambio propuesto, pero guardarlo lo hacés vos con el botón Guardar de siempre. Es el valor de fábrica.",
+        example="Es la diferencia entre que te dejen el formulario completado en pantalla y que además lo presenten por vos: lo segundo se pide aparte.",
     ),
 }
 

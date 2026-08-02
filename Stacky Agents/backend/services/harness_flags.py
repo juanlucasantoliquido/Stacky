@@ -321,6 +321,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_FINAL_STATE_WRITER_ROUTED_ENABLED",  # Plan 271 — escritor ruteado
         "STACKY_FINAL_STATE_PUBLISH_GATE_PRECISE_ENABLED",  # Plan 271 — gate preciso
         "STACKY_FINAL_STATE_REASON_VISIBLE_ENABLED",  # Plan 271 — razón visible
+        "STACKY_PROFILE_COPILOT_ENABLED",  # Plan 296 — copiloto conversacional del perfil
     ),
     "routing_costo": (
         "STACKY_COMPLEXITY_ESTIMATION_ENABLED", "STACKY_DIFFICULTY_ROUTING_ENABLED",
@@ -532,6 +533,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_MEETINGS_PUBLISH_ENABLED",      # Plan 283 — publicar un pendiente al tracker (OFF)
         "STACKY_MEETINGS_GRAPH_TENANT",         # Plan 283 — organizacion de Microsoft
         "STACKY_MEETINGS_GRAPH_CLIENT_ID",      # Plan 283 — identificador de la aplicacion
+        # Plan 296 — el copiloto del perfil APLICA el diff (nace OFF, causal (B):
+        # escribe projects/<NAME>/config.json, la config real del operador).
+        "STACKY_PROFILE_COPILOT_APPLY_ENABLED",
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -618,6 +622,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # Plan 292 — el sync de GitLab pide sólo lo que cambió
         "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED",
         "STACKY_GITLAB_SYNC_FULL_CADA_N",
+        # Plan 295 — la integración con GitLab deja de mentir sobre sí misma
+        "STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED",  # F6/F7/F8 — 502 + kind + breaker propio
+        "STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED",  # F9 — el webhook crea placeholder o devuelve 404
+        "STACKY_TICKET_SYNC_INTERVAL_MS",            # F10 — el intervalo de sync pasa a ser del operador
         # Plan 293 — tablero de trabajo: git guiado para quien no sabe git
         "STACKY_WORKBENCH_ENABLED",        # F3/F10 — solo lectura del repositorio (ON)
         "STACKY_WORKBENCH_WRITE_ENABLED",  # F6/F7/F9 — escribe en el arbol del operador (OFF, B)
@@ -7467,6 +7475,64 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
     ),
+    # ── Plan 295 — la integración con GitLab deja de mentir sobre sí misma ────
+    FlagSpec(
+        key="STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED",
+        default=True,
+        type="bool",
+        label="Los errores de GitLab se explican en vez de salir como falla interna",
+        description=(
+            "Plan 295 — Cuando GitLab rechaza un pedido (token vencido, proyecto "
+            "que no existe, servidor caído), Stacky lo cuenta con palabras y te "
+            "dice qué hacer, en vez de mostrar una falla interna genérica. "
+            "Además recuerda que GitLab está fallando y deja de golpearlo hasta "
+            "que se arregle. Nace ENCENDIDA porque sólo cambia CÓMO se cuenta un "
+            "error que ya ocurría. Apagándola vuelve el mensaje genérico de antes."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED",
+        default=True,
+        type="bool",
+        label="El aviso de una compilación fallida puede crear el ítem si no existe",
+        description=(
+            "Plan 295 — Cuando tu servidor de compilación le avisa a Stacky que "
+            "algo falló y ese ítem no está en el tablero, Stacky lo crea como "
+            "marcador de posición para poder trabajarlo. Nace ENCENDIDA porque es "
+            "exactamente lo que ya hacía. Apagándola, Stacky avisa que el ítem no "
+            "existe en vez de crearlo. El arreglo de fondo — buscar el ítem dentro "
+            "del proyecto correcto — no depende de esta opción: va siempre."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_TICKET_SYNC_INTERVAL_MS",
+        # SIN default= A PROPOSITO (regla dura, misma razón que la numérica del plan
+        # 292 más arriba): `default_is_known(spec)` es literalmente
+        # `spec.default is not None`, y declararlo metería esta key en el conjunto que
+        # test_default_known_only_for_curated exige que sea EXACTAMENTE
+        # _CURATED_DEFAULTS_ON -- que es SÓLO para booleanas ON. El valor 45000 vive
+        # SOLO en config.py.
+        type="int",
+        min_value=5000,
+        max_value=3600000,
+        label="Cada cuántos milisegundos se sincronizan los tickets solos",
+        description=(
+            "Plan 295 — Cada cuánto el tablero de tickets le pide a Stacky que "
+            "traiga novedades del tracker sin que vos aprietes nada. Con 45000 "
+            "(45 segundos) es el valor histórico. El plan 292 midió que con 180000 "
+            "(3 minutos) el tráfico contra el servidor de la empresa baja un 75 % "
+            "y las novedades siguen llegando solas. El mínimo de 5000 evita "
+            "dispararse en el pie contra el límite de pedidos del propio Stacky; "
+            "el máximo de una hora evita apagar de hecho el sync creyendo que se "
+            "lo está ralentizando."
+        ),
+        group="global",
+        env_only=False,
+    ),
     # ── Plan 293 — Tablero de trabajo: git guiado para quien no sabe git ──────
     FlagSpec(
         key="STACKY_WORKBENCH_ENABLED",
@@ -7524,6 +7590,54 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         env_only=False,
+    ),
+    # ── Plan 296 — El perfil del cliente se configura CONVERSANDO ─────────────
+    FlagSpec(
+        key="STACKY_PROFILE_COPILOT_ENABLED",
+        # ON — no cae en (A) ni en (B): conversa, detecta faltantes, recomienda y
+        # MUESTRA el diff, y no consume tokens en reposo (no hay loop, daemon,
+        # barrido, polling ni prefetch: sólo responde a turnos del operador).
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated
+        # exige la pertenencia al conjunto).
+        default=True,
+        type="bool",
+        label="Configurar el perfil del proyecto conversando",
+        description=(
+            "Plan 296 — Agrega dentro de la pantalla del perfil de cliente un "
+            "copiloto que pregunta en castellano, deduce de lo que ya existe, "
+            "muestra qué falta y prepara la propuesta de cambio ANTES de "
+            "aplicarla. También muestra la ficha completa de cada runtime "
+            "(disponibilidad, para qué sirve, qué credenciales pide, dónde "
+            "corre, qué pasa si falla). NO escribe nada: aplicar el cambio lo "
+            "gatea STACKY_PROFILE_COPILOT_APPLY_ENABLED. OFF: la pantalla del "
+            "perfil queda exactamente como hoy."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_PROFILE_COPILOT_APPLY_ENABLED",
+        # SIN default= A PROPOSITO. `default_is_known(spec)` es literalmente
+        # `spec.default is not None`: declararlo la metería en el conjunto que
+        # test_default_known_only_for_curated exige que sea EXACTAMENTE
+        # _CURATED_DEFAULTS_ON, donde una OFF no entra. El OFF vive SOLO en
+        # config.py. Causal (B): ESCRIBE projects/<NAME>/config.json, la
+        # configuración real del proyecto del operador, que gobierna el ruteo de
+        # agentes y el contexto que se le inyecta a todo agente.
+        type="bool",
+        label="Dejar que el copiloto aplique los cambios al perfil",
+        description=(
+            "Plan 296 — Decide si el copiloto del perfil puede guardar la "
+            "propuesta que te mostró en la configuración real del proyecto, o "
+            "si sólo puede mostrártela. Nace APAGADA: aun encendida exige tu "
+            "confirmación explícita y, para las secciones sensibles, una "
+            "confirmación por sección. OFF: el copiloto conversa, detecta y "
+            "muestra el diff, y vos lo aplicás a mano con el botón Guardar de "
+            "siempre."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+        requires="STACKY_PROFILE_COPILOT_ENABLED",
     ),
 )
 

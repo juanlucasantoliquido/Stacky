@@ -813,6 +813,12 @@ def _run_in_background(
             project_ctx=project_ctx,
             log=log,
         )
+        # Plan 289 F2 — paridad: los 3 runtimes escriben por la MISMA funcion. Las
+        # escrituras de :871 y :1051 se conservan (no se tocan): son idempotentes y
+        # sacarlas seria una regresion de un camino que hoy funciona.
+        context_enrichment.persistir_stats_de_contexto(
+            execution_id=execution_id, stats=ado_enrich_stats, log=log,
+        )
 
         # Plan 133 F5 — garantía pre-spawn de stacky_required_blocks. Este path
         # (github_copilot) no tiene vscode_agent_filename en su firma —

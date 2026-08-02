@@ -193,7 +193,8 @@ def test_pata_de_presencia_la_funcion_llama_al_pipeline(ruta, funcion):
 # de verdad. (Lo que sigue sin cubrir un censo estatico es que la funcion HAGA
 # lo suyo: eso lo prueba tests/test_plan289_stat_de_contexto.py, ejecutandola.)
 
-@pytest.mark.xfail(strict=True, reason="Plan 289 F2 lo pone verde: hoy 2 de 3 runtimes tiran el stat")
+# F2 (2026-08-02): el marcador `xfail(strict=True)` se RETIRA en el mismo commit que
+# pone verde la pata. Con strict=True dejarlo daria XPASS(strict) = FAILED.
 @pytest.mark.parametrize("ruta,funcion", _SITIOS_DE_ENRIQUECIMIENTO)
 def test_los_3_runtimes_persisten_el_contador(ruta, funcion):
     nodo = _funcion_del_modulo(ruta, funcion)

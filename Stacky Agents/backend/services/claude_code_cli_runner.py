@@ -674,12 +674,16 @@ def _run_in_background(
         # comentarios/adjuntos ADO). Corre acá, en el thread de background, para no
         # bloquear el request de lanzamiento (el dock ya abrió con execution_id).
         log("info", "enriqueciendo contexto del ticket…")
-        enriched_blocks, _ado_stats = context_enrichment.enrich_blocks(
+        enriched_blocks, ado_stats = context_enrichment.enrich_blocks(
             ticket_id=ticket_id,
             agent_type=agent_type or "",
             raw_blocks=raw_blocks,
             project_ctx=project_ctx,
             log=log,
+        )
+        # Plan 289 F2 — el contador se persiste ACA, no al cerrar: antes se tiraba.
+        context_enrichment.persistir_stats_de_contexto(
+            execution_id=execution_id, stats=ado_stats, log=log,
         )
         # Plan 133 F5 — garantía pre-spawn de stacky_required_blocks: si el
         # .agent.md declara bloques obligatorios y el enriquecimiento no los

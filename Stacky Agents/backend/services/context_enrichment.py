@@ -281,6 +281,46 @@ def enrich_blocks(
     return blocks, ado_stats
 
 
+def persistir_stats_de_contexto(
+    *,
+    execution_id: int | None,
+    stats: dict | None,
+    session_factory=None,
+    log: LogFn | None = None,
+) -> bool:
+    """Plan 289 F2 — Persiste el contador de enriquecimiento en metadata["ado_context"].
+
+    Los 3 runtimes llaman a ESTA funcion. Antes de este plan solo agent_runner lo
+    persistia (agent_runner.py:871 y :1051); claude_code_cli_runner.py:677 y
+    codex_cli_runner.py:334 asignaban el valor a `_ado_stats` y lo TIRABAN, con lo
+    que 173 de 223 ejecuciones de la base no tenian el dato (medido 2026-08-02; la
+    base es VIVA y el total sube solo: lo que importa es el 0, no el denominador).
+
+    Se escribe TEMPRANO (justo despues de enriquecer) y no al cerrar el run, a
+    proposito: si el run muere despues, el dato de contexto igual queda. Idempotente:
+    volver a escribirlo con el mismo valor no cambia nada.
+
+    NUNCA levanta. Devuelve True solo si escribio.
+    """
+    log = log or _noop_log
+    if execution_id is None or stats is None:
+        return False
+    try:
+        if session_factory is None:
+            from db import session_scope as session_factory  # import local: evita ciclos
+        with session_factory() as sesion:
+            fila = sesion.get(AgentExecution, execution_id)
+            if fila is None:
+                return False
+            md = dict(fila.metadata_dict or {})
+            md["ado_context"] = stats
+            fila.metadata_dict = md
+        return True
+    except Exception as exc:  # noqa: BLE001 — un contador nunca tumba un run
+        log("warn", f"no se pudo persistir el contador de contexto: {exc}")
+        return False
+
+
 # ---------------------------------------------------------------------------
 # I0.1 — Dedup léxico de hechos repetidos entre bloques de contexto
 # ---------------------------------------------------------------------------

@@ -133,6 +133,13 @@ class GitLabTrackerProvider:
             params["assignee_username"] = q.assignee
         if q.search:
             params["search"] = q.search
+        # Plan 292 — sólo lo que cambió. Se emite CRUDO, tal como lo guardó el
+        # store: el valor sale del propio `updated_at` que devolvió GitLab, así que
+        # no hay nada que reformatear y cualquier reformateo sería una oportunidad
+        # de perder precisión. Un string vacío es "no sé", y "no sé" nunca puede
+        # producir un filtro.
+        if q.updated_after:
+            params["updated_after"] = q.updated_after
         return params
 
     def _normalize_issue(self, body: dict) -> dict:

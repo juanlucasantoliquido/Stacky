@@ -26,6 +26,10 @@ class TrackerQuery:
     assignee: Optional[str] = None
     search: Optional[str] = None
     parent_id: Optional[str] = None
+    # Plan 292 — ISO-8601 del tracker; None = sin filtro. Va ULTIMO y con default
+    # a proposito: los 6 llamadores de produccion siguen andando sin tocarse, y un
+    # proveedor que no lo entienda simplemente lo ignora.
+    updated_after: Optional[str] = None
 
 
 @dataclass(frozen=True)

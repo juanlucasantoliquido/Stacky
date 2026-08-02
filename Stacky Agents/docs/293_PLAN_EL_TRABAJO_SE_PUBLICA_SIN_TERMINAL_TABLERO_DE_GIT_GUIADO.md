@@ -1,6 +1,43 @@
 # Plan 293 — El trabajo se publica sin terminal: tablero de Git guiado para quien no sabe Git
 
-**Estado:** **v3 — EJE CAMBIADO POR DECISIÓN DEL OPERADOR (D2 = git local).** 2026-08-02, rama `docs/plan-279`, sin push.
+**Estado:** **v3 — PARCIALMENTE IMPLEMENTADO.** Backend **COMPLETO y cableado**; frontend **a medias**. 2026-08-02, rama `docs/plan-279`, **sin push**.
+
+## Estado de implementación por fase (2026-08-02)
+
+| Fase | Estado | Commit | Evidencia **medida** |
+|---|---|---|---|
+| **F0** — baselines | ✅ **MEDIDA** | (en el cuerpo) | 13 valores re-medidos; brecha de ratchets **64 = `_PS1_LAG_MAX`**, holgura cero |
+| **F1** — catálogo cerrado | ✅ **IMPL** | `9ef70c0e` + `c27b948b` | **54 passed**. Contraste: con el guard desactivado **26 fallan** |
+| **F2** — las 3 opciones | ✅ **IMPL** | `84f93dd4` | **27 passed**. `FLAG_REGISTRY` 495→**498**, `PLAIN_HELP` 403→**406** |
+| **F3** — estado enriquecido | ✅ **IMPL** | `88950066` + `c27b948b` | **45 passed** (junto con F4). `--porcelain=v2 --branch` |
+| **F4** — el semáforo | ✅ **IMPL** | `88950066` + `c27b948b` | Contraste: devolver sólo el primer bloqueo pone rojo `test_30` |
+| **F5** — conflictos (frontend) | ✅ **IMPL** | `106e7c1b` | **21 passed**, `tsc` limpio. Contraste **con inyección verificada**: 2 rojos |
+| **F6** — elegir y confirmar | ✅ **IMPL** | `584bc4c6` | **15 passed**. **Contraste del riesgo #1**: con `add -A` + commit sin pathspec ⇒ **3 rojos** |
+| **F7** — traer cambios | ✅ **IMPL** | `cab2852b` | **8 passed**; `test_pre_run_git` **5** (delta cero). Contraste: 2 rojos |
+| **F8** — enviar | ✅ **IMPL** | `49b09eac` | **9 passed** contra un remoto `--bare` real |
+| **F9** — ramas | ✅ **IMPL** | `d0916e99` | **22 passed** (junto con F10) |
+| **F10** — historial | ✅ **IMPL** | `d0916e99` | idem |
+| **F11** — propuesta REST + evidencias | ❌ **NO IMPLEMENTADA** | — | Ver §Pendientes |
+| **F12** — diccionario de errores | ✅ **IMPL** | `fed80e7c` | **9 passed**. Contraste con inyección verificada: 3 rojos |
+| **F13** — la pantalla (13 patas) | ⚠️ **PARCIAL: sólo el backend** | `4c5ca572` | **15 passed**. Las 9 rutas `/api/workbench/...` existen y responden. **Las 13 patas del tab NO están hechas** |
+| **F14** — cierre | ⚠️ **PARCIAL** | — | Ratchets y no-regresión hechos; docs de sistema **no** escritas |
+
+**Total propio: 195 tests de backend + 30 de frontend, todos verdes.**
+
+### Pendientes reales, con nombre y apellido
+
+1. **F11 completa** — `change_proposal.py` (descripción + `create_merge_request`) y `work_evidence.py` (subida de capturas). **Nada de esto existe todavía.**
+2. **F13 frontend** — las **13 patas** del tab `publicar`, `WorkbenchPage.tsx` y el asistente de 5 pasos. Quedaron sin commitear `ReposGitPanel.tsx` y su `.module.css`, **incompletos y sin test**.
+3. **F14** — `docs/sistema/17-tablero-de-trabajo.md` y el registro de la huella de regresión.
+4. **Humo con credenciales reales** (§11.3): sigue siendo trabajo del operador y **no** es criterio de ninguna fase.
+
+### Desvíos respecto del plan, medidos al implementar
+
+1. **`git commit` SIN `user.email` NO falla.** Git deriva la identidad de usuario+máquina y guarda con exit 0. El plan preveía bloquear por la sonda `config --get user.email`; eso habría sido un **falso bloqueo permanente**. `identidad_derivada` pasó de bloqueo a **aviso**.
+2. **Una fusión a medias hace IMPOSIBLE el commit por rutas** (`fatal: cannot do a partial commit during a merge`), y el `status` **deja de mostrarla** apenas el usuario resuelve el conflicto. Se agregó `operacion_en_curso`, que se detecta **por sistema de archivos** (`MERGE_HEAD`, `CHERRY_PICK_HEAD`, …), no por `status`.
+3. **`git push origin +rama` es un force-push completo sin escribir `--force`**, y **`git switch -C`** resetea una rama existente destruyendo commits. Validar `push` por aridad no alcanzaba: se validan las **formas** de `push`, `switch` y `fetch`.
+4. **Una pathspec de carpeta es RECURSIVA**: `commit -- sub` arrastra todo lo de abajo. Se rechazan carpetas; sólo archivos.
+5. **La API no estaba en el plan como fase propia** y sin ella todo F1..F12 era **inalcanzable por HTTP** — el patrón "construido y jamás cableado". Se construyó `api/workbench.py` con 9 rutas.
 **Juez v2: subagente independiente, misma corrida, contexto limpio.** El eje de publicación del v2 quedó **DEROGADO** por el operador; ver **CHANGELOG v2 → v3**.
 **Fecha:** 2026-08-02
 **Rama en la que se escribió:** `docs/plan-279`

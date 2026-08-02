@@ -19,7 +19,7 @@
 | F2 | **IMPLEMENTADA** | Rojo previo real, los 2 predichos: `#1 assert 'ado_client' == 'provider'`, `#5 assert 'azure_devops' == 'gitlab'`. Después **`6 passed`** (6 collected). No-regresión exacta: 270→**14**, 271→**13**, ratchet 270→**6**, 281 sitios→**18**. Ratchets: parity **12**, meta **4 passed** |
 | F3 | **IMPLEMENTADA, con UN rojo ajeno declarado (ver C12)** | Rojo previo real: `#7 assert 'ado_client' == 'gitlab_adapter'`. Después **`9 passed`** (9 collected). **PERO** `test_plan282_publicacion_comentario.py` pasa de **`7 passed`** a **`1 failed, 6 passed`** — y el que falla estaba **congelando el defecto**. No se tocó. Ver C12 |
 | F4 | **IMPLEMENTADA — hito del eje** | Rojo previo real: `#10` y `#12`, los dos `assert 'azure_devops' == 'gitlab'`. Después **`13 passed`**. **F0 pasa a `4 passed`: las DOS patas verdes.** 281 sitios sigue en **18**. Censo `getattr`-extendido **8 → 7**, sin `completion_sync::_resolve_sync_and_project`. El import de `api.tickets` NO creó la base (verificado: el archivo no existe) |
-| F5 | pendiente | |
+| F5 | **IMPLEMENTADA** | `test_plan281_ratchet_ado_only.py` **`11 passed`**, `test_plan281_sitios_ado_only.py` **`18 passed`**, y el snippet imprime **`F5 OK`** (`scan_tracker_type_routing() == []` con la exclusión reducida a `project_context.py`). Efecto medido: cero, como predijo el plan |
 | F6 | pendiente | |
 | F7 | pendiente | |
 

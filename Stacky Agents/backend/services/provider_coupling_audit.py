@@ -175,9 +175,14 @@ _ORIGENES_RESUELTOS: frozenset[str] = frozenset({
     "get_tracker_provider", "_provider_for_ticket",
 })
 # Archivos donde `<algo>.tracker_type` ES la verdad resuelta, no la columna.
+# Plan 286 F5 — `services/tracker_write_router.py` SALE de esta lista: desde el
+# Plan 286 ese archivo no lee la columna (resuelve con
+# `project_context.tracker_efectivo_de_ticket`), así que la exención sobraba y
+# solo servía para que una reincidencia futura pasara sin ser vista.
+# `services/project_context.py` SE QUEDA: ahí la columna se lee A PROPÓSITO, es
+# el lugar donde vive el resolvedor.
 _ROUTING_EXCLUDED_FILES: frozenset[str] = frozenset({
     "services/project_context.py",
-    "services/tracker_write_router.py",
 })
 
 
@@ -366,9 +371,12 @@ def scan_tracker_type_routing(raiz: Path | None = None) -> list[str]:
     (p. ej. `api/devops.py::preflight_check_route`). Sin esta exclusión el detector
     devuelve 2 y marca un sitio correcto.
 
-    EXCLUYE POR ARCHIVO: `services/project_context.py` (ahí `ctx.tracker_type` ES la
-    verdad resuelta desde el config) y `services/tracker_write_router.py`
-    (`target.tracker_type` viene del TrackerTarget resuelto).
+    EXCLUYE POR ARCHIVO: sólo `services/project_context.py` (ahí `ctx.tracker_type`
+    ES la verdad resuelta desde el config, y es donde vive el resolvedor).
+    Plan 286 F5 — `services/tracker_write_router.py` YA NO se excluye: desde el
+    Plan 286 ese archivo resuelve con `tracker_efectivo_de_ticket` y no tiene
+    nada que esconder, así que mantener la exención sólo habría hecho invisible
+    una reincidencia futura.
     """
     import ast as _ast
 

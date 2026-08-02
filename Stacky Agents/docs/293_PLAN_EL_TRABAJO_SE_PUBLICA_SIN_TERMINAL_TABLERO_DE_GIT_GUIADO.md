@@ -17,12 +17,13 @@
 | **F8** — enviar | ✅ **IMPL** | `49b09eac` | **9 passed** contra un remoto `--bare` real |
 | **F9** — ramas | ✅ **IMPL** | `d0916e99` | **22 passed** (junto con F10) |
 | **F10** — historial | ✅ **IMPL** | `d0916e99` | idem |
-| **F11** — propuesta REST | ✅ **IMPL (sin evidencias)** | `c0b871ec` | **20 passed**. Los **2 casos negativos**: `link_attachment` nunca se llama, `redact_secrets` nunca se importa |
+| **F11** — propuesta REST | ✅ **IMPL** | `c0b871ec` | **20 passed**. Los **2 casos negativos**: `link_attachment` nunca se llama, `redact_secrets` nunca se importa |
+| **F11b** — **evidencias** (guardar, previsualizar, adjuntar) | ✅ **IMPL** | `871658e0` | **26 passed**. Validación por **bytes reales**, no por extensión. ADO **declara** la degradación |
 | **F12** — diccionario de errores | ✅ **IMPL** | `fed80e7c` | **9 passed**. Contraste con inyección verificada: 3 rojos |
 | **F13** — la pantalla, 13 patas | ✅ **IMPL** | `4c5ca572` (API) + `b12f8da4` (pantalla) | **103 passed** en 9 archivos, `tsc` limpio. Contraste: sacar el tab del grupo y romper `isGateOn` ⇒ 2 patas rojas |
 | **F14** — cierre | ⚠️ **PARCIAL** | — | Ratchets y no-regresión hechos; `docs/sistema/17-*.md` **no** escrita |
 
-**Total propio: 215 tests de backend + 103 de frontend, todos verdes.**
+**Total propio: 241 tests de backend + 103 de frontend, todos verdes.**
 
 ### Cómo lo abre el operador
 
@@ -31,12 +32,21 @@
 3. Con las dos opciones de escritura apagadas (el valor de fábrica) el tablero **muestra todo y no puede tocar nada**: los botones aparecen deshabilitados y el aviso dice cuál encender.
 4. Para guardar y traer: encender **"Dejar que el tablero guarde cambios en tu carpeta"**. Para enviar y proponer: **"Dejar que el tablero envíe tu trabajo al servidor"**.
 
+### Decisiones pendientes del operador sobre las evidencias
+
+| # | Decisión | Default implementado (el más conservador) |
+|---|---|---|
+| **D9** | **Dónde viven las capturas.** Hoy:  — el área de datos de Stacky, **nunca** dentro del repositorio del operador (un archivo ahí aparecería como cambio sin confirmar y le ensuciaría el tablero) | Ya implementado así |
+| **D10** | **Retención.** Hoy **no se borran solas**. Acumulan como los sidecars de  | Sin purga automática: borrar datos del operador sin que lo pida es exactamente lo que el riel prohíbe |
+| **D11** | **Topes.** 10 archivos, 10 MB c/u, 25 MB en total — los mismos valores ya probados del intake de incidencias | Ya implementado así |
+| **D12** | **Formatos.** PNG, JPG, GIF, BMP, WEBP y PDF, **verificados por firma real** | Ya implementado así |
+
 ### Pendientes reales, con nombre y apellido
 
 1. **Evidencias (`work_evidence.py`)** — subir capturas y embeberlas en la propuesta. **No existe.** El renderizador de la descripción ya acepta el parámetro `evidencias` y lo pinta; lo que falta es el almacenamiento y el `upload_attachment`.
 2. **F14** — `docs/sistema/17-tablero-de-trabajo.md` y la huella de regresión en `error_fingerprints.json`.
-3. **Humo con credenciales reales** (§11.3): trabajo del operador, **no** es criterio de ninguna fase.
-4. **Basura a limpiar:** quedaron sin commitear `frontend/src/components/ReposGitPanel.tsx` y su `.module.css`, de un intento anterior **abandonado y sin test**. La pantalla buena es `pages/WorkbenchPage.tsx`. Son archivos muertos: borrarlos es decisión del operador.
+2. **Humo con credenciales reales** (§11.3): trabajo del operador, **no** es criterio de ninguna fase.
+3. **Basura a limpiar:** quedaron sin commitear `frontend/src/components/ReposGitPanel.tsx` y su `.module.css`, de un intento anterior **abandonado y sin test**. La pantalla buena es `pages/WorkbenchPage.tsx`. Son archivos muertos: borrarlos es decisión del operador.
 
 ### Desvíos respecto del plan, medidos al implementar
 

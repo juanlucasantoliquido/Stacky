@@ -44,7 +44,24 @@ def _resolve_sync_and_project(ticket) -> tuple:
     canónica de breaker/cliente, coherente con `_startup_sync` (app.py:196,203).
     C3: NO caer a `ticket.project` (nombre del tracker) ⇒ divergiría la key del breaker.
     """
-    tracker_type = (getattr(ticket, "tracker_type", None) or "azure_devops").strip().lower()
+    # Plan 286 F4 — el tracker sale del helper (columna explícita > config del
+    # proyecto > default), NO de la columna cruda, que tiene default
+    # "azure_devops" en el ORM (models.py:49) y miente para todo ticket creado
+    # sin ese campo en un proyecto que no es ADO. Import local: `services/` NO
+    # importa de `api/` (regla del repo, :94-96) y un import al tope arriesga un
+    # ciclo al arrancar el daemon.
+    #
+    # OJO, y por eso está escrito acá: para un ticket de un proyecto GitLab esta
+    # función pasa a devolver el par INCOHERENTE
+    # `(services.ado_sync.sync_tickets, "RIPLEY", "gitlab")` — callable de ADO,
+    # tracker GitLab. NO agregues una rama `gitlab` al if/elif/else de abajo
+    # para "arreglarlo": el callable está MUERTO. Su único consumidor, `:165`,
+    # lo descarta (`_, project, tracker_type = _resolve_sync_and_project(t)`) y
+    # le pasa `(project, tracker_type)` a `_do_project_sync`, que SÍ discrimina
+    # GitLab en `:116-119`. Está en el fuera-de-scope del Plan 286, §7.11.
+    from services.project_context import tracker_efectivo_de_ticket
+
+    tracker_type = tracker_efectivo_de_ticket(ticket)
     project = getattr(ticket, "stacky_project_name", None)
     if tracker_type == "jira":
         from services.jira_sync import sync_tickets as fn

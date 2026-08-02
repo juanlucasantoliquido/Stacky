@@ -34,6 +34,7 @@ from services.project_context import (
     build_ado_client,
     resolve_project_context,
     ruteo_estricto_por_tracker,  # Plan 281 F7 — kill-switch de rollback de los guards
+    tracker_efectivo_de_ticket,  # Plan 286 F4 — columna explícita > proyecto > default
     tracker_is_azure_devops,  # F2 — el gate del provider es tracker-aware
 )
 from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
@@ -459,8 +460,13 @@ _ci_provider_coverage: dict[str, int] = {}
 
 
 def _tracker_type_for(ticket: "Ticket") -> str:
-    """Retorna el tracker_type del ticket o 'azure_devops' como default."""
-    return (getattr(ticket, "tracker_type", None) or "azure_devops").strip().lower()
+    """Plan 286 F4 — tracker EFECTIVO del ticket, no la columna cruda.
+
+    El NOMBRE de esta función no se cambia: `services/provider_coupling_audit.py:142`
+    lo tiene literal en `TRACKER_GUARDS`, el conjunto que decide si una función
+    que construye un cliente ADO cae en `gateados` o en `ado_only`.
+    """
+    return tracker_efectivo_de_ticket(ticket)
 
 
 def _item_ref_for_ticket(ticket: "Ticket") -> "ItemRef | None":

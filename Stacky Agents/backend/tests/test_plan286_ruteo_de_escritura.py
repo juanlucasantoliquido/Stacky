@@ -217,3 +217,42 @@ def test_comentario_sin_proyecto_sigue_yendo_a_ado(monkeypatch, ado_publisher_sp
 
     p = cpr.resolve_comment_publisher(_ticket("azure_devops", None))
     assert p.kind == "ado_client"
+
+
+# ── F4 — completion_sync y api/tickets._tracker_type_for ─────────────────────
+
+def test_completion_sync_de_ripley_no_elige_el_sync_de_ado(monkeypatch):
+    _con_config(monkeypatch)
+    from services.completion_sync import _resolve_sync_and_project
+
+    assert _resolve_sync_and_project(_ripley_mentiroso())[2] == "gitlab"
+
+
+def test_completion_sync_de_rspacifico_elige_ado(monkeypatch):
+    """C9 — NO se assertea el callable: es codigo MUERTO. El unico consumidor,
+    `completion_sync.py:165`, lo descarta (`_, project, tracker_type = ...`) y
+    la rama GitLab del sync vive en `_do_project_sync:116-119`. Congelar ese
+    callable como contrato documentaria una mentira."""
+    _con_config(monkeypatch)
+    from services.completion_sync import _resolve_sync_and_project
+
+    _fn, project, tracker_type = _resolve_sync_and_project(
+        _ticket("azure_devops", "RSPACIFICO"))
+    assert tracker_type == "azure_devops"
+    assert project == "RSPACIFICO"
+
+
+def test_item_ref_de_ripley_declara_gitlab(monkeypatch):
+    """Importa `api.tickets` directo: medido, tarda ~3,8 s y NO abre ni crea la
+    base (SQLAlchemy no conecta al importar `db`)."""
+    _con_config(monkeypatch)
+    from api.tickets import _tracker_type_for
+
+    assert _tracker_type_for(_ripley_mentiroso()) == "gitlab"
+
+
+def test_item_ref_de_rspacifico_declara_ado(monkeypatch):
+    _con_config(monkeypatch)
+    from api.tickets import _tracker_type_for
+
+    assert _tracker_type_for(_ticket("azure_devops", "RSPACIFICO")) == "azure_devops"

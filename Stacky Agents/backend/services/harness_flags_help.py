@@ -2470,6 +2470,12 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagas: los paneles que no pueden traer todo aparecen vacios sin decir por que.",
         example="En un proyecto de GitLab el listado de adjuntos sale de la descripcion del issue: la ficha lo aclara en vez de mostrar una lista vacia.",
     ),
+    "STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED": PlainHelp(
+        what="Lee de tu equipo la lista de modelos que tu cuenta de Claude Code tiene habilitados, para ofrecerte solo esos.",
+        on_effect="Si la activas: el selector suma los modelos que tu cuenta ya viene usando, siempre que Stacky pueda ejecutarlos de verdad, y te dice cuales dejo afuera y por que.",
+        off_effect="Si la apagas: el selector muestra solo la lista fija que viene con Stacky, sin mirar tu cuenta.",
+        example="Tu cuenta usa Opus 5 desde hace semanas; con esto aparece en la lista en vez de quedar invisible.",
+    ),
 }
 
 

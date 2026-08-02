@@ -203,6 +203,39 @@ def test_precio_declarado_para_todo_modelo_ofrecido():
     )
 
 
+# ── F7.0 — el respaldo de emergencia deja de contaminarse ────────────────────
+
+def test_el_respaldo_de_emergencia_no_se_contamina(tmp_path, monkeypatch):
+    """load_model_catalog asignaba la REFERENCIA de la constante de modulo, y
+    _merge_probe/_merge_cuenta le hacian append: quedaba mutada para siempre.
+    """
+    antes = len(_ids_del_respaldo())
+
+    # Archivo ilegible -> se cae al respaldo de emergencia, dos veces.
+    monkeypatch.setattr(
+        model_catalog, "_catalog_path", lambda: tmp_path / "no_existe.json"
+    )
+    dir_cuenta = tmp_path / "claude_config"
+    dir_cuenta.mkdir(parents=True, exist_ok=True)
+    (dir_cuenta / "stats-cache.json").write_text(
+        json.dumps({"modelUsage": {"claude-sonnet-5": {}, "claude-opus-5": {}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(dir_cuenta))
+
+    primera = model_catalog.load_model_catalog(force_refresh=True)
+    segunda = model_catalog.load_model_catalog(force_refresh=True)
+
+    # DOS PATAS: la respuesta SI trajo los modelos (si no, el test pasaria vacio)...
+    assert primera["fallback_used"] is True
+    assert len(_ids_efectivos(segunda)) >= antes
+    assert "claude-sonnet-5" in _ids_efectivos(segunda)
+    # ...y la constante de modulo quedo intacta.
+    assert len(_ids_del_respaldo()) == antes, (
+        f"_EMERGENCY_FALLBACK quedo contaminado: {antes} -> {len(_ids_del_respaldo())}"
+    )
+
+
 # ── F4 / F11 — los otros dos motores no cambian ──────────────────────────────
 
 def test_los_otros_dos_motores_no_cambian():

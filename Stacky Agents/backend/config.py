@@ -1517,6 +1517,12 @@ class Config:
     STACKY_MODEL_PROBE_ENABLED: bool = os.getenv(
         "STACKY_MODEL_PROBE_ENABLED", "true"
     ).strip().lower() == "true"
+    # ── Plan 288 F7 — Modelos habilitados en la cuenta local de Claude Code ───
+    # Solo lectura de dos archivos de texto del disco: sin red, sin credenciales
+    # y sin gasto. Nunca resta modelos del catálogo ⇒ default ON.
+    STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED: bool = os.getenv(
+        "STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
     # ── Plan 264 — una sola matriz de capacidades de runtime/modelo/effort ────
     STACKY_RUNTIME_CAPABILITIES_ENABLED: bool = os.getenv(
         "STACKY_RUNTIME_CAPABILITIES_ENABLED", "true"

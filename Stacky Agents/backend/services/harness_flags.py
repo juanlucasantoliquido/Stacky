@@ -129,6 +129,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "CODEX_CLI_AUTOCORRECT_MAX_RETRIES", "CODEX_CLI_MODEL_DENYLIST",
         "CODEX_CLI_RESUME_ENABLED", "CODEX_CLI_RESUME_PROJECTS",
         "STACKY_MODEL_CATALOG_ENABLED",  # Plan 159 — catálogo unificado modelos/efforts
+        "STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED",  # Plan 288 — modelos de la cuenta local
     ),
     "contexto_memoria": (
         "STACKY_CONTEXT_BUDGET_ENABLED", "STACKY_CONTEXT_BUDGET_PROJECTS",
@@ -7224,6 +7225,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         default=True,
+    ),
+    # ── Plan 288 — el selector de modelos deja de mentir ──────────────────────
+    FlagSpec(
+        key="STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED",
+        type="bool",
+        label="Modelos habilitados en tu cuenta de Claude Code",
+        description=(
+            "Plan 288 — Lee del disco local lo que el programa de Claude Code ya "
+            "guardo sobre esta cuenta (modelos usados, opciones extra ofrecidas y "
+            "tipo de suscripcion) y SUMA al catalogo solo los que Stacky puede "
+            "ejecutar de verdad; lo descartado se informa con su motivo. Solo "
+            "lectura: sin red, sin credenciales y sin gasto. Nunca resta modelos."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+        # SIN requires= a proposito: ver Plan 288 seccion 5.2 pata 5.
     ),
 )
 

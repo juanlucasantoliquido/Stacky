@@ -4,6 +4,7 @@ Resolución de ruta vía runtime_paths.backend_root(): válida en dev (backend/)
 y en el deploy congelado PyInstaller (dir del exe). PROHIBIDO usar __file__
 para esta ruta (C1)."""
 from pathlib import Path
+import copy
 import json
 import logging
 import os
@@ -103,10 +104,14 @@ def load_model_catalog(force_refresh: bool = False) -> dict:
                   "runtimes": raw["runtimes"]}
     except Exception as e:  # noqa: BLE001
         logger.warning("model_catalog: fallback de emergencia (%s)", e)
+        # Plan 288 F7.0 — COPIA PROFUNDA: `_merge_probe` y `_merge_cuenta` hacen
+        # append sobre este dict. Sin la copia se muta la constante de modulo y el
+        # respaldo de emergencia queda contaminado para el resto del proceso.
         result = {"fallback_used": True, "error": str(e), "loaded_at": now,
-                  "runtimes": _EMERGENCY_FALLBACK["runtimes"]}
+                  "runtimes": copy.deepcopy(_EMERGENCY_FALLBACK["runtimes"])}
 
     result = _merge_probe(result)
+    result = _merge_cuenta(result)   # Plan 288 F7 — segunda fuente, independiente
     _cache.update(data=result, loaded_at=now, mtime=current_mtime)
     return result
 
@@ -171,6 +176,57 @@ def _merge_probe(catalog: dict) -> dict:
         return catalog
     except Exception:  # noqa: BLE001 — el catálogo nunca cae por el probe
         logger.debug("model_catalog: probe falló (no crítico)", exc_info=True)
+        return catalog
+
+
+def _merge_cuenta(catalog: dict) -> dict:
+    """Plan 288 F7 — Suma al bloque claude_code_cli lo que la cuenta local declara.
+
+    INDEPENDIENTE de _merge_probe a proposito (Plan 288 §5.1): no comparte su flag
+    ni su guarda de modo de prueba. Es determinista porque el lector resuelve sus
+    rutas desde CLAUDE_CONFIG_DIR, que los tests apuntan a un directorio temporal.
+
+    Escribe SOLO en el bloque claude_code_cli. A codex_cli y github_copilot no les
+    agrega ninguna clave: el gate de paridad de F11 lo exige.
+    """
+    try:
+        from services.claude_account_models import leer_cuenta_claude
+
+        cli = (catalog.get("runtimes") or {}).get("claude_code_cli")
+        if not isinstance(cli, dict):
+            return catalog
+
+        lectura = leer_cuenta_claude()
+        conocidos = {m.get("id") for m in (cli.get("models") or [])}
+        agregados_cuenta: list = []
+
+        if lectura.disponible:
+            for mid in (*lectura.ofrecidos, *lectura.usados):
+                if mid in conocidos:
+                    continue
+                cli.setdefault("models", []).append({
+                    "id": mid,
+                    "label": lectura.etiquetas.get(mid) or f"{mid} (habilitado en tu cuenta)",
+                    "recommended": False,
+                })
+                conocidos.add(mid)
+                agregados_cuenta.append(mid)
+
+        cli["cuenta"] = {
+            "disponible": lectura.disponible,
+            "motivo": lectura.motivo,
+            "suscripcion": lectura.suscripcion,
+            "nivel_de_limite": lectura.nivel_de_limite,
+            "agregados": agregados_cuenta,
+            "omitidos": [{"id": i, "motivo": m} for i, m in lectura.omitidos],
+        }
+        if agregados_cuenta:
+            # Concatenar, no reemplazar: hoy puede valer "static_config_file" o
+            # "static_config_file+live_probe".
+            cli["source"] = f"{cli.get('source', 'static_config_file')}+cuenta_local"
+        return catalog
+    except Exception:  # noqa: BLE001 — el catalogo nunca cae por el lector de cuenta
+        logger.debug("model_catalog: lector de cuenta fallo (no critico)", exc_info=True)
         return catalog
 
 

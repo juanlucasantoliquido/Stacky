@@ -1096,6 +1096,13 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_TICKET_FULLVIEW_ENABLED",
     "STACKY_TICKET_HISTORY_API_ENABLED",
     "STACKY_TRACKER_CAPABILITIES_API_ENABLED",
+    # ── Plan 288 — el selector de modelos deja de mentir ──────────────────────
+    # Nace ON. No cae en (A): no enciende loop, daemon, barrido, sondeo ni
+    # llamada a modelo — lee dos archivos de texto del disco local dentro del
+    # refresco de cache que YA existe (300 s), y solo cuando alguien pide el
+    # catalogo. No cae en (B): no escribe en ningun sistema, no borra nada y no
+    # decide nada por el operador; ademas NUNCA resta modelos del catalogo.
+    "STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED",
 }
 
 

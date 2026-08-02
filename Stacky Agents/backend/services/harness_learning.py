@@ -183,3 +183,294 @@ def persist_pattern(p: HarnessPattern) -> str:
         confidence=safe.confidence,
         source_agent_type=safe.agent_type,
     )
+
+
+# ── Lectura: confianza on-read + filtro EN PYTHON (decisión (a)) ─────────────
+
+
+def compute_confidence(occurrences: int, days_since_last_seen: int) -> float:
+    """Determinista, sin LLM, sin deps.
+
+    base  = min(1.0, occurrences / 5.0)
+    decay = 0.5 ** (days / 30)      # half-life 30 días
+
+    Puntos de calibración: 1 ocurrencia hoy = 0.2 (NO se inyecta con el umbral
+    0.5 por default); 3 ocurrencias hoy = 0.6 (se inyecta). Por eso el sistema
+    arranca silencioso y se enciende solo cuando hay evidencia.
+    """
+    occ = max(0, int(occurrences or 0))
+    days = max(0, int(days_since_last_seen or 0))
+    base = min(1.0, occ / 5.0)
+    decay = 0.5 ** (days / 30.0)
+    return round(base * decay, 3)
+
+
+def is_suppressed(pattern_status: str) -> bool:
+    """True si el operador descartó el patrón."""
+    return (pattern_status or "") == PATTERN_STATUS_DISMISSED
+
+
+def _days_since(iso_ts: str | None) -> int:
+    from datetime import datetime
+
+    if not iso_ts:
+        return 0
+    try:
+        seen = datetime.fromisoformat(str(iso_ts).replace("Z", ""))
+    except Exception:  # noqa: BLE001
+        return 0
+    return max(0, (datetime.utcnow() - seen).days)
+
+
+def list_patterns(
+    project: str,
+    *,
+    agent_type: str | None = None,
+    ticket_kind: str | None = None,
+    min_confidence: float = 0.0,
+    limit: int = 50,
+) -> list[HarnessPattern]:
+    """Patrones activos del proyecto, ordenados por confianza descendente.
+
+    Decisión (a) del operador — el filtro de confianza es EN PYTHON:
+    `list_observations` no acepta ese filtro (su firma es project/status/scope/
+    type/limit) y armar una query propia habría duplicado el motor de acceso del
+    store. Se trae el conjunto YA ACOTADO por project+scope+status con UNA sola
+    llamada y se filtra en memoria.
+
+    Presupuesto del camino caliente (guardarraíl 11): 1 query + a lo sumo
+    _PATTERN_SCAN_LIMIT deserializaciones. Nunca N queries, nunca sin límite.
+
+    Desvío D-1: el .limit() se aplica DESPUÉS de ordenar por updated_at desc, o
+    sea recorta por RECENCIA. Un patrón muy bueno pero viejo puede quedar fuera.
+    """
+    if not project:
+        return []
+    rows = memory_store.list_observations(
+        project=project,
+        scope=HARNESS_PATTERN_SCOPE,
+        status=PATTERN_STATUS_ACTIVE,
+        limit=_PATTERN_SCAN_LIMIT,
+    )
+    out: list[HarnessPattern] = []
+    for r in rows:
+        if is_suppressed(r.get("status") or ""):
+            continue  # cinturón y tirantes: el status ya se filtró en la query
+        try:
+            data = json.loads(r.get("content") or "{}")
+        except Exception:  # noqa: BLE001
+            continue
+        if not isinstance(data, dict):
+            continue
+        if agent_type and data.get("agent_type") != agent_type:
+            continue
+        if ticket_kind and data.get("ticket_kind") != ticket_kind:
+            continue
+        occurrences = int(r.get("revision_count") or 1)
+        conf = compute_confidence(occurrences, _days_since(r.get("updated_at")))
+        if conf < min_confidence:
+            continue
+        out.append(
+            HarnessPattern(
+                project=r.get("project") or project,
+                agent_type=str(data.get("agent_type") or "unknown"),
+                ticket_kind=str(data.get("ticket_kind") or "unknown"),
+                signal_kind=str(data.get("signal_kind") or ""),
+                signal_key=str(data.get("signal_key") or ""),
+                remedy_hint=str(data.get("remedy_hint") or ""),
+                occurrences=occurrences,
+                confidence=conf,
+                last_seen=str(data.get("last_seen") or ""),
+            )
+        )
+    out.sort(key=lambda p: (-p.confidence, -p.occurrences, p.signal_key))
+    return out[: max(0, int(limit))]
+
+
+# ── F1 — Cosecha pasiva post-run ─────────────────────────────────────────────
+
+# Mapeo tipo del tracker -> ticket_kind. El tipo declarado por el tracker MANDA
+# sobre cualquier heurística de título.
+_WI_TYPE_KIND = {
+    "bug": "bug", "defect": "bug", "incidencia": "bug", "incident": "bug",
+    "issue": "bug",
+    "feature": "feature", "epic": "feature", "epica": "feature",
+    "user story": "feature", "userstory": "feature", "historia": "feature",
+    "requirement": "feature",
+    "task": "task", "tarea": "task", "subtask": "task",
+}
+
+_TITLE_BUG = ("error", "falla", "fallo", "bug", "no funciona", "incidencia",
+              "excepcion", "excepción", "roto", "corrige", "corregir", "arreglar")
+_TITLE_FEATURE = ("nueva", "nuevo", "agregar", "añadir", "anadir", "implementar",
+                  "funcionalidad", "feature", "permitir", "incorporar")
+
+
+def classify_ticket_kind(ticket_title: str, work_item_type: str | None) -> str:
+    """Heurística barata stdlib -> "bug" | "feature" | "task" | "unknown". Sin LLM.
+
+    OJO: el 2º parámetro es el WORK ITEM TYPE del tracker. `Ticket.type` NO
+    EXISTE en el modelo — los campos reales son `work_item_type` (models.py) y
+    `local_work_item_type`. Un getattr(ticket, "type", None) devuelve None
+    SIEMPRE y EN SILENCIO, dejando ciega a esta función.
+    """
+    wt = (work_item_type or "").strip().lower()
+    if wt:
+        mapped = _WI_TYPE_KIND.get(wt)
+        if mapped:
+            return mapped
+    title = (ticket_title or "").strip().lower()
+    if not title:
+        return "unknown"
+    if any(w in title for w in _TITLE_BUG):
+        return "bug"
+    if any(w in title for w in _TITLE_FEATURE):
+        return "feature"
+    return "task"
+
+
+def _as_dict(value) -> dict:
+    return value if isinstance(value, dict) else {}
+
+
+def _extract_signals(md: dict) -> list[tuple[str, str, str]]:
+    """(signal_kind, signal_key, remedy_hint) por cada señal de la metadata.
+
+    SOLO lee claves OBSERVADAS en la calibración F1.0 (§3-bis del plan, fixture
+    tests/fixtures/harness_metadata_sample.json). Escribir acá el nombre de una
+    clave que no exista devuelve 0 patrones EN SILENCIO — el peor falso verde
+    posible, porque toda la suite con mocks pasaría igual.
+
+    Nunca lanza: la metadata de producción llega con shapes corruptos.
+    """
+    out: list[tuple[str, str, str]] = []
+    if not isinstance(md, dict):
+        return out
+
+    # criteria_repair: {"attempted": bool, "unmet_before": [str], "recovered": bool|null}
+    cr = _as_dict(md.get("criteria_repair"))
+    unmet = cr.get("unmet_before")
+    if isinstance(unmet, (list, tuple)):
+        for item in unmet:
+            text = str(item or "").strip()
+            if text:
+                out.append(("criterion_fail", text, ""))
+    if cr.get("recovered") is True:
+        out.append((
+            "repair_success",
+            "criteria_repair",
+            "el pase correctivo de criterios recuperó el run",
+        ))
+
+    # precondition_failure: {"check": str, "detail": str}
+    pf = _as_dict(md.get("precondition_failure"))
+    check = str(pf.get("check") or "").strip()
+    if check:
+        out.append(("contract_fail", check, str(pf.get("detail") or "").strip()))
+
+    # validation_playbook: {"status": str, "degraded_reason": str, ...}
+    vp = _as_dict(md.get("validation_playbook"))
+    vp_status = str(vp.get("status") or "").strip()
+    if vp_status and vp_status != "ok":
+        key = str(vp.get("degraded_reason") or "").strip() or vp_status
+        out.append(("verifier_fail", key, ""))
+
+    # autocorrect: {"attempts": int, "max_retries": int, "last_action": str, ...}
+    ac = _as_dict(md.get("autocorrect"))
+    try:
+        attempts = int(ac.get("attempts") or 0)
+    except Exception:  # noqa: BLE001
+        attempts = 0
+    if attempts > 0 and str(ac.get("last_action") or "") == "ok":
+        out.append((
+            "repair_success",
+            "autocorrect",
+            f"la autocorrección resolvió el run en {attempts} intento(s)",
+        ))
+
+    # failure_kind: str — "crash" | "contract_failed"
+    fk = md.get("failure_kind")
+    if isinstance(fk, str) and fk.strip():
+        out.append(("run_failure", fk.strip(), ""))
+
+    return out
+
+
+def harvest_from_execution(
+    *,
+    ticket_id: int,
+    execution_id: int,
+    final_status: str,
+    agent_type: str | None = None,
+    error: str | None = None,
+    **kwargs,
+) -> int:
+    """Post-hook de cosecha. Devuelve el nº de patrones persistidos. Best-effort.
+
+    Firma EXACTA que documenta `ticket_status.register_post_hook`:
+      fn(*, ticket_id, execution_id, final_status, agent_type, error, **kwargs)
+    El `**kwargs` es obligatorio: el chokepoint puede pasar claves adicionales.
+
+    Seam: `on_execution_end` (3/3 runtimes), NO `finalize_run` (1/3 — sólo Codex
+    CLI). Acá la metadata YA está persistida en la fila, a diferencia del
+    `metadata_patch` de PostRunResult, que es un patch todavía sin fusionar.
+    """
+    from datetime import datetime
+
+    from config import config as _cfg
+
+    if not getattr(_cfg, "STACKY_HARNESS_LEARNING_HARVEST_ENABLED", True):
+        return 0
+
+    try:
+        from db import session_scope
+        from models import AgentExecution, Ticket
+
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            if row is None:
+                return 0
+            md = row.metadata_dict or {}
+            ticket = session.get(Ticket, ticket_id)
+            # TODOS los escalares se capturan DENTRO de la sesión: afuera el
+            # objeto queda detached y cualquier acceso da DetachedInstanceError.
+            project = getattr(ticket, "stacky_project_name", "") or ""
+            ticket_title = getattr(ticket, "title", "") or ""
+            wi_type = (
+                getattr(ticket, "work_item_type", None)
+                or getattr(ticket, "local_work_item_type", None)
+            )
+    except Exception:  # noqa: BLE001
+        return 0
+
+    if not project:
+        return 0
+
+    kind = classify_ticket_kind(ticket_title, wi_type)
+    today = datetime.utcnow().date().isoformat()
+    n = 0
+    for signal_kind, signal_key, remedy in _extract_signals(md):
+        try:
+            persisted = persist_pattern(
+                HarnessPattern(
+                    project=project,
+                    agent_type=(agent_type or "unknown"),
+                    ticket_kind=kind,
+                    signal_kind=signal_kind,
+                    signal_key=signal_key,
+                    remedy_hint=remedy,
+                    occurrences=1,
+                    confidence=0.0,   # se recalcula on-read
+                    last_seen=today,
+                )
+            )
+        except Exception:  # noqa: BLE001
+            continue
+        if persisted:
+            n += 1
+    return n
+
+
+def register(register_post_hook) -> None:
+    """Cableado. Mismo idioma que services/epic_autopublish.register."""
+    register_post_hook(harvest_from_execution)

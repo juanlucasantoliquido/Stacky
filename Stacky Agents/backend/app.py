@@ -1049,6 +1049,13 @@ def create_app() -> Flask:
     # Va DESPUÉS del gate de build para que pueda leer su veredicto.
     from services import qa_uat_enqueue
     qa_uat_enqueue.register(ticket_status.register_post_hook)
+    # Plan 35 F1 — cosecha pasiva de las señales de verificación del arnés.
+    # Va ÚLTIMO a propósito: solo LEE la fila ya persistida y escribe patrones en
+    # la memoria interna de Stacky, así que no debe adelantarse a ningún hook que
+    # sincronice el tracker. Seam elegido por medición: on_execution_end es 3/3
+    # runtimes; finalize_run es 1/3 (sólo Codex CLI).
+    from services import harness_learning
+    harness_learning.register(ticket_status.register_post_hook)
 
     return app
 

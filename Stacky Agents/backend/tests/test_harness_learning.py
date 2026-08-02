@@ -185,3 +185,362 @@ def test_empty_project_is_not_persisted(app_ctx):
     despues = memory_store.list_observations(scope=HARNESS_PATTERN_SCOPE, limit=500)
     assert len(despues) == antes, "un project vacío escribió una observación"
     assert all((r.get("project") or "").strip() for r in despues)
+
+
+# ── F1 — T9..T16 ─────────────────────────────────────────────────────────────
+
+_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "harness_metadata_sample.json"
+
+
+def _md(bloque: str) -> dict:
+    """Metadata REAL congelada en el fixture de F1.0. Prohibido inventar claves."""
+    import json
+
+    return json.loads(_FIXTURE.read_text(encoding="utf-8"))[bloque]
+
+
+def _seed_execution(project: str, *, metadata: dict, title: str = "Ticket de prueba",
+                    work_item_type: str | None = "Bug") -> tuple[int, int]:
+    """Crea un Ticket + AgentExecution reales y devuelve (ticket_id, execution_id)."""
+    from db import session_scope
+    from models import AgentExecution, Ticket
+
+    with session_scope() as s:
+        t = Ticket(
+            ado_id=_seed_execution.counter,
+            project=project,
+            stacky_project_name=project,
+            title=title,
+            work_item_type=work_item_type,
+        )
+        _seed_execution.counter += 1
+        s.add(t)
+        s.flush()
+        e = AgentExecution(
+            ticket_id=t.id,
+            agent_type="developer",
+            status="completed",
+            input_context_json="{}",   # NOT NULL en el modelo
+            started_by="test",         # NOT NULL en el modelo
+        )
+        e.metadata_dict = metadata
+        s.add(e)
+        s.flush()
+        return t.id, e.id
+
+
+_seed_execution.counter = 900001
+
+
+def test_harvest_extracts_criterion_fail(app_ctx):
+    """T9 — cosecha los criterios incumplidos usando el FIXTURE REAL de F1.0."""
+    from services.harness_learning import harvest_from_execution, list_patterns
+
+    tid, eid = _seed_execution("HL_H_CRIT", metadata=_md("con_senales"))
+    n = harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="completed", agent_type="developer"
+    )
+    assert n > 0
+    kinds = {p.signal_kind for p in list_patterns("HL_H_CRIT", min_confidence=0.0)}
+    assert "criterion_fail" in kinds
+    assert "contract_fail" in kinds      # precondition_failure.check
+    assert "verifier_fail" in kinds      # validation_playbook.degraded_reason
+    assert "run_failure" in kinds        # failure_kind
+
+
+def test_harvest_extracts_repair_success_with_hint(app_ctx):
+    """T10 — el repair exitoso deja un patrón con remedy_hint no vacío."""
+    from services.harness_learning import harvest_from_execution, list_patterns
+
+    tid, eid = _seed_execution("HL_H_REP", metadata=_md("con_senales"))
+    harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="completed", agent_type="developer"
+    )
+    repairs = [
+        p for p in list_patterns("HL_H_REP", min_confidence=0.0)
+        if p.signal_kind == "repair_success"
+    ]
+    assert repairs, "no se cosechó ningún repair_success"
+    assert any(p.remedy_hint.strip() for p in repairs)
+
+
+def test_harvest_is_noop_without_signals(app_ctx):
+    """T11 — metadata sin señales → 0 patrones, sin excepción."""
+    from services.harness_learning import harvest_from_execution, list_patterns
+
+    tid, eid = _seed_execution("HL_H_VACIO", metadata=_md("sin_senales"))
+    assert harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="completed", agent_type="developer"
+    ) == 0
+    assert list_patterns("HL_H_VACIO", min_confidence=0.0) == []
+
+    # …y metadata literalmente vacía tampoco rompe
+    tid2, eid2 = _seed_execution("HL_H_VACIO2", metadata={})
+    assert harvest_from_execution(
+        ticket_id=tid2, execution_id=eid2, final_status="error", agent_type="qa"
+    ) == 0
+
+
+def test_harvest_never_raises(app_ctx):
+    """T12 — metadata corrupta y ejecución inexistente no propagan excepción."""
+    from services.harness_learning import harvest_from_execution
+
+    tid, eid = _seed_execution("HL_H_CORR", metadata=_md("corrupta"))
+    harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="error", agent_type="developer"
+    )  # no debe lanzar
+    # ejecución / ticket inexistentes
+    assert harvest_from_execution(
+        ticket_id=-1, execution_id=-1, final_status="error", agent_type=None, error="x"
+    ) == 0
+
+
+def test_classify_ticket_kind_uses_work_item_type(app_ctx):
+    """T13 — GATE de B6: el 2º parámetro es el WORK ITEM TYPE, no un Ticket.type.
+
+    `Ticket.type` NO EXISTE en el modelo (los campos reales son work_item_type y
+    local_work_item_type). El plan v2 hacía getattr(ticket,"type",None), que
+    devuelve None SIEMPRE y EN SILENCIO: con esa versión, este test falla.
+    """
+    from services.harness_learning import classify_ticket_kind
+
+    assert classify_ticket_kind("lo que sea", "Bug") == "bug"
+    assert classify_ticket_kind("lo que sea", "Feature") == "feature"
+    assert classify_ticket_kind("lo que sea", "Task") == "task"
+    # el tipo del tracker MANDA sobre el título
+    assert classify_ticket_kind("nueva funcionalidad de reportes", "Bug") == "bug"
+    # sin tipo, cae al título
+    assert classify_ticket_kind("Error al calcular el saldo", None) == "bug"
+    assert classify_ticket_kind("Nueva funcionalidad de exportación", None) == "feature"
+    assert classify_ticket_kind("", None) == "unknown"
+
+    # …y el harvest lo toma del campo REAL del ticket, no de un "type" inexistente
+    from services.harness_learning import harvest_from_execution, list_patterns
+
+    tid, eid = _seed_execution(
+        "HL_H_KIND", metadata=_md("con_senales"), title="da igual", work_item_type="Bug"
+    )
+    harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="completed", agent_type="developer"
+    )
+    pats = list_patterns("HL_H_KIND", min_confidence=0.0)
+    assert pats and all(p.ticket_kind == "bug" for p in pats)
+
+
+def test_flag_off_does_not_harvest(app_ctx, monkeypatch):
+    """T14 — flag OFF → 0 y cero escrituras."""
+    from config import config as cfg
+    from services import memory_store
+    from services.harness_learning import HARNESS_PATTERN_SCOPE, harvest_from_execution
+
+    monkeypatch.setattr(cfg, "STACKY_HARNESS_LEARNING_HARVEST_ENABLED", False, raising=False)
+    antes = len(memory_store.list_observations(scope=HARNESS_PATTERN_SCOPE, limit=500))
+    tid, eid = _seed_execution("HL_H_OFF", metadata=_md("con_senales"))
+    assert harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="completed", agent_type="developer"
+    ) == 0
+    despues = len(memory_store.list_observations(scope=HARNESS_PATTERN_SCOPE, limit=500))
+    assert despues == antes, "con la flag OFF se escribieron observaciones"
+
+
+def test_harvest_signature_matches_post_hook_contract(app_ctx):
+    """T15 — GATE contra el defecto que mató a v1: la firma imaginada.
+
+    register_post_hook documenta literalmente:
+      fn(*, ticket_id, execution_id, final_status, agent_type, error, **kwargs)
+    """
+    import inspect
+
+    from services.harness_learning import harvest_from_execution
+
+    sig = inspect.signature(harvest_from_execution)
+    kw = {
+        n for n, p in sig.parameters.items()
+        if p.kind is inspect.Parameter.KEYWORD_ONLY
+    }
+    assert {"ticket_id", "execution_id", "final_status", "agent_type", "error"} <= kw
+    assert any(
+        p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()
+    ), "falta **kwargs: el chokepoint puede pasar claves adicionales"
+    # y no exige nada posicional
+    assert not [
+        n for n, p in sig.parameters.items()
+        if p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+    ]
+
+
+def test_hook_is_registered_in_app(app_ctx):
+    """T16 — GATE anti-"construido y jamás cableado".
+
+    Se verifica por AST y no por grep: un grep cuenta también comentarios y
+    strings. Se ancla por SÍMBOLO (harness_learning + register), no por línea.
+    """
+    import ast
+
+    src = (Path(__file__).resolve().parents[1] / "app.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+
+    cableado = False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        if (
+            isinstance(fn, ast.Attribute)
+            and fn.attr == "register"
+            and isinstance(fn.value, ast.Name)
+            and fn.value.id == "harness_learning"
+        ):
+            cableado = True
+            break
+    assert cableado, (
+        "F1 no está cableada: app.py no llama harness_learning.register(...). "
+        "El gate de implementado no es que exista el símbolo, es que exista un "
+        "consumidor de PRODUCCIÓN."
+    )
+
+
+# ── F3 — T17..T23 ────────────────────────────────────────────────────────────
+
+
+def test_confidence_grows_with_occurrences(app_ctx):
+    """T17 — monotonía y techo en 1.0."""
+    from services.harness_learning import compute_confidence
+
+    vals = [compute_confidence(n, 0) for n in (1, 2, 3, 4, 5)]
+    assert vals == sorted(vals) and len(set(vals)) == 5
+    assert compute_confidence(5, 0) == 1.0
+    assert compute_confidence(50, 0) == 1.0, "la base debe topear en 1.0"
+    assert compute_confidence(0, 0) == 0.0
+
+
+def test_confidence_decays_with_age(app_ctx):
+    """T18 — half-life de 30 días."""
+    from services.harness_learning import compute_confidence
+
+    hoy = compute_confidence(5, 0)
+    un_hl = compute_confidence(5, 30)
+    dos_hl = compute_confidence(5, 60)
+    assert hoy == 1.0
+    assert un_hl == 0.5
+    assert dos_hl == 0.25
+    # 6 ocurrencias hace 120 días: base topea en 1.0 y decae 4 half-lives.
+    # 1.0 * 0.5**4 = 0.0625 y round(0.0625, 3) == 0.062 — NO 0.063: Python usa
+    # banker's rounding y 0.0625 cae exactamente en el medio. El plan escribía
+    # 0.063; el valor real de la fórmula es 0.062.
+    assert compute_confidence(6, 120) == 0.062
+    assert compute_confidence(6, 120) < 0.5, "un patrón rancio no se inyecta"
+
+
+def test_single_occurrence_below_default_threshold(app_ctx):
+    """T19 — 1 ocurrencia hoy = 0.2 < 0.5: el sistema arranca SILENCIOSO."""
+    from services.harness_learning import compute_confidence
+
+    assert compute_confidence(1, 0) == 0.2
+    assert compute_confidence(1, 0) < 0.5
+
+
+def test_three_occurrences_reach_threshold(app_ctx):
+    """T20 — 3 ocurrencias hoy = 0.6 >= 0.5: fija el PUNTO DE ENCENDIDO.
+
+    Es lo que sostiene el riesgo asumido de §4-bis: la inyección nace ON pero es
+    inerte hasta que hay evidencia repetida.
+    """
+    from services.harness_learning import compute_confidence
+
+    assert compute_confidence(2, 0) == 0.4 and compute_confidence(2, 0) < 0.5
+    assert compute_confidence(3, 0) == 0.6
+    assert compute_confidence(3, 0) >= 0.5
+
+
+def test_dismissed_pattern_is_never_listed(app_ctx):
+    """T21 — un patrón en "rejected" no aparece en list_patterns."""
+    from services import memory_store
+    from services.harness_learning import (
+        PATTERN_STATUS_DISMISSED,
+        is_suppressed,
+        list_patterns,
+        persist_pattern,
+    )
+
+    mid = persist_pattern(_pattern(project="HL_DISM", signal_key="senal descartable"))
+    assert [p for p in list_patterns("HL_DISM", min_confidence=0.0)]
+
+    assert memory_store.set_status(mid, PATTERN_STATUS_DISMISSED) is True
+    assert list_patterns("HL_DISM", min_confidence=0.0) == []
+    assert is_suppressed(memory_store.get(mid)["status"]) is True
+
+
+def test_dismissed_status_is_in_all_statuses(app_ctx):
+    """T22 — "rejected" pertenece a la taxonomía; "dismissed" NO existe."""
+    from services import memory_store
+    from services.harness_learning import PATTERN_STATUS_ACTIVE, PATTERN_STATUS_DISMISSED
+
+    assert PATTERN_STATUS_DISMISSED in memory_store.ALL_STATUSES
+    assert PATTERN_STATUS_ACTIVE in memory_store.ALL_STATUSES
+    assert "dismissed" not in memory_store.ALL_STATUSES
+
+
+def test_dismissed_pattern_is_not_resurrected_by_reharvest(app_ctx):
+    """T23 — GATE de la decisión (b): el descarte del operador es DE POR VIDA.
+
+    Es el único test que recorre el mecanismo entero por el camino de
+    PRODUCCIÓN: cosecha con harvest_from_execution, descarta, y VUELVE A
+    COSECHAR la misma ejecución. Un test que fabrique la fila a mano no prueba
+    nada de esto — el defecto vive en el camino, no en el dato:
+    upsert_by_topic_key pisa `status` incondicionalmente, así que sin el guard
+    de persist_pattern la re-cosecha reactivaría el patrón en silencio.
+    """
+    from services import memory_store
+    from services.harness_learning import (
+        HARNESS_PATTERN_SCOPE,
+        PATTERN_STATUS_DISMISSED,
+        harvest_from_execution,
+        list_patterns,
+    )
+
+    proj = "HL_NORESU"
+    tid, eid = _seed_execution(proj, metadata=_md("con_senales"))
+
+    # 1) cosecha por el camino de producción
+    assert harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="completed", agent_type="developer"
+    ) > 0
+    activos = memory_store.list_observations(
+        project=proj, scope=HARNESS_PATTERN_SCOPE, status="active", limit=500
+    )
+    assert activos, "la primera cosecha no dejó nada que descartar"
+    victima = activos[0]
+    topic = victima["topic_key"]
+    rev_al_descartar = victima["revision_count"]
+
+    # 2) el operador lo descarta
+    assert memory_store.set_status(victima["memory_id"], PATTERN_STATUS_DISMISSED) is True
+
+    # 3) vuelve a correr la MISMA ejecución (el escenario real: el run se repite)
+    harvest_from_execution(
+        ticket_id=tid, execution_id=eid, final_status="completed", agent_type="developer"
+    )
+
+    fila = memory_store.get(victima["memory_id"])
+    assert fila["status"] == PATTERN_STATUS_DISMISSED, (
+        "la re-cosecha RESUCITÓ un patrón descartado: falta el guard de "
+        "is_dismissed_topic en persist_pattern"
+    )
+    assert fila["revision_count"] == rev_al_descartar, (
+        "la re-cosecha tocó la fila descartada (revision_count creció)"
+    )
+    assert all(
+        p.signal_key != fila["title"] for p in list_patterns(proj, min_confidence=0.0)
+    ), "el patrón descartado volvió a list_patterns"
+
+    # y tampoco se creó un DUPLICADO con el mismo topic_key en otro estado
+    mismo_topic = [
+        r for r in memory_store.list_observations(
+            project=proj, scope=HARNESS_PATTERN_SCOPE, limit=500
+        )
+        if r["topic_key"] == topic
+    ]
+    assert len(mismo_topic) == 1, (
+        f"la re-cosecha creó {len(mismo_topic)} filas para el mismo topic_key"
+    )

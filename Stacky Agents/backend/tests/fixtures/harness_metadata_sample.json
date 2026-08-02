@@ -1,0 +1,98 @@
+{
+  "_meta": {
+    "plan": "35 F1.0",
+    "que_es": "SHAPE congelado de las claves-senal de metadata de una ejecucion. Es la fuente de verdad de los extractores de harness_learning._extract_signals: esta PROHIBIDO leer en un extractor una clave que no aparezca aca. Un extractor contra una clave inexistente devuelve 0 patrones EN SILENCIO, con toda la suite en verde: el peor falso verde posible.",
+    "medido_el": "2026-08-01",
+    "fuente": "backend/data/stacky_agents.db abierta en modo ro (sqlite3 URI file:...?mode=ro). 217 ejecuciones totales, 201 con metadata_json no vacio.",
+    "desvio_declarado": "El SHAPE y los CONTEOS son reales y medidos. Los VALORES son sinteticos y neutros: los criterios reales traen datos de negocio del cliente y este repo no versiona datos de cliente. Si el productor cambia el shape, los tests rompen igual, que es para lo que existe el fixture.",
+    "conteos_reales_sobre_201_filas": {
+      "failure_kind": 71,
+      "autocorrect": 69,
+      "precondition_failure": 23,
+      "contract_score": 23,
+      "validation_playbook": 21,
+      "criteria_repair": 6,
+      "harness_telemetry": 61
+    },
+    "descartada": "harness_telemetry NO es fuente de cosecha: RunTelemetry.to_dict() emite SOLO runtime/session_id/num_turns/total_cost_usd/input_tokens/output_tokens/cache_read_tokens/cost_estimated. Cero senales de verificacion. El plan v1/v2 lo declaraba 'el sustrato que F1 lee' y eso habria devuelto 0 patrones para siempre.",
+    "valores_distintos_observados": {
+      "failure_kind": ["crash", "contract_failed"],
+      "autocorrect.last_action": ["ok", "no_artifacts"],
+      "validation_playbook.status": ["degraded"],
+      "validation_playbook.degraded_reason": ["no_grounding"],
+      "precondition_failure.check": ["ado_pat_missing"]
+    }
+  },
+
+  "con_senales": {
+    "runtime": "claude_code_cli",
+    "work_item_type": "Bug",
+    "failure_kind": "contract_failed",
+    "contract_score": 54,
+    "criteria_repair": {
+      "attempted": true,
+      "unmet_before": [
+        "CA-01: el campo calculado se muestra sin el formato de moneda esperado",
+        "CA-03: la columna nueva no aparece en la posicion indicada por el criterio"
+      ],
+      "recovered": true
+    },
+    "precondition_failure": {
+      "check": "ado_pat_missing",
+      "detail": "No se encontro PAT del tracker y el auto-create de tasks esta habilitado."
+    },
+    "validation_playbook": {
+      "status": "degraded",
+      "steps": [],
+      "sources": [],
+      "confidence": 0.0,
+      "degraded_reason": "no_grounding"
+    },
+    "autocorrect": {
+      "attempts": 2,
+      "max_retries": 2,
+      "last_action": "ok",
+      "last_errors": []
+    },
+    "harness_telemetry": {
+      "runtime": "claude_code_cli",
+      "session_id": "sess-sintetico-0001",
+      "num_turns": 12,
+      "total_cost_usd": 0.41,
+      "input_tokens": 51234,
+      "output_tokens": 8123,
+      "cache_read_tokens": 40000,
+      "cost_estimated": false
+    }
+  },
+
+  "sin_senales": {
+    "runtime": "codex_cli",
+    "work_item_type": "Task",
+    "contract_score": 100,
+    "autocorrect": {
+      "attempts": 0,
+      "max_retries": 2,
+      "last_action": "ok",
+      "last_errors": []
+    },
+    "harness_telemetry": {
+      "runtime": "codex_cli",
+      "session_id": "sess-sintetico-0002",
+      "num_turns": 4,
+      "total_cost_usd": 0.02,
+      "input_tokens": 3000,
+      "output_tokens": 500,
+      "cache_read_tokens": 0,
+      "cost_estimated": true
+    }
+  },
+
+  "corrupta": {
+    "criteria_repair": "esto deberia ser un dict y es un string",
+    "precondition_failure": [1, 2, 3],
+    "validation_playbook": null,
+    "autocorrect": {"attempts": "dos"},
+    "failure_kind": {"no": "soy un str"}
+  }
+}

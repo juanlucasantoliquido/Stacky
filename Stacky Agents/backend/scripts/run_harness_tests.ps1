@@ -1015,7 +1015,8 @@ $HarnessTestFiles = @(
   "tests/test_plan294_baseline.py",
   "tests/test_plan294_flags.py",
   "tests/test_plan293_commit.py",
-  "tests/test_plan293_pull.py"
+  "tests/test_plan293_pull.py",
+  "tests/test_plan293_push.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

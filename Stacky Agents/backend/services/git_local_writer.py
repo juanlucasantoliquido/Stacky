@@ -203,3 +203,81 @@ def confirmar_cambios(*, raiz: Path, rutas: list[str], mensaje: str) -> dict:
     sha = (cabeza.stdout or "").strip() if cabeza and cabeza.returncode == 0 else ""
 
     return {"ok": True, "codigo": None, "sha": sha, "archivos": limpias}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Plan 293 F8 — Enviar al servidor
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _auth_para(project: str | None) -> str | None:
+    """Reusa el encabezado no interactivo que ya resuelve el pre-run de git, en
+    vez de abrir un camino nuevo para el PAT."""
+    if not project:
+        return None
+    try:
+        from services.pre_run_git import _resolve_auth_header_for_project
+
+        return _resolve_auth_header_for_project(project)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def enviar_cambios(*, raiz: Path, rama: str, remoto: str = "origin", project: str | None = None) -> dict:
+    """Envia la rama al servidor. NUNCA fuerza.
+
+    Un rechazo por non-fast-forward NO es un error del tablero: es la barrera de
+    git funcionando, y se traduce a castellano en vez de reintentarse con fuerza.
+    """
+    raiz = Path(raiz)
+
+    if not getattr(config, "STACKY_WORKBENCH_PUSH_ENABLED", False):
+        return _fallo(
+            "push_apagado",
+            "La opcion que permite enviar tu trabajo al servidor esta apagada.",
+        )
+
+    if _hay_index_lock(raiz):
+        return _fallo(
+            "otra_operacion_en_curso",
+            "Hay otra operacion en curso sobre esta carpeta. Espera unos segundos "
+            "y volve a intentar.",
+        )
+
+    auth = _auth_para(project)
+    try:
+        res = gw._run_git(
+            ["push", remoto, rama], raiz, escritura=True, auth_header=auth,
+        )
+    except gw.GitVetado:
+        # `+rama`, `origen:destino` o un comodin convierten el envio en una
+        # reescritura forzada de la historia del servidor. El catalogo lo veta
+        # ANTES de ejecutar nada.
+        return _fallo(
+            "rama_invalida",
+            "El nombre de la version de trabajo no es valido para enviar.",
+        )
+
+    if res is None:
+        return _fallo(
+            "no_se_pudo_enviar",
+            "No se pudo enviar: el servidor no respondio a tiempo.",
+        )
+
+    if res.returncode != 0:
+        salida = f"{res.stdout or ''}\n{res.stderr or ''}"
+        bajo = salida.lower()
+        if "non-fast-forward" in bajo or "fetch first" in bajo or "rejected" in bajo:
+            return _fallo(
+                "envio_rechazado",
+                "Alguien mas subio cambios antes que vos. Trae los cambios y "
+                "volve a intentar.",
+            )
+        if "authentication" in bajo or "403" in bajo or "denied" in bajo:
+            return _fallo(
+                "sin_permiso_en_el_servidor",
+                "El servidor no acepto tus credenciales para esta carpeta.",
+            )
+        return _fallo("no_se_pudo_enviar", "No se pudo enviar tu trabajo al servidor.")
+
+    return {"ok": True, "codigo": None, "rama": rama, "remoto": remoto}

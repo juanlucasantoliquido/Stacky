@@ -20,7 +20,7 @@
 | **F5** — switch de GitLab en la UI | pendiente | |
 | **F6** — `base_url` server-side | pendiente | |
 | **F7** — 23 descripciones + 1 label | pendiente | |
-| **F9** — centinela de los ocho sitios | pendiente | |
+| **F9** — centinela de los ocho sitios | **IMPLEMENTADA** | `2 passed`. Censo interno: **8 guards en 7 archivos** (`api/tickets.py` tiene 2), exacto a §2.1. Probado contra los **dos** escenarios de rojo: (1) un noveno sitio sin clasificar → `sitios sin clasificar: ['services/_plan290_tmp_sitio9.py']`; (2) borrar la declaración de F2 → `['services/business_preflight.py']`. Ratchets 824→825 / 760→761. |
 | **F8** — docs, métrica y no-regresión | pendiente | |
 
 > **Baselines RE-MEDIDOS el 2026-08-02 sobre `c3844db8`**, con `DATABASE_URL` redirigido al scratchpad y **una base FRESCA por archivo**. Los 13 del plan dieron **exacto**. Dos añadidos que el v2 pidió medir en F0: `test_context_enrichment.py` = **8 passed**, `test_run_directive_block.py` = **7 passed**.

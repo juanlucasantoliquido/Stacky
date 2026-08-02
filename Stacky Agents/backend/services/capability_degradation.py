@@ -29,6 +29,42 @@ from models import AgentExecution
 CLAVE_METADATA = "capability_degraded"
 
 
+# Plan 290 F9 — los sitios de degradación del Plan 281 F7 que a propósito NO
+# declaran, con su motivo. Es un CONTRATO, no un comentario: el test de
+# tests/test_plan290_sitios_clasificados.py exige que TODO sitio del censo esté
+# instrumentado o esté acá. Agregar un guard nuevo sin clasificarlo pone el arnés
+# en rojo. Sacar uno de acá obliga a instrumentarlo.
+#
+# La clave es la ruta relativa al backend, con `/`, y NUNCA `archivo:línea`: los
+# ocho anclajes del censo ya se movieron una vez y se van a volver a mover.
+SITIOS_SIN_DECLARAR: dict[str, str] = {
+    "api/agents.py": (
+        "sin execution_id en el scope ni en su llamador (:1687): plomeria nueva por "
+        "varias capas, que es el defecto de alcance que hundio planes anteriores"
+    ),
+    "api/tickets.py": (
+        "dos sitios. :5111 es un closure sin execution_id y su propio comentario lo "
+        "declara guard COSMETICO (la funcion ya esta protegida). :7762 degrada un "
+        "sellado de aprendizaje bidireccional (Plan 60 F1), no una capacidad que el "
+        "operador espere. Bajo dano los dos"
+    ),
+    "services/acceptance_criteria.py": (
+        "gemelo funcional de self_review, pero NINGUNO de sus llamadores tiene "
+        "execution_id; F3 ya cubre el mismo hecho de negocio desde donde el dato "
+        "existe, e instrumentar los dos duplicaria la entrada"
+    ),
+    "services/similar_tickets.py": (
+        "devuelve [] , indistinguible de 'no hubo coincidencias', que es un "
+        "resultado legitimo y frecuente: declararlo seria ruido de alta frecuencia "
+        "y bajo valor. Sin execution_id ademas"
+    ),
+    "services/ticket_assigner.py": (
+        "devuelve None y ya loguea en debug; el ticket sin asignar se ve en el "
+        "propio tracker. Sin execution_id"
+    ),
+}
+
+
 def _noop_log(*_args, **_kwargs) -> None:
     """Sumidero de registro.
 

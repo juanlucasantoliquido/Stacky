@@ -11,7 +11,7 @@
 | **F2** — el store de la marca | **IMPLEMENTADA** | `5314f5c3` | **17** passed (rojo previo: `ModuleNotFoundError`). Mitad de contraste de la marca monótona **ejecutada y fallando** |
 | **F3+F4** — las opciones y su consumidor | **IMPLEMENTADA** | `50496f73` | flags 12 passed (rojo previo 11F/1P); `FLAG_REGISTRY` 493 → **495**; grep de las 2 keys en `app.py` = **0** |
 | **F5** — el gate de correctitud | **IMPLEMENTADA** | `94a6245d` | **22** passed. **Las CINCO mitades de contraste ejecutadas y fallando**, parches revertidos (`git diff` vacío) |
-| **F6** — paridad, docs y no-regresión | **IMPLEMENTADA** | `7e5b1c4a` | 6 passed + **5 mitades de contraste propias**; delta cero en los 14 baselines verdes y los 7 rojos de fábrica medibles |
+| **F6** — paridad, docs y no-regresión | **IMPLEMENTADA** | `e3dab299` | 6 passed + **5 mitades de contraste propias**; delta cero en los 14 baselines verdes y los 7 rojos de fábrica medibles |
 
 **Desvíos respecto del plan, medidos al implementar (ninguno cambia el alcance):**
 

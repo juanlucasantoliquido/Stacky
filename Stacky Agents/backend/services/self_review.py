@@ -84,6 +84,50 @@ def review_artifact(*, execution_id: int, artifact_text: str) -> SelfReviewResul
 
     criteria_text = _resolve_criteria(ticket)
     if not criteria_text:
+        # Plan 290 F3 — el self-review se saltea y devuelve score=1.0, o sea
+        # "perfecto", sobre un artefacto que NADIE revisó. Que quede dicho, no
+        # solo devuelto. NO cambia el retorno: sigue score=1.0 + skipped_reason.
+        #
+        # La declaración va acá y no en `_resolve_criteria`: esa función no tiene
+        # `execution_id` y la llaman otros caminos; instrumentarla exigiría
+        # cambiarle la firma. Acá el dato está a tres líneas.
+        #
+        # El guard se REPITE a propósito: `criteria_text` puede venir vacío por dos
+        # motivos distintos — el tracker no tiene el campo (degradación, sitio 6) o
+        # el ticket ADO no tiene criterios cargados (ticket incompleto, que NO es
+        # una degradación de capacidad). Sin el guard se declararían falsos
+        # positivos sobre proyectos ADO y el KPI se inflaría con ruido.
+        # El `try` NO es decorativo y NO es redundante con el de `declarar`:
+        # `review_artifact` no está dentro de ningún `try` de su llamador (a
+        # diferencia del sitio de F2, que corre dentro del `except` de
+        # `business_preflight.evaluate`, :198-200). Acá, cualquier excepción — del
+        # propio `declarar`, del resolvedor de tracker, o del import — subiría hasta
+        # `apply_to_execution` y tumbaría la corrida por no poder anotar un aviso.
+        try:
+            from services import capability_degradation
+            from services.project_context import (
+                ruteo_estricto_por_tracker,
+                tracker_efectivo_de_ticket,
+                tracker_is_azure_devops,
+            )
+
+            if (
+                not tracker_is_azure_devops(getattr(ticket, "stacky_project_name", None))
+                and ruteo_estricto_por_tracker()
+            ):
+                capability_degradation.declarar(
+                    execution_id=execution_id,
+                    capability="tracker.acceptance_criteria",
+                    reason=(
+                        "el tracker no expone criterios de aceptación "
+                        "(Microsoft.VSTS.Common.AcceptanceCriteria es un campo de Azure DevOps): "
+                        "el self-review se saltea y NO evaluó el artefacto"
+                    ),
+                    provider=tracker_efectivo_de_ticket(ticket),
+                    site="self_review.review_artifact",
+                )
+        except Exception:  # noqa: BLE001 — un aviso nunca tumba un self-review
+            pass
         return SelfReviewResult(score=1.0, checklist=[], skipped_reason="no_acceptance_criteria")
 
     try:

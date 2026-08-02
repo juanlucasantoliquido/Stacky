@@ -1073,6 +1073,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan290_degradacion_declarada.py
   tests/test_plan290_registro_degradacion.py
   tests/test_plan290_preflight_no_regresion.py
+  tests/test_plan290_self_review_no_regresion.py
 )
 
 pass=0

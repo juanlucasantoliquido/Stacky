@@ -279,3 +279,101 @@ def test_el_orden_de_entrada_se_conserva():
     out = normalizar_notas_gitlab(NOTAS_GITLAB)
     assert [c["text"] for c in out] == [
         "Primera nota del cliente", "Segunda nota con detalle", "Tercera nota"]
+
+
+# -- F4 - lector por proveedor ------------------------------------------------
+
+def test_lee_los_comentarios_por_la_fabrica_y_los_normaliza(proyecto_gitlab):
+    from services.tracker_context import fetch_comentarios_normalizados
+
+    comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1124)
+    assert [c["text"] for c in comentarios] == [
+        "Primera nota del cliente", "Segunda nota con detalle", "Tercera nota"]
+    assert stats == {"comments_count": 3, "comments_truncated": False,
+                     "comments_total_disponibles": 3, "errors": []}
+    assert proyecto_gitlab.llamadas == ["1124"]     # str, y es el iid (§4.8)
+
+
+def test_el_tope_recorta_y_lo_DECLARA(monkeypatch):
+    """Un issue con mas notas que el tope entrega EXACTAMENTE el tope, y lo dice."""
+    import services.tracker_provider as tp
+    from services.tracker_context import fetch_comentarios_normalizados
+
+    muchas = [{"body": f"nota {i}", "system": False, "author": {"name": "A"},
+               "created_at": "2026-01-01T00:00:00Z"} for i in range(200)]
+    monkeypatch.setattr(tp, "get_tracker_provider", lambda project=None: _FakeGitLabProvider(muchas))
+
+    comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1)
+    assert len(comentarios) == 30                     # el default, = top=30 de ADO
+    assert stats["comments_count"] == 30
+    assert stats["comments_truncated"] is True
+    assert stats["comments_total_disponibles"] == 200   # v2: lo necesita el sello de F5/F6
+    # Se quedan las MAS RECIENTES: las notas vienen mas viejas primero (v2 §4.12: ADO
+    # las trae al reves, con order=desc; el sentido se DECLARA en el sello, no se invierte).
+    assert comentarios[-1]["text"] == "nota 199"
+    assert comentarios[0]["text"] == "nota 170"
+
+
+def test_el_tope_se_puede_bajar_por_env(monkeypatch):
+    import services.tracker_provider as tp
+    from services.tracker_context import fetch_comentarios_normalizados
+
+    monkeypatch.setenv("TRACKER_CONTEXT_MAX_COMMENTS", "2")
+    monkeypatch.setattr(tp, "get_tracker_provider", lambda project=None: _FakeGitLabProvider(NOTAS_GITLAB))
+    comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1)
+    assert len(comentarios) == 2
+    assert stats["comments_truncated"] is True
+    assert [c["text"] for c in comentarios] == ["Segunda nota con detalle", "Tercera nota"]
+
+
+def test_tope_cero_devuelve_cero_comentarios_sin_error(monkeypatch):
+    import services.tracker_provider as tp
+    from services.tracker_context import fetch_comentarios_normalizados
+
+    monkeypatch.setenv("TRACKER_CONTEXT_MAX_COMMENTS", "0")
+    monkeypatch.setattr(tp, "get_tracker_provider", lambda project=None: _FakeGitLabProvider(NOTAS_GITLAB))
+    comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1)
+    assert comentarios == []
+    assert stats["comments_count"] == 0
+    assert stats["errors"] == []
+
+
+def test_el_master_switch_de_gitlab_apagado_se_DECLARA_no_se_confunde(monkeypatch):
+    """STACKY_GITLAB_ENABLED=false NO puede reportarse como un error de Azure DevOps."""
+    import services.tracker_provider as tp
+    from services.tracker_context import fetch_comentarios_normalizados
+
+    def _explota(project=None):
+        raise tp.TrackerConfigError("issue_tracker.type=gitlab pero STACKY_GITLAB_ENABLED=false")
+
+    monkeypatch.setattr(tp, "get_tracker_provider", _explota)
+    comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1)
+    assert comentarios == []
+    assert len(stats["errors"]) == 1
+    assert stats["errors"][0].startswith("tracker_provider_unavailable:")
+    assert "azure devops" not in stats["errors"][0].lower()      # y NUNCA lo contrario
+
+
+def test_un_fallo_de_red_del_provider_no_levanta(monkeypatch):
+    import services.tracker_provider as tp
+    from services.tracker_context import fetch_comentarios_normalizados
+
+    class _Rompe:
+        name = "gitlab"
+        def fetch_comments(self, item_id):
+            raise tp.TrackerApiError(503, "gateway timeout", kind="transient")
+
+    monkeypatch.setattr(tp, "get_tracker_provider", lambda project=None: _Rompe())
+    comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1)
+    assert comentarios == []
+    assert stats["errors"][0].startswith("fetch_comments_failed:")
+
+
+def test_un_provider_sin_fetch_comments_se_declara_no_se_rompe(monkeypatch):
+    import services.tracker_provider as tp
+    from services.tracker_context import fetch_comentarios_normalizados
+
+    monkeypatch.setattr(tp, "get_tracker_provider", lambda project=None: object())
+    comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1)
+    assert comentarios == []
+    assert stats["errors"][0].startswith("capability_missing:")

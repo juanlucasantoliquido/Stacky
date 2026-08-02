@@ -70,3 +70,70 @@ def normalizar_notas_gitlab(notas) -> list[dict]:
         fecha = (nota.get("created_at") or "")[:10]
         salida.append({"author": autor, "date": fecha, "text": texto, "is_html": False})
     return salida
+
+
+def fetch_comentarios_normalizados(
+    *, project_name: str | None, item_id, log=None,
+) -> tuple[list[dict], dict]:
+    """Comentarios de un ticket, por la costura de proveedor, ya normalizados y topeados.
+
+    `item_id` es el id que el proveedor entiende. Para GitLab es el **iid**, que en
+    Stacky vive en `Ticket.ado_id` (gitlab_sync.py:145). Se convierte a str porque
+    GitLabTrackerProvider.fetch_comments espera str (gitlab_provider.py:472).
+
+    NUNCA levanta. Devuelve (comentarios, stats) donde stats declara el motivo de
+    todo lo que no se pudo hacer: un contexto vacio SIN explicacion es el defecto
+    que este plan cierra.
+    """
+    stats: dict = {
+        "comments_count": 0,
+        "comments_truncated": False,
+        # v2 — cuantos habia ANTES de recortar. Lo consume el sello del bloque (F5/F6):
+        # sin este numero el bloque puede decir "30 comentarios" y el agente creer que
+        # esos son TODOS, que es exactamente el trabajo a ciegas que el plan cierra.
+        "comments_total_disponibles": 0,
+        "errors": [],
+    }
+
+    # Import LOCAL y por MODULO (no `from ... import get_tracker_provider`): los
+    # tests parchean el atributo del modulo, y un import por nombre congelaria la
+    # referencia al cargar. Mismo motivo por el que tracker_provider.py:121 importa
+    # `resolve_project_context` a nivel modulo "para poder parchear en tests".
+    from services import tracker_provider as _tp
+
+    try:
+        provider = _tp.get_tracker_provider(project_name)
+    except Exception as exc:  # noqa: BLE001
+        stats["errors"].append(f"tracker_provider_unavailable: {exc}")
+        return [], stats
+
+    fetch = getattr(provider, "fetch_comments", None)
+    if not callable(fetch):
+        stats["errors"].append(
+            f"capability_missing: el proveedor '{getattr(provider, 'name', '?')}' "
+            f"no expone fetch_comments"
+        )
+        return [], stats
+
+    try:
+        crudos = fetch(str(item_id))
+    except Exception as exc:  # noqa: BLE001
+        stats["errors"].append(f"fetch_comments_failed: {exc}")
+        return [], stats
+
+    comentarios = normalizar_notas_gitlab(crudos)
+    stats["comments_total_disponibles"] = len(comentarios)   # v2: ANTES de recortar
+
+    tope = max_comments()
+    if len(comentarios) > tope:
+        # Se conservan las MAS RECIENTES: GitLab devuelve las notas de mas vieja a
+        # mas nueva, y el contexto util de un ticket es el final de la conversacion.
+        # Es la misma politica que ADO, que pide `order=desc` con $top (ado_client.py:439).
+        stats["comments_truncated"] = True
+        comentarios = comentarios[len(comentarios) - tope:]
+
+    stats["comments_count"] = len(comentarios)
+    if log:
+        log("info", f"tracker_context — {len(comentarios)} comentarios "
+                    f"(tope={tope}, recortado={stats['comments_truncated']})")
+    return comentarios, stats

@@ -1,7 +1,10 @@
 # Plan 289 — El agente deja de trabajar a ciegas sobre un ticket de GitLab
 
-**Estado:** **v1 -> v2 — MEJORADO tras crítica adversarial.** Veredicto de la v1: **RECHAZADO**
-(6 bloqueantes). NO implementado.
+**Estado:** **v2 — IMPLEMENTADO (F0..F7) el 2026-08-02.** Ver **§10**. 8 commits en `docs/plan-279`
+(`ba14e865` → F7), **sin push**. Pendiente del operador: el **smoke manual de §7.3** (requiere
+credenciales de GitLab), que es lo único que habilita declarar el KPI K4.
+*Historia:* v1 → v2 — MEJORADO tras crítica adversarial; veredicto de la v1: **RECHAZADO**
+(6 bloqueantes).
 **Rama en la que se escribió:** `docs/plan-279`
 **Fecha:** 2026-08-02 (v1) / 2026-08-02 (v2)
 **Depende de:** Plan 286 (IMPLEMENTADO, `64a58ff4`..`af9a5ec1`) — reusa su helper `tracker_efectivo_de_ticket`.
@@ -2636,6 +2639,114 @@ ninguno subió a bloqueante — pero **la v2 los corrige, no los borra**.
 | `services/provider_coupling_audit.py:206 / :125-127 / :314-315` | **OK las líneas, MAL el gate que se les atribuía** | ver C13: quien las corre es `test_plan281_ratchet_ado_only.py`, no `test_plan282_censo_paridad.py`. `_ADO_ONLY_EXCLUDED_PREFIXES` en `:168` |
 | `Stacky/agents/Developer.agent.md:178` y `FunctionalAnalyst.agent.md:51`,`:312` | **OK, pero INCOMPLETO** | son relativos a `backend/`. **Falta un tercero: `backend/agents/Developer.agent.md:176`** (segundo árbol de agentes). Ver C12 |
 | `services/README_ado_context.md:50` y `:59` | **OK, pero INCOMPLETO** | `ado-comments` aparece también en **`:92`** (idempotencia) |
+
+---
+
+## 10. IMPLEMENTADO — 2026-08-02, rama `docs/plan-279`, 8 commits, SIN push
+
+**Intérprete:** `backend/.venv/Scripts/python.exe` (Python **3.13.5**), un archivo por corrida,
+con `DATABASE_URL` redirigido a un temporal del scratchpad en **todos** los comandos (§4.1).
+**No se escribió en la BD del operador.**
+
+### 10.1 Estado por fase
+
+| Fase | Estado | Commit | Comando y resultado REAL |
+|---|---|---|---|
+| **F0** | **IMPLEMENTADA** | `ba14e865` | `--collect-only` → **10 tests**; `-q -rxX` → **`6 passed, 4 xfailed`** (cero `xpassed`). Verificación obligatoria del rojo: `--runxfail` → `4 failed, 6 passed`, PATA A con `AssertionError: esperaba 1 bloque de comentarios, hay 0: []` y en la salida capturada `WARNING …ado_context.py:218 … no se pudo instanciar AdoClient: El proyecto 'GITLABTEST' no usa Azure DevOps (tracker_type=gitlab).` — el rojo es por la razón correcta. Ratchets: `4 passed` / `12 passed` |
+| **F1** | **IMPLEMENTADA** | `b61a6eb7` | `test_ado_context.py` **`9 failed, 8 passed` → `17 passed`**; `--collect-only` → **17 tests** (ninguno perdido). **KPI K7 cerrado** |
+| **F2** | **IMPLEMENTADA** | `ff3d8102` | `test_plan289_stat_de_contexto.py` → **6 collected / `6 passed`**; `test_plan289_contexto_por_tracker.py` → **`9 passed, 1 xfailed`**; `test_context_enrichment.py` → `8 passed`. Ratchets post-commit: `4 passed` / `12 passed`. **KPI K2 y K3** |
+| **F3** | **IMPLEMENTADA** | `672fb290` | 17 collected → **`16 passed, 1 xfailed`**; `test_gitlab_provider.py` `26 passed`; `test_plan282_censo_paridad.py` `2 passed`; `test_plan281_ratchet_ado_only.py` **`11 passed`** |
+| **F4** | **IMPLEMENTADA** | `18186171` | 24 collected → **`23 passed, 1 xfailed`**; `test_tracker_provider_conformance.py` `13 passed`; `test_plan282_fabrica_unica.py` `4 passed` |
+| **F5** | **IMPLEMENTADA** | `07399940` | 32 collected → **`31 passed, 1 xfailed`**; `test_ado_context.py` `17 passed`; `test_ado_blocker_block.py` `4 passed`; `test_block_priorities_contract.py` `4 passed`; `test_context_enrichment.py` `8 passed`; `test_context_budget.py` `3 passed`. **KPI K6** |
+| **F6** | **IMPLEMENTADA** | `8e8b4e5a` | 34 collected → **`34 passed`**, cero `xfailed`, cero `xpassed`. `test_harness_flags.py` **`59 passed` (0 failed)**; `test_harness_flags_help.py` `4 failed, 4 passed` (**delta cero**); los tres del 286 `16`/`13`/`6`; `test_plan281_ratchet_ado_only.py` **`11 passed`**; `test_plan218_coupling_ratchet.py` `3 failed, 7 passed` (**delta cero**); `test_flags_env_read_meta.py` `1 failed, 1 passed` (**delta cero**). **KPI K1, K5, K8** |
+| **F7** | **IMPLEMENTADA** | *(este commit)* | Barrido de las **22** suites de §4.6: **todas en su baseline exacto**, con las tres excepciones que el plan cambia a propósito. Re-medición de la BD y README actualizado |
+
+### 10.2 Total de ejecuciones del día (§4.11) — sobre una COPIA read-only
+
+```
+total=223 con_ado_context=4 comments_count>0=0
+  claude_code_cli        ejec= 173  con ado_context=0
+  (sin runtime)          ejec=  26  con ado_context=0
+  github_copilot         ejec=  24  con ado_context=4
+```
+
+**El total no se movió respecto de la medición del juez** (223, y el reparto 173/26/24 idéntico).
+Baseline de la consulta de K4 (RIPLEY): **`total=15 con_ado_context=0 comments_count>0=0`**, también
+idéntico al declarado. Los tres son **fotos**: el criterio es la **forma** (el `0`), no el
+denominador.
+
+### 10.3 Barrido final de no-regresión — 22 suites, esperado vs medido
+
+| Suite | Baseline §4.6 | Medido tras F7 | |
+|---|---|---|---|
+| `test_ado_context.py` | `9 failed, 8 passed` | **`17 passed`** | cambio previsto (F1) |
+| `test_plan289_contexto_por_tracker.py` | *(nueva)* | **`34 passed`** | previsto |
+| `test_plan289_stat_de_contexto.py` | *(nueva)* | **`6 passed`** | previsto |
+| `test_context_enrichment.py` | `8 passed` | `8 passed` | = |
+| `test_context_enrichment_client_profile.py` | `14 passed` | `14 passed` | = |
+| `test_acceptance_criteria_injection.py` | `9 passed` | `9 passed` | = |
+| `test_ado_blocker_block.py` | `4 passed` | `4 passed` | = |
+| `test_block_priorities_contract.py` | `4 passed` | `4 passed` | = |
+| `test_plan282_publicacion_comentario.py` | `7 passed` | `7 passed` | = |
+| `test_plan282_censo_paridad.py` | `2 passed` | `2 passed` | = |
+| `test_plan282_fabrica_unica.py` | `4 passed` | `4 passed` | = |
+| `test_plan282_assignee_no_borra.py` | `6 passed` | `6 passed` | = |
+| `test_plan286_tracker_efectivo.py` | `16 passed` | `16 passed` | = |
+| `test_plan286_ruteo_de_escritura.py` | `13 passed` | `13 passed` | = |
+| `test_plan286_columna_no_rutea.py` | `6 passed` | `6 passed` | = |
+| `test_tracker_provider_conformance.py` | `13 passed` | `13 passed` | = |
+| `test_gitlab_provider.py` | `26 passed` | `26 passed` | = |
+| `test_u1_self_review.py` | `2 passed` | `2 passed` | = |
+| `test_harness_flags.py` | `59 passed` | `59 passed` | = (agregar una key a un `set` no crea un test) |
+| `test_harness_flags_help.py` | `4 failed, 4 passed` | `4 failed, 4 passed` | **delta cero** (rojo de fábrica ajeno) |
+| `test_harness_ratchet_meta.py` | `4 passed` | `4 passed` | = |
+| `test_plan259_ratchet_script_parity.py` | `12 passed` | `12 passed` | = |
+| `test_plan281_ratchet_ado_only.py` | `11 passed` | `11 passed` | = (**el gate que atraparía un error de scope: no se movió**) |
+| `test_plan218_coupling_ratchet.py` | `3 failed, 7 passed` | `3 failed, 7 passed` | **delta cero** (rojo de fábrica ajeno) |
+
+**Cero movimientos no declarados.** Fuera de la tabla se corrieron además
+`test_context_budget.py` (`3 passed`, consume `ado-comments`),
+`test_claude_code_cli_prompt.py` (`11 passed`) y `test_flags_env_read_meta.py`
+(`1 failed, 1 passed`, sexto rojo de fábrica del repo).
+
+### 10.4 Los 6 bloqueantes de la v1: cómo quedó cada uno
+
+| # | Cerrado por | Evidencia |
+|---|---|---|
+| **C1** | F6.3 + F6.4 | El bucle de propagación está en `enrich`; el test de contrato **calibra con la clave centinela** y pasa. **K8: 2 → 0** |
+| **C2** | P6 + §4.1 | Los 3 greps del DoD 11 dan **cero resultados**; todos los comandos con `DATABASE_URL` redirigido |
+| **C3** | F0 por AST | Los tres `_run_in_background` verificados: `agent_runner.py` 718-1231, `claude_code_cli_runner.py` 595-2179, `codex_cli_runner.py` 258-1260, **uno por archivo**. Las patas de presencia (sin `xfail`) pasaron desde F0 |
+| **C4** | F0 PATA B | El censo exige `stats=` == el nombre desempaquetado de `enrich_blocks`. Los 3 pasan |
+| **C5** | F2 | Los **tres** runtimes editados; las 3 patas B verdes en el mismo commit |
+| **C6** | F2 Archivos | El `xfail` de la PATA B se retiró en `ff3d8102`; cero `XPASS(strict)` |
+
+### 10.5 Las dos correcciones que hubo que hacer al plan (y por qué)
+
+1. **F5 — el literal de `sello` del test contradecía al de F6.** El test de §11.2 pasaba
+   `"…comentarios (los mas recientes, del mas antiguo al mas reciente)"` (paréntesis cerrando al
+   final), pero `_bloques_por_proveedor` genera `"…(los mas recientes), del mas antiguo al mas
+   reciente"` (cerrando antes de la coma) y el armador envuelve todo en `_(…)_`. Con el literal del
+   plan salía `…reciente))_` contra un assert que exige `…reciente)_`. **Se alineó el literal del
+   test al string que F6 produce de verdad** (el que §11.2 documenta renderizado). El armador y los
+   asserts quedaron intactos; el test pasó a probar el formato real en vez de uno inventado.
+2. **F6 — el comentario del dispatcher rompía el DoD 9.** El texto que §6.2 manda escribir contiene
+   la subcadena literal `ticket.tracker_type`, y el DoD 9 exige que ese grep dé **cero resultados**
+   sobre ese mismo archivo. Es el patrón conocido de "un comentario que nombra el patrón rompe su
+   propio gate por grep". **Se reformuló el comentario** ("decidir leyendo la columna `tracker_type`
+   del ticket") conservando la advertencia entera. Cero cambios de código.
+
+### 10.6 Lo que queda pendiente y por qué
+
+- **El smoke manual de §7.3 / F7** (backend levantado, token de GitLab real, un agente `technical`
+  sobre un issue con comentarios, repetido en los 3 runtimes). **No es un test** y requiere
+  credenciales e infraestructura del operador. **KPI K4 no es declarable hasta correrlo**: por
+  definición mide ejecuciones **posteriores al deploy**.
+- **`comments_total_disponibles` viaja al sello del bloque pero `_bloques_por_proveedor` no lo pone
+  en `stats`** (sí lo hace `tracker_context`). El bucle de F6.3 lo admite (`if _clave in
+  build_stats`), así que el día que se agregue no hay que tocar `enrich`. Es exactamente lo que el
+  plan especifica, no una omisión.
+- **`deployment/harness_defaults.env`** no se regeneró: el plan lo declara cortesía sin gate
+  (pata 6 opcional) y ningún test lo vigila.
 
 ---
 

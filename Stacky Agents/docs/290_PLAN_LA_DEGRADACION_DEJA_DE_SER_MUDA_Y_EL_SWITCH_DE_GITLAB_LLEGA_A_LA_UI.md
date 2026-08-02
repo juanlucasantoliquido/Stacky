@@ -8,6 +8,27 @@
 
 ---
 
+## Estado de implementación (se actualiza fase por fase)
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| **F0** — centinelas en ROJO | **IMPLEMENTADA** | `2 failed`: `TypeError: enrich_blocks() got an unexpected keyword argument 'execution_id'` + `AssertionError` sobre `metadata['capability_degraded'] is None`. Cero `ImportError`. Ratchets 820→821 / 756→757. |
+| **F1** — registro de degradación | pendiente | |
+| **F2** — `business_preflight` declara | pendiente | |
+| **F3** — `self_review` declara | pendiente | |
+| **F4** — el aviso llega a la interfaz | pendiente | |
+| **F5** — switch de GitLab en la UI | pendiente | |
+| **F6** — `base_url` server-side | pendiente | |
+| **F7** — 23 descripciones + 1 label | pendiente | |
+| **F9** — centinela de los ocho sitios | pendiente | |
+| **F8** — docs, métrica y no-regresión | pendiente | |
+
+> **Baselines RE-MEDIDOS el 2026-08-02 sobre `c3844db8`**, con `DATABASE_URL` redirigido al scratchpad y **una base FRESCA por archivo**. Los 13 del plan dieron **exacto**. Dos añadidos que el v2 pidió medir en F0: `test_context_enrichment.py` = **8 passed**, `test_run_directive_block.py` = **7 passed**.
+>
+> ⚠️ **Regla de medición descubierta al implementar:** reusar un mismo archivo `.db` del scratchpad entre suites hace que la migración de arranque (`UPDATE tickets SET external_id = COALESCE(external_id, ado_id)`) choque contra el índice único de `tickets` y devuelva **errors** en vez de passed (`test_u1_self_review` → 2 errors, `test_context_enrichment` → 5 errors, `test_run_directive_block` → 7 errors). Es el mismo síntoma que §F8.2/C12 atribuye a la copia sin WAL, y aparece **también** con una base limpia reutilizada. **Una base fresca por archivo** lo resuelve y devuelve los baselines de la tabla.
+
+---
+
 ## 0. CHANGELOG v1 -> v2
 
 Todas las afirmaciones del v1 fueron **reproducidas ejecutando**, y todos los anclajes **abiertos**. El v1 tenía una precisión de medición altísima (490 `FlagSpec` y las 23 contradicciones salieron **exactas**, línea por línea; los 13 baselines de §5.1 salieron **exactos**; 820/756 entradas de los ratchets, **exactas**) — y aun así fue **RECHAZADO**, porque el defecto no estaba en lo que midió sino en **una plomería que dio por existente**.

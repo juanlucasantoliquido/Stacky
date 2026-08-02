@@ -1069,6 +1069,8 @@ HARNESS_TEST_FILES=(
   # Plan 289 - El agente deja de trabajar a ciegas sobre un ticket de GitLab
   tests/test_plan289_contexto_por_tracker.py
   tests/test_plan289_stat_de_contexto.py
+  # Plan 290 - La degradacion deja de ser muda
+  tests/test_plan290_degradacion_declarada.py
 )
 
 pass=0

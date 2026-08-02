@@ -95,11 +95,18 @@ def run_pull_check(
     project: str | None = None,
     auth_header: str | None = None,
     log: Callable[[str, str], None] | None = None,
+    policy: str | None = None,
 ) -> PullCheckResult:
     started = time.monotonic()
     enabled = config.STACKY_PRE_RUN_GIT_PULL_ENABLED if enabled is None else bool(enabled)
     required = config.STACKY_PRE_RUN_GIT_PULL_REQUIRED if required is None else bool(required)
-    policy = config.STACKY_PRE_RUN_GIT_WORKSPACE_POLICY or "fetch_only_warn"
+    # Plan 293 F7 — la politica pasa a ser PARAMETRO, con la config como respaldo.
+    # Antes se leia solo de config, y como el valor de fabrica es
+    # "fetch_only_warn" (config.py:865-866), el bloque de fusion de mas abajo NO
+    # se ejecutaba nunca: un boton "Traer cambios" hacia fetch y no bajaba nada,
+    # en verde. Los 5 llamadores de produccion no pasan `policy` y conservan
+    # exactamente el comportamiento anterior.
+    policy = policy or config.STACKY_PRE_RUN_GIT_WORKSPACE_POLICY or "fetch_only_warn"
     timeout_seconds = timeout_seconds or config.STACKY_PRE_RUN_GIT_TIMEOUT_SECONDS
     should_fetch = enabled if fetch is None else bool(fetch)
     # Auth ADO no interactiva para las ops de red (reusa el PAT DPAPI vía

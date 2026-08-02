@@ -754,6 +754,48 @@ class GitLabTrackerProvider:
 
     # ── Plan 73 F4 — RepoWriter (sub-puerto separado de CIProvider) ─────────────
 
+    def branch_exists(self, branch: str) -> bool:
+        """GET /projects/:id/repository/branches/:branch — ¿existe la rama?
+
+        SOLO LECTURA. 200 → True; 404 → False; cualquier otro TrackerApiError se
+        PROPAGA (un 401/403/500 NO es "no existe": tratarlo como False haría que
+        commit_file intentara crear una rama que quizás ya está, C1 del plan 73).
+
+        El nombre de rama del auto-PR lleva una BARRA ('stacky/incidencia-12-exec-34'),
+        así que va URL-encodeado con safe="" o GitLab lo lee como dos segmentos de path.
+
+        Plan 291 F1. Sin flag: es un GET de solo lectura que no puede cambiar
+        ningún resultado exitoso (ver plan 291 sección 3.3).
+        """
+        from services.tracker_provider import TrackerApiError  # lazy import — patrón del repo
+        proj_path = self._client._project_path()
+        encoded_branch = urllib.parse.quote(branch, safe="")
+        try:
+            self._client._request(
+                "GET",
+                f"/projects/{proj_path}/repository/branches/{encoded_branch}",
+            )
+            return True
+        except TrackerApiError as e:
+            if e.status == 404:
+                return False
+            raise
+
+    def _default_branch_name(self) -> str:
+        """GET /projects/:id → campo 'default_branch'. Cadena vacía si el repo no
+        tiene rama default (repo recién creado y VACÍO).
+
+        NO adivina 'main': si el repo usa 'master' o 'develop', devuelve eso.
+        NO importa nada de `api/` — `services/` NUNCA importa `api/` (riel duro).
+
+        ⚠️ ESTA ES LA IMPLEMENTACIÓN CANÓNICA a partir del plan 291. La rama GitLab
+        de `api/devops_production._default_branch` hacía EXACTAMENTE este GET y
+        pasa a delegar acá (plan 291 F1.b, hallazgo C7).
+        """
+        proj_path = self._client._project_path()
+        body, _ = self._client._request("GET", f"/projects/{proj_path}")
+        return str((body or {}).get("default_branch") or "")
+
     def _decode_file_content(self, body: dict) -> str:
         """Decodifica el contenido base64 que devuelve la API de archivos de GitLab."""
         raw = body.get("content") or ""

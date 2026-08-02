@@ -45,10 +45,11 @@ def _default_branch(provider, project):
         from services.ado_pipeline_definitions import _default_branch as _ado_default_branch  # noqa: PLC0415
         return _ado_default_branch(provider, project)
 
-    # GitLab
-    proj_path = provider._client._project_path()
-    body, _ = provider._client._request("GET", f"/projects/{proj_path}")
-    return body.get("default_branch") or "main"
+    # GitLab — Plan 291 F1.b: implementación única en el provider.
+    # El fallback "main" se PRESERVA acá (contrato histórico de este helper);
+    # el provider devuelve "" para el repo vacío y commit_file lo traduce a
+    # TrackerApiError(kind="repo_empty"). Los dos contratos quedan explícitos.
+    return provider._default_branch_name() or "main"
 
 
 @bp.route("/mr", methods=["POST"])

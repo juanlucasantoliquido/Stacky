@@ -296,6 +296,8 @@ $HarnessTestFiles = @(
   "tests/test_plan73_render_ado.py",
   "tests/test_plan73_render_gitlab.py",
   "tests/test_plan73_repo_writer.py",
+  # Plan 291 - El commit del agente crea la rama que necesita (GitLab)
+  "tests/test_plan291_start_branch.py",
   "tests/test_plan73_generator_endpoint.py",
   "tests/test_plan73_routes_registered.py",
   "tests/test_plan73_round_trip.py",

@@ -293,3 +293,179 @@ def test_f3_7_las_entradas_nuevas_no_violan_el_denylist_de_jerga():
             if _PHASE_RE.search(campo):
                 violaciones.append(f"{k}: referencia a fase de plan")
     assert violaciones == [], f"Ayuda llana con jerga prohibida: {violaciones}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# F4 — start_branch en el body, detrás de la flag
+# ══════════════════════════════════════════════════════════════════════════════
+
+class ClienteFalso:
+    """Doble del cliente GitLab CON ESTADO. Cero red.
+
+    ⚠️ EL ESTADO ES EL PUNTO. Un MagicMock plano que devolviera 404 siempre haría
+    que el SEGUNDO commit también mandara `start_branch` y F4.1 pasaría igual:
+    falso verde en el criterio central de la fase. Acá la rama pasa a EXISTIR
+    después del primer POST, que es lo que hace GitLab de verdad.
+    """
+
+    def __init__(self, ramas=(), archivos=None, default_branch="main"):
+        self.ramas = set(ramas)
+        self.archivos = dict(archivos or {})   # (rama, path) -> contenido
+        self.default_branch = default_branch
+        self.posts = []                        # [(url, json_body)] — LO QUE SE ASERTA
+
+    def _project_path(self):
+        return "grp%2Fproj"
+
+    def _request(self, method, path, *, params=None, json_body=None, files=None, _retry=0):
+        if method == "GET" and "/repository/branches/" in path:
+            rama = urllib.parse.unquote(path.rsplit("/", 1)[1])
+            if rama in self.ramas:
+                return {"name": rama}, {}
+            raise TrackerApiError(404, "branch not found", kind="not_found")
+
+        if method == "GET" and "/repository/files/" in path:
+            rel = urllib.parse.unquote(path.rsplit("/", 1)[1])
+            rama = (params or {}).get("ref")
+            contenido = self.archivos.get((rama, rel))
+            if contenido is None:
+                raise TrackerApiError(404, "file not found", kind="not_found")
+            return {"content": base64.b64encode(contenido.encode()).decode()}, {}
+
+        if method == "GET" and path == f"/projects/{self._project_path()}":
+            return {"default_branch": self.default_branch}, {}
+
+        if method == "POST" and path.endswith("/repository/commits"):
+            self.posts.append((path, json_body))
+            self.ramas.add(json_body["branch"])          # ← la rama pasa a EXISTIR
+            for a in json_body["actions"]:
+                self.archivos[(json_body["branch"], a["file_path"])] = a["content"]
+            return {"id": "deadbeef", "web_url": "http://x/commit/deadbeef"}, {}
+
+        raise AssertionError(f"llamada inesperada: {method} {path}")
+
+
+def _provider_con_cliente_falso(cliente):
+    from services.gitlab_provider import GitLabTrackerProvider
+    p = GitLabTrackerProvider.__new__(GitLabTrackerProvider)
+    p._client = cliente
+    p._project = "proj"
+    p._group = ""
+    p._epics_native = False
+    return p
+
+
+def _flag_start_branch(monkeypatch, valor):
+    """No se toca os.environ: `config = Config()` se instancia en el import y
+    os.getenv ya corrió. Se parchea la instancia viva, que es lo que lee el código."""
+    import config
+    monkeypatch.setattr(
+        config.config, "STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED", valor, raising=False,
+    )
+
+
+def test_f4_1_el_primer_post_lleva_start_branch_y_el_segundo_no(monkeypatch):
+    """F4.1 — el criterio central. start_branch NO es idempotente: mandarlo en el
+    segundo commit sobre una rama que ya existe puede hacer que GitLab rechace la
+    operación o cree un commit huérfano."""
+    _flag_start_branch(monkeypatch, True)
+    cliente = ClienteFalso(ramas=(), default_branch="main")
+    provider = _provider_con_cliente_falso(cliente)
+
+    provider.commit_file("src/a.py", "uno", "stacky/incidencia-12-exec-34", "msg")
+    provider.commit_file("src/b.py", "dos", "stacky/incidencia-12-exec-34", "msg")
+
+    assert len(cliente.posts) == 2
+    assert "start_branch" in cliente.posts[0][1]
+    assert "start_branch" not in cliente.posts[1][1]
+
+
+def test_f4_2_la_rama_base_se_lee_no_se_adivina(monkeypatch):
+    """F4.2 — si el repo usa 'develop', start_branch dice 'develop'. Nunca 'main'."""
+    _flag_start_branch(monkeypatch, True)
+    cliente = ClienteFalso(ramas=(), default_branch="develop")
+    provider = _provider_con_cliente_falso(cliente)
+
+    provider.commit_file("src/a.py", "uno", "stacky/x", "msg")
+
+    assert cliente.posts[0][1]["start_branch"] == "develop"
+
+
+def test_f4_3_con_la_flag_apagada_cero_post_y_error_accionable(monkeypatch):
+    """F4.3 — flag OFF + rama inexistente → TrackerApiError(kind='branch_missing')
+    y CERO POST al endpoint de commits.
+
+    ⚠️ "cero POST" no es "cero escritura" a nivel sistema: el camino de error del
+    auto-PR igual comenta en la Issue (plan 291 §3.7 / R12). Acá se afirma lo
+    primero, que es lo que esta fase gobierna.
+    """
+    _flag_start_branch(monkeypatch, False)
+    cliente = ClienteFalso(ramas=(), default_branch="main")
+    provider = _provider_con_cliente_falso(cliente)
+
+    with pytest.raises(TrackerApiError) as exc:
+        provider.commit_file("src/a.py", "uno", "stacky/x", "msg")
+
+    assert exc.value.kind == "branch_missing"
+    assert "stacky/x" in str(exc.value)
+    assert cliente.posts == []
+
+
+def test_f4_4_rama_preexistente_nunca_lleva_start_branch(monkeypatch):
+    """F4.4 — con la rama ya creada de antes, el body es el de hoy."""
+    _flag_start_branch(monkeypatch, True)
+    cliente = ClienteFalso(ramas={"stacky/x"}, default_branch="main")
+    provider = _provider_con_cliente_falso(cliente)
+
+    provider.commit_file("src/a.py", "uno", "stacky/x", "msg")
+
+    assert "start_branch" not in cliente.posts[0][1]
+
+
+def test_f4_5_repo_vacio_da_error_claro_y_cero_post(monkeypatch):
+    """F4.5 — sin rama default no hay desde dónde crear: repo_empty, antes del POST."""
+    _flag_start_branch(monkeypatch, True)
+    cliente = ClienteFalso(ramas=(), default_branch="")
+    provider = _provider_con_cliente_falso(cliente)
+
+    with pytest.raises(TrackerApiError) as exc:
+        provider.commit_file("src/a.py", "uno", "stacky/x", "msg")
+
+    assert exc.value.kind == "repo_empty"
+    assert cliente.posts == []
+
+
+def test_f4_6_el_corto_de_contenido_identico_se_preserva(monkeypatch):
+    """F4.6 — FIX C7 del plan 73 intacto: mismo contenido → 'unchanged' sin POST."""
+    _flag_start_branch(monkeypatch, True)
+    cliente = ClienteFalso(
+        ramas={"stacky/x"}, archivos={("stacky/x", "src/a.py"): "uno"}, default_branch="main",
+    )
+    provider = _provider_con_cliente_falso(cliente)
+
+    resultado = provider.commit_file("src/a.py", "uno", "stacky/x", "msg")
+
+    assert resultado["status"] == "unchanged"
+    assert cliente.posts == []
+
+
+def test_f4_7_el_radio_de_la_flag_alcanza_al_armado_de_pipelines(monkeypatch):
+    """F4.7 — RADIO DE ALCANCE DECLARADO (§3.6), PROBADO.
+
+    La perilla vive en commit_file, no en el auto-PR: commit_file tiene TRES
+    consumidores y api/pipeline_generator.py:97 arma ramas `feature/pipeline-…`.
+    Este test NO afirma que eso esté mal: afirma que PASA, para que el radio real
+    quede escrito en el arnés y no solo en la prosa del plan.
+
+    (El F4.7 del v1 asertaba `branch.startswith("stacky/")` sobre ramas que el
+    propio test pasaba: un gate que comprueba su propio input. El K2 de verdad
+    vive en F6.8, que ejecuta el producto.)
+    """
+    _flag_start_branch(monkeypatch, True)
+    cliente = ClienteFalso(ramas=(), default_branch="main")
+    provider = _provider_con_cliente_falso(cliente)
+
+    provider.commit_file(".gitlab-ci.yml", "stages: []", "feature/pipeline-x", "msg")
+
+    assert cliente.posts[0][1]["branch"] == "feature/pipeline-x"
+    assert "start_branch" in cliente.posts[0][1]

@@ -848,8 +848,12 @@ class GitLabTrackerProvider:
         FIX C1: body, _ = _request(...); NO compara status; TrackerApiError ya se lanza y propaga.
         FIX C7: si el contenido es idéntico al actual, NO commitea (retorna status 'unchanged').
         """
+        from services.tracker_provider import TrackerApiError  # lazy import — patrón del repo
         proj_path = self._client._project_path()
-        action, current = self._detect_commit_action(path, branch)
+        rama_existe = self.branch_exists(branch)                      # Plan 291 F1
+        action, current = self._detect_commit_action(
+            path, branch, rama_existe=rama_existe,                    # Plan 291 F2
+        )
         if action == "update" and current == content:
             return {
                 "sha": "",
@@ -858,14 +862,47 @@ class GitLabTrackerProvider:
                 "web_url": "",
                 "status": "unchanged",
             }
+
+        # Plan 291 F4 — traducir el sentinela INTERNO a la acción real de la API.
+        crear_rama = (action == _ACCION_RAMA_NUEVA)
+        if crear_rama:
+            action = "create"
+
+        cuerpo = {
+            "branch": branch,
+            "commit_message": message,
+            "actions": [{"action": action, "file_path": path, "content": content}],
+        }
+        if crear_rama:
+            if not bool(getattr(
+                config.config, "STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED", False,
+            )):
+                raise TrackerApiError(
+                    400,
+                    f"La rama '{branch}' no existe en GitLab y la creación automática de "
+                    f"ramas está apagada. Encendé "
+                    f"'Crear la rama del fix cuando no existe (GitLab)' en el panel de "
+                    f"opciones para que Stacky la cree, o creá la rama a mano.",
+                    kind="branch_missing",
+                )
+            base = self._default_branch_name()
+            if not base:
+                raise TrackerApiError(
+                    400,
+                    f"El repositorio de GitLab no tiene rama principal (¿está vacío?), "
+                    f"así que no hay desde dónde crear '{branch}'. Hacé el primer commit "
+                    f"del repositorio a mano y volvé a intentar.",
+                    kind="repo_empty",
+                )
+            # start_branch NO es idempotente: se manda UNA sola vez, en el commit
+            # que crea la rama. En el segundo commit la rama ya existe y
+            # branch_exists devuelve True, así que este bloque no se ejecuta.
+            cuerpo["start_branch"] = base
+
         body, _ = self._client._request(
             "POST",
             f"/projects/{proj_path}/repository/commits",
-            json_body={
-                "branch": branch,
-                "commit_message": message,
-                "actions": [{"action": action, "file_path": path, "content": content}],
-            },
+            json_body=cuerpo,
         )
         return {
             "sha": str(body.get("id") or ""),

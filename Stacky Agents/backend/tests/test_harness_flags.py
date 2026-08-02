@@ -1129,6 +1129,12 @@ _CURATED_DEFAULTS_ON = {
     # Su hermana STACKY_GITLAB_SYNC_FULL_CADA_N NO figura aca a proposito: es
     # numerica y por eso NO declara default= en su FlagSpec.
     "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED",
+    # Plan 293 — el tablero de trabajo NACE ENCENDIDO porque es solo LECTURA:
+    # muestra estado, diferencias, historial y ramas, y no modifica ni un byte.
+    # Sus dos hermanas de escritura (STACKY_WORKBENCH_WRITE_ENABLED y
+    # STACKY_WORKBENCH_PUSH_ENABLED) NO figuran aca a proposito: nacen APAGADAS
+    # por la excepcion (B) y por eso tampoco declaran default= en su FlagSpec.
+    "STACKY_WORKBENCH_ENABLED",
 }
 
 

@@ -615,6 +615,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # Plan 292 — el sync de GitLab pide sólo lo que cambió
         "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED",
         "STACKY_GITLAB_SYNC_FULL_CADA_N",
+        # Plan 293 — tablero de trabajo: git guiado para quien no sabe git
+        "STACKY_WORKBENCH_ENABLED",        # F3/F10 — solo lectura del repositorio (ON)
+        "STACKY_WORKBENCH_WRITE_ENABLED",  # F6/F7/F9 — escribe en el arbol del operador (OFF, B)
+        "STACKY_WORKBENCH_PUSH_ENABLED",   # F8/F11 — publica en el remoto del operador (OFF, B)
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -7400,6 +7404,64 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "borrado no aparece en la lista de cambios. Con 10, una de cada diez "
             "consultas es completa. Bajarlo la hace más segura y más cara; "
             "subirlo, al revés. Además se pide todo si pasaron más de 24 horas."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    # ── Plan 293 — Tablero de trabajo: git guiado para quien no sabe git ──────
+    FlagSpec(
+        key="STACKY_WORKBENCH_ENABLED",
+        type="bool",
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated), y
+        # por eso declara default=True: son DOS ediciones acopladas.
+        # Nace ON: no cae en (A) —no enciende loop, daemon ni llamada a modelo— ni
+        # en (B) —es lectura pura: estado, diferencias, historial y ramas—. Las
+        # acciones que escriben viven detrás de las OTRAS dos opciones.
+        # Precedente exacto: STACKY_CONSOLE_REPO_PANEL_ENABLED nace "true".
+        default=True,
+        label="Tablero de trabajo",
+        description=(
+            "Plan 293 — Muestra una pantalla donde ver en qué carpeta y en qué "
+            "versión estás trabajando, qué archivos cambiaste, en qué se "
+            "diferencian y qué se guardó antes. Nace ENCENDIDA porque sólo mira: "
+            "no modifica ni un archivo. Guardar y enviar tienen sus propias "
+            "opciones, y las dos vienen apagadas."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_WORKBENCH_WRITE_ENABLED",
+        type="bool",
+        # OFF — excepción (B): escribe en un sistema REAL del operador. Habilita
+        # `add`/`commit`/`switch`/`merge --ff-only` sobre SU carpeta de trabajo:
+        # cambia archivos de su disco y su historial local. NO declara default=
+        # porque nace apagada y no está curada.
+        # Precedente exacto: STACKY_PRE_RUN_GIT_PULL_ENABLED nace "false" por lo mismo.
+        label="Dejar que el tablero guarde cambios en tu carpeta",
+        description=(
+            "Plan 293 — Habilita los botones de guardar los archivos que elegiste, "
+            "traer las novedades de tus compañeros y cambiar de versión de "
+            "trabajo. Nace APAGADA porque modifica archivos y el historial "
+            "guardado EN TU MÁQUINA. Nada de esto sale de tu computadora: para "
+            "eso está la opción de enviar."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_WORKBENCH_PUSH_ENABLED",
+        type="bool",
+        # OFF — excepción (B): publica en el sistema REAL del operador. Manda el
+        # push al servidor de la empresa y abre la propuesta de cambio en su
+        # GitLab/Azure DevOps, que es visible para todo el equipo.
+        # Precedente exacto: STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED nace apagada.
+        label="Dejar que el tablero envíe tu trabajo al servidor",
+        description=(
+            "Plan 293 — Habilita enviar lo que guardaste al servidor de la empresa "
+            "y abrir una propuesta para que la revisen. Nace APAGADA porque es el "
+            "único paso que sale de tu computadora y lo ve todo el equipo. Lo "
+            "enviado no se puede borrar desde acá."
         ),
         group="global",
         env_only=False,

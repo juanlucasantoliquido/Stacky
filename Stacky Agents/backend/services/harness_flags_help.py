@@ -2514,6 +2514,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si bajás el número: se pide la lista completa más seguido, así que se nota antes un ítem borrado pero se le da más trabajo al servidor de la empresa.",
         example="Con 10, una de cada diez consultas trae la lista entera y las otras nueve traen sólo lo que cambió. Además se pide todo si pasaron más de 24 horas desde la última vez.",
     ),
+    # ── Plan 293 — Tablero de trabajo ─────────────────────────────────────────
+    "STACKY_WORKBENCH_ENABLED": PlainHelp(
+        what="Muestra una pantalla para ver en qué carpeta estás trabajando, qué archivos cambiaste y en qué se diferencian, sin usar la consola.",
+        on_effect="Si la activás: aparece el tablero con tu carpeta, tus archivos cambiados, las diferencias de cada uno y lo que se guardó antes. Sólo mira: no modifica nada.",
+        off_effect="Si la apagás: la pantalla desaparece del menú y no se puede consultar el estado de la carpeta desde Stacky. No cambia nada de tu trabajo.",
+        example="Con doce archivos tocados ves los doce agrupados en modificados, nuevos, borrados y en conflicto, y abrís cada uno para ver qué le cambió.",
+    ),
+    "STACKY_WORKBENCH_WRITE_ENABLED": PlainHelp(
+        what="Permite que el tablero guarde los archivos que elegiste y traiga a tu carpeta las novedades de tus compañeros.",
+        on_effect="Si la activás: aparecen los botones de guardar los archivos elegidos, traer novedades y cambiar de versión de trabajo. Todo ocurre dentro de tu máquina.",
+        off_effect="Si la apagás: el tablero sigue mostrando todo, pero los botones que modifican tu carpeta no aparecen. Es el valor de fábrica.",
+        example="Tildás tres de doce archivos y los guardás con un comentario. Los otros nueve quedan intactos, aunque un compañero los haya tocado en la misma carpeta.",
+    ),
+    "STACKY_WORKBENCH_PUSH_ENABLED": PlainHelp(
+        what="Permite que el tablero envíe al servidor de la empresa lo que guardaste y abra una propuesta para que tu equipo la revise.",
+        on_effect="Si la activás: aparece el paso final que sube tu trabajo al servidor y crea la propuesta con tu descripción, tus pruebas y tus capturas.",
+        off_effect="Si la apagás: podés guardar y ver todo en tu máquina, pero nada sale de ella. Es el valor de fábrica, porque lo enviado lo ve todo el equipo.",
+        example="Después de guardar tres archivos enviás, y se crea una propuesta con el resumen de los cambios y las dos capturas que adjuntaste como prueba.",
+    ),
 }
 
 

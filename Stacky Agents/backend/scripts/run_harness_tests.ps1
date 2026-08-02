@@ -1008,7 +1008,8 @@ $HarnessTestFiles = @(
   "tests/test_plan292_flags.py",
   "tests/test_plan292_paridad_runtimes.py",
   # Plan 293 - tablero de trabajo: git guiado para no tecnicos
-  "tests/test_plan293_catalogo.py"
+  "tests/test_plan293_catalogo.py",
+  "tests/test_plan293_flags.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -2744,4 +2744,24 @@ class Config:
         os.getenv("STACKY_GITLAB_SYNC_FULL_CADA_N", "10")
     )
 
+    # ── Plan 293 — Tablero de trabajo: git guiado para quien no sabe git ──────
+    # Nace ON. Solo LECTURA: estado del repositorio, diferencias, historial y
+    # ramas. No cae en (A) ni en (B). Curada en _CURATED_DEFAULTS_ON.
+    STACKY_WORKBENCH_ENABLED: bool = os.getenv(
+        "STACKY_WORKBENCH_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # Nace OFF — excepcion (B): escribe en el arbol de trabajo REAL del operador
+    # (add/commit/switch/merge --ff-only). Cambia archivos de su disco y su
+    # historial local. Mismo criterio que STACKY_PRE_RUN_GIT_PULL_ENABLED.
+    STACKY_WORKBENCH_WRITE_ENABLED: bool = os.getenv(
+        "STACKY_WORKBENCH_WRITE_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # Nace OFF — excepcion (B): publica en el remoto REAL del operador (push) y
+    # abre la propuesta de cambio en su GitLab/ADO, visible para todo el equipo.
+    STACKY_WORKBENCH_PUSH_ENABLED: bool = os.getenv(
+        "STACKY_WORKBENCH_PUSH_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "yes")
+
 config = Config()

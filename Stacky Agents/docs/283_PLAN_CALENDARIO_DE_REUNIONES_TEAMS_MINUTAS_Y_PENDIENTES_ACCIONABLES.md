@@ -1,6 +1,10 @@
 # Plan 283 — El calendario de reuniones: de la transcripción a los pendientes accionables
 
-**Estado:** **v1 -> v2 — MEJORADO tras crítica adversarial, 2026-08-01. Veredicto de v1: RECHAZADO (5 bloqueantes).** **NO implementado.**
+**Estado:** **v1 -> v2 — MEJORADO tras crítica adversarial, 2026-08-01. Veredicto de v1: RECHAZADO (5 bloqueantes).**
+**IMPLEMENTADO 2026-08-01 — F0..F10, commits `fe08faea` (backend F0..F8) y `0f0fc395` (frontend F9 + ratchets F10), sin push.**
+Medido, no afirmado: los 12 archivos en una sola invocación dan **`99 passed, 0 failed`** (el número exacto del DoD #13), `npx tsc --noEmit` da 0 errores, y el lag entre los dos ratchets queda en **64 == `_PS1_LAG_MAX`**.
+**Desvíos declarados (3):** (1) el namespace de la API del frontend NO va en `api/endpoints.ts` sino en `api/meetings.ts` propio — ese archivo tiene cambios sin commitear de una sesión paralela, y se aplica el mismo criterio que D6 aplica a `api/tickets.py`; (2) `api/__init__.py` se editó UNA sola vez (las 2 líneas de F7 y las 2 de F8 juntas) para minimizar el roce en un archivo compartido; (3) los baselines de §7 que el plan predecía como `70 passed` y `16 passed` estaban **ya rojos por causas ajenas** al empezar (`1 failed, 69 passed` y `1 failed, 15 passed`) — el criterio aplicado fue **delta cero contra lo MEDIDO**, no contra la foto del plan.
+**Pendiente: solo los 3 smokes manuales S1, S2 y S3** (exigen backend levantado y un tenant real de Microsoft).
 **Rama:** `docs/plan-279` (los planes 281 y 282 se escribieron en paralelo en otras sesiones)
 ✅ **Colisión de número RESUELTA por el operador, 2026-08-01:** este plan nació como `280` (pinneado) pero una sesión paralela commiteó `280_PLAN_EL_DESENLACE_*.md` con el mismo número. El operador dictaminó que **el commiteado conserva el 280** y **este documento se renumera a 283** (primer libre real). Renombrado de `280_PLAN_CALENDARIO_*.md` a `283_PLAN_CALENDARIO_*.md`; el contenido no cambió.
 **Origen:** pedido textual del operador (2026-08-01):

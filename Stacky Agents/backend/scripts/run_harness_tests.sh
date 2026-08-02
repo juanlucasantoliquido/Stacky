@@ -1063,6 +1063,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan283_api.py
   tests/test_plan283_publish.py
   tests/test_plan283_e2e.py
+  tests/test_plan287_ficha_ticket.py
 )
 
 pass=0

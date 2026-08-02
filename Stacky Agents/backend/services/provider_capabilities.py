@@ -241,10 +241,16 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
             "services/gitlab_provider.py:381",
             "devuelve el PADRE como proxy del hijo cuando no hay épica nativa",
         ),
+        # Plan 287 F2/C9 — el texto anterior MENTÍA en sus dos mitades y su anclaje
+        # era inexistente: `:413` es el armado de etiquetas de `update_item_state`,
+        # no `fetch_item_updates` (que vive en `:606`); y las sub-consultas SÍ se
+        # hacen (`resource_label_events` en `:613`, `resource_state_events` en
+        # `:630`). Lo silenciado son los ERRORES de esas sub-consultas.
         "tracker.updates.history": _p(
-            "services/gitlab_provider.py:413",
-            "las sub-consultas de resource_state_events / resource_label_events están "
-            "silenciadas: sin historial de estado ni de etiquetas",
+            "services/gitlab_provider.py:606",
+            "las tres sub-consultas (etiquetas, estados y notas del sistema) atrapan "
+            "su error con un except mudo: si una falla, el historial sale incompleto "
+            "y no hay forma de distinguirlo de un ticket sin actividad",
         ),
         # Plan 276 F5.4 — deja de mentir: el sync completo EXISTE para GitLab.
         # Antes era `_a("api/tickets.py:692")` (ausente), que era la deuda que

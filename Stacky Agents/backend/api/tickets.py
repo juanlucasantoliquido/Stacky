@@ -38,6 +38,7 @@ from services.project_context import (
     tracker_is_azure_devops,  # F2 — el gate del provider es tracker-aware
 )
 from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
+from services.provider_capabilities import capability_status, capability_loss, supports  # Plan 287
 from services.ci_provider import get_ci_provider, ItemRef, ItemPipelineResult  # Plan 71 F5
 from services.client_profile import load_effective_client_profile  # Plan 79
 from harness.task_states import (  # Plan 79
@@ -1626,6 +1627,166 @@ def get_attachments(ticket_id: int):
             return jsonify({"attachments": [], "error": str(e)}), 200
         attachments = client.fetch_attachments(ado_id)
     return jsonify({"attachments": attachments})
+
+
+# ── Plan 287 F1 (v2/C1) — normalizador POR TRACKER. La forma de fetch_item_updates
+# NO es comun a los dos adaptadores: no comparten ni una clave. Mapeo explicito o
+# el panel sale mudo. Fixtures reales: tests/fixtures/plan287_updates.py, copiadas
+# de tests/test_ado_provider.py y tests/test_gitlab_provider.py.
+#   ADO    — services/ado_provider.py:137 devuelve el `value` crudo del endpoint
+#            de updates: revisedDate / revisedBy{displayName} / fields{...}.
+#   GitLab — services/gitlab_provider.py:606-666 arma el dict el adaptador:
+#            kind / created_at / user (YA es el username, string, :622) / label /
+#            action / state / body.
+
+_CAMPOS_ADO_VISIBLES = frozenset({
+    "System.State", "System.AssignedTo", "System.Title", "System.IterationPath",
+    "System.AreaPath", "System.Tags", "Microsoft.VSTS.Common.Priority",
+})
+_NOMBRES_LLANOS = {
+    "System.State": "Estado", "System.AssignedTo": "Asignado",
+    "System.Title": "Titulo", "System.IterationPath": "Iteracion",
+    "System.AreaPath": "Area", "System.Tags": "Etiquetas",
+    "Microsoft.VSTS.Common.Priority": "Prioridad",
+}
+
+
+def _nombre_llano(k: str) -> str:
+    return _NOMBRES_LLANOS.get(k, k)
+
+
+def _txt(v) -> str | None:
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        return v.get("displayName") or v.get("name") or str(v)
+    return str(v)
+
+
+def _normalizar_update(u: dict, tracker: str) -> list[dict]:
+    """Devuelve 0..N filas {fecha, autor, campo, de, a} (str|None). NUNCA lanza.
+
+    ADO emite UNA entrada con N campos cambiados -> se expande a N filas.
+    GitLab emite UNA entrada por evento -> devuelve 0 o 1 fila.
+    """
+    if not isinstance(u, dict):
+        return []
+
+    if tracker == "gitlab":
+        kind = u.get("kind") or ""
+        autor = u.get("user") or None                     # ya es el username, string
+        fecha = u.get("created_at") or None
+        if kind == "state_event":
+            return [{"fecha": fecha, "autor": autor, "campo": "Estado",
+                     "de": None, "a": _txt(u.get("state")) or None}]
+        if kind == "label_event":
+            etiqueta = _txt((u.get("label") or {}).get("name")) or None
+            agrega = (u.get("action") or "") == "add"
+            return [{"fecha": fecha, "autor": autor, "campo": "Etiqueta",
+                     "de": None if agrega else etiqueta,
+                     "a": etiqueta if agrega else None}]
+        if kind == "system_note":
+            return [{"fecha": fecha, "autor": autor, "campo": "Nota del sistema",
+                     "de": None, "a": _txt(u.get("body")) or None}]
+        return []                                          # kind desconocido: se descarta
+
+    # azure_devops (y cualquier otro que hable el dialecto de ADO)
+    fecha = u.get("revisedDate") or None
+    autor = _txt((u.get("revisedBy") or {}).get("displayName")) or None
+    campos = u.get("fields")
+    if not isinstance(campos, dict):
+        campos = {}
+    filas = [
+        {"fecha": fecha, "autor": autor, "campo": _nombre_llano(nombre),
+         "de": _txt(cambio.get("oldValue")), "a": _txt(cambio.get("newValue"))}
+        for nombre, cambio in campos.items()
+        if isinstance(cambio, dict) and nombre in _CAMPOS_ADO_VISIBLES
+    ]
+    # Una revision sin ningun campo visible NO se descarta en silencio: se emite
+    # una fila de presencia, para que el operador vea que hubo una revision.
+    return filas or [{"fecha": fecha, "autor": autor, "campo": None, "de": None, "a": None}]
+
+
+# ── Plan 287 F1 — historial de cambios del ticket, por la costura de proveedor ──
+# PROHIBIDO leer ticket.tracker_type para rutear: la columna miente (Plan 281/286).
+# El ruteo va por get_tracker_provider(project), que es PROVIDER_SEAM reconocido
+# por services/provider_coupling_audit.py:130-132.
+
+_CAPACIDAD_HISTORIAL = "tracker.updates.history"
+
+
+@bp.get("/<int:ticket_id>/historial")
+def get_ticket_historial(ticket_id: int):
+    """Historial de cambios del ticket, igual para Azure DevOps y para GitLab."""
+    if not bool(getattr(config.config, "STACKY_TICKET_HISTORY_API_ENABLED", True)):
+        return jsonify({"error": "feature_disabled",
+                        "detalle": "El historial del ticket esta apagado en el arnes."}), 403
+
+    with session_scope() as session:
+        ticket = session.get(Ticket, ticket_id)
+        if ticket is None:
+            return jsonify({"error": "not_found",
+                            "detalle": f"No existe el ticket {ticket_id}."}), 404
+        proyecto = ticket.stacky_project_name
+        item_id = str(ticket.external_id or ticket.ado_id)
+
+    ctx = resolve_project_context(project_name=proyecto)      # TRACKER_GUARD reconocido
+    tracker = (getattr(ctx, "tracker_type", None) or "azure_devops").strip().lower()
+
+    estado = capability_status(tracker, _CAPACIDAD_HISTORIAL)
+    perdida = capability_loss(tracker, _CAPACIDAD_HISTORIAL)
+    capacidad = {"clave": _CAPACIDAD_HISTORIAL, "estado": estado, "perdida": perdida}
+
+    if not supports(tracker, _CAPACIDAD_HISTORIAL):
+        # Degrada, NO rompe: 200 con lista vacia y el motivo escrito.
+        return jsonify({"historial": [], "tracker": tracker, "capacidad": capacidad}), 200
+
+    try:
+        provider = get_tracker_provider(proyecto)
+        crudos = provider.fetch_item_updates(item_id) or []
+    except TrackerConfigError as e:
+        return jsonify({"error": "tracker_no_configurado", "detalle": str(e),
+                        "tracker": tracker}), 503
+
+    historial = [fila for u in crudos for fila in _normalizar_update(u, tracker)]
+    return jsonify({"historial": historial,
+                    "tracker": tracker, "capacidad": capacidad}), 200
+
+
+# ── Plan 287 F2 — la matriz de capacidades, publicada ─────────────────────────
+# La ficha solo necesita estas 4: publicar de mas es superficie inutil.
+# La ruta se declara ANTES de get_ticket aunque Flask ya la resolveria primero
+# (el conversor `int` no matchea "capacidades"), para que quede explicito.
+
+_CAPACIDADES_DE_LA_FICHA = (
+    "tracker.comments.list",
+    "tracker.attachments.list",
+    "tracker.updates.history",
+    "tracker.items.url",
+)
+
+
+@bp.get("/capacidades")
+def get_tracker_capacidades():
+    """Que soporta el tracker del proyecto activo, y con que perdida.
+
+    Es la funcionalidad que ni Azure DevOps ni GitLab dan: decir que NO se puede
+    mostrar y POR QUE, en vez de dejar un panel vacio y mudo.
+    """
+    if not bool(getattr(config.config, "STACKY_TRACKER_CAPABILITIES_API_ENABLED", True)):
+        return jsonify({"error": "feature_disabled",
+                        "detalle": "El aviso de capacidades esta apagado en el arnes."}), 403
+
+    proyecto = _request_project_name() or None
+    ctx = resolve_project_context(project_name=proyecto)
+    tracker = (getattr(ctx, "tracker_type", None) or "azure_devops").strip().lower()
+
+    capacidades = {
+        clave: {"estado": capability_status(tracker, clave),
+                "perdida": capability_loss(tracker, clave)}
+        for clave in _CAPACIDADES_DE_LA_FICHA
+    }
+    return jsonify({"tracker": tracker, "capacidades": capacidades}), 200
 
 
 @bp.get("/<int:ticket_id>/stacky-status")

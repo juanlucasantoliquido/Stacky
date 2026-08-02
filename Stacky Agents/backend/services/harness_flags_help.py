@@ -2502,6 +2502,18 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el archivo se sube tal cual lo escribió el agente y solo recibís el aviso, sin que nadie le cambie el contenido.",
         example="Como pasar un marcador negro por un dato de una fotocopia antes de archivarla: protege, pero el original ya no vuelve.",
     ),
+    "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED": PlainHelp(
+        what="Hace que Stacky le pida a GitLab sólo los ítems que cambiaron desde la última consulta, en vez de la lista completa cada vez.",
+        on_effect="Si la activás: cada consulta trae únicamente lo que se modificó, y cada tanto se pide la lista entera para no perderse un ítem borrado en el servidor.",
+        off_effect="Si la apagás: cada consulta vuelve a traer la lista completa de ítems abiertos, exactamente como se hacía antes. Sirve para volver atrás si algo no cierra.",
+        example="Con 63 ítems abiertos y ningún cambio, la consulta pasa de traer los 63 enteros a no traer ninguno. Como pedir sólo las cartas nuevas del buzón en vez de vaciarlo entero cada vez.",
+    ),
+    "STACKY_GITLAB_SYNC_FULL_CADA_N": PlainHelp(
+        what="Cada cuántas consultas parciales seguidas Stacky vuelve a pedirle a GitLab la lista completa de ítems.",
+        on_effect="Si subís el número: se pide la lista completa menos seguido, así que se gasta menos y se tarda más en notar que un ítem desapareció del servidor.",
+        off_effect="Si bajás el número: se pide la lista completa más seguido, así que se nota antes un ítem borrado pero se le da más trabajo al servidor de la empresa.",
+        example="Con 10, una de cada diez consultas trae la lista entera y las otras nueve traen sólo lo que cambió. Además se pide todo si pasaron más de 24 horas desde la última vez.",
+    ),
 }
 
 

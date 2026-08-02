@@ -170,3 +170,28 @@ def test_admitir_del_delta_trata_el_estado_ausente_como_abierto(store):
     assert ad({"state": ""}, fila_existe=False, modo="incremental") is True
     assert ad({"state": None}, fila_existe=False, modo="incremental") is True
     assert ad({"state": "reopened"}, fila_existe=False, modo="incremental") is True
+
+
+def test_bajo_pytest_no_se_escribe_en_la_carpeta_del_operador(tmp_path):
+    """R8, MEDIDO AL IMPLEMENTAR y no previsto por el plan.
+
+    `tests/test_plan276_gitlab_sync.py` ejercita el sync entero y aisla la BD por
+    DATABASE_URL, pero NO aisla `data_dir()`: apenas el sync empezo a guardar la
+    marca, esa suite ajena dejo un gitlab_sync_watermark.json REAL en
+    backend/data/. Una marca escrita por un test podria quedar lo bastante fresca
+    como para que la primera corrida real del operador salga PARCIAL apoyada en un
+    reloj inventado — eso es correctitud, no higiene.
+
+    Se prueba la DECISION y no la escritura, para que este caso no pueda crear el
+    archivo que denuncia ni siquiera cuando falla.
+    """
+    import runtime_paths
+    import services.gitlab_sync_watermark as wm
+
+    real = runtime_paths.data_dir() / "gitlab_sync_watermark.json"
+    assert wm._escritura_bloqueada_por_modo_test(real) is True, (
+        "bajo pytest, una ruta SIN aislar tiene que bloquearse"
+    )
+    # Y la ruta aislada NO se bloquea: los tests propios siguen ejercitando la
+    # escritura de verdad, o el resto de este archivo seria un falso verde.
+    assert wm._escritura_bloqueada_por_modo_test(tmp_path / "x.json") is False

@@ -183,7 +183,12 @@ def _startup_sync(logger) -> None:
                 from services.gitlab_sync import sync_gitlab_tickets
                 _prov = get_tracker_provider(active)
                 if getattr(_prov, "name", "") == "gitlab":
-                    _r = sync_gitlab_tickets(active, provider=_prov)
+                    # Plan 292 — el arranque fuerza COMPLETO: ocurre una vez por
+                    # proceso, no es polling, y es el momento donde más conviene
+                    # una foto completa (el proceso pudo estar apagado días). La
+                    # condición de vencimiento de 24 h lo cubriría igual, pero
+                    # depender de ella dejaría el arranque a merced del reloj.
+                    _r = sync_gitlab_tickets(active, provider=_prov, forzar_full=True)
                     logger.info("sync GitLab ok al arranque: project=%s %s", active, _r)
                 else:
                     logger.info(

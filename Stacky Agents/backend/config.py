@@ -2729,4 +2729,19 @@ class Config:
         "STACKY_AUTOCOMMIT_REDACT_ENABLED", "false"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 292 — El sync de GitLab deja de preguntar todo cada vez ──────────
+    # Nace ON. No cae en (A): no enciende ningun loop, daemon ni barrido — al
+    # contrario, ABARATA un poll que ya corre cada 45 s desde el tablero. No cae
+    # en (B): es camino de LECTURA, y de hecho APAGA la unica regla del sync que
+    # marca filas como cerradas. Curada en _CURATED_DEFAULTS_ON.
+    STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # Cada cuantas corridas parciales consecutivas se fuerza una completa. Es la
+    # red que detecta lo que el delta NO puede ver: un issue BORRADO de GitLab.
+    STACKY_GITLAB_SYNC_FULL_CADA_N: int = int(
+        os.getenv("STACKY_GITLAB_SYNC_FULL_CADA_N", "10")
+    )
+
 config = Config()

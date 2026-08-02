@@ -1086,6 +1086,7 @@ HARNESS_TEST_FILES=(
   # Plan 292 - el sync de GitLab deja de preguntar todo cada vez
   tests/test_plan292_sync_incremental.py
   tests/test_plan292_watermark_store.py
+  tests/test_plan292_flags.py
 )
 
 pass=0

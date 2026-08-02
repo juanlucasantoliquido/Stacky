@@ -612,6 +612,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_TRACKER_CAPABILITIES_API_ENABLED",  # Plan 287 F2 — la matriz de capacidades, publicada
         # Plan 289 — los comentarios del issue llegan al contexto del agente
         "STACKY_TRACKER_CONTEXT_ENABLED",           # Plan 289 F6 — dispatcher de contexto por tracker
+        # Plan 292 — el sync de GitLab pide sólo lo que cambió
+        "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED",
+        "STACKY_GITLAB_SYNC_FULL_CADA_N",
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -7346,6 +7349,57 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
             "de cambio. Nace APAGADA porque modifica el contenido que se guarda en "
             "el repositorio de la empresa, y esa es una decisión tuya. Con OFF, el "
             "archivo se sube tal cual lo escribió el agente y solo recibís el aviso."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    # ── Plan 292 — el sync de GitLab deja de preguntar todo cada vez ──────────
+    FlagSpec(
+        key="STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED",
+        type="bool",
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        # Nace ON: no cae en (A) —no enciende loop, daemon, barrido ni llamada a
+        # modelo; abarata un poll que YA existe— ni en (B) —es lectura pura, no
+        # publica, no commitea, no escribe en el tracker y APAGA la única regla
+        # del sync que marca filas como cerradas—. Con OFF el sync vuelve
+        # byte-idéntico al de hoy: es la palanca de rollback.
+        #
+        # SIN requires= A PROPOSITO: STACKY_GITLAB_ENABLED no está en
+        # FLAG_REGISTRY (rompería R1 de validate_requires_graph) y la dependencia
+        # con STACKY_GITLAB_SYNC_ENABLED ya está resuelta EN CODIGO (si el sync
+        # está apagado, esto es inalcanzable). Mismo criterio deliberado que el
+        # plan 269, ver tests/test_harness_flags_requires.py:351-352.
+        default=True,
+        label="Traer de GitLab sólo lo que cambió",
+        description=(
+            "Plan 292 — Stacky le pide a GitLab únicamente los ítems modificados "
+            "desde la última vez que miró, en vez de pedir la lista entera cada "
+            "45 segundos. Cada tanto igual pide todo, para no perderse un ítem "
+            "borrado en el servidor. Nace ENCENDIDA porque sólo lee y le saca "
+            "trabajo al GitLab de la empresa. Con esto apagado, Stacky vuelve a "
+            "pedir la lista completa en cada consulta, como antes."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_GITLAB_SYNC_FULL_CADA_N",
+        # SIN default= A PROPOSITO (regla dura): `default_is_known(spec)` es
+        # literalmente `spec.default is not None`, y declararlo metería esta key
+        # en el conjunto que test_default_known_only_for_curated exige que sea
+        # EXACTAMENTE _CURATED_DEFAULTS_ON — que es sólo para booleanas ON. El
+        # valor 10 vive SOLO en config.py.
+        type="int",
+        min_value=1,
+        max_value=1000,
+        label="Cada cuántas consultas se pide la lista completa",
+        description=(
+            "Plan 292 — Va de la mano de la opción anterior. Aunque Stacky pida "
+            "sólo los cambios, cada tanto necesita pedir la lista completa para "
+            "descubrir ítems que desaparecieron del servidor, porque un ítem "
+            "borrado no aparece en la lista de cambios. Con 10, una de cada diez "
+            "consultas es completa. Bajarlo la hace más segura y más cara; "
+            "subirlo, al revés. Además se pide todo si pasaron más de 24 horas."
         ),
         group="global",
         env_only=False,

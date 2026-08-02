@@ -1118,6 +1118,17 @@ _CURATED_DEFAULTS_ON = {
     # STACKY_AUTOCOMMIT_REDACT_ENABLED) NO figuran aca a proposito: nacen OFF por
     # la excepcion (B) y por lo tanto no declaran default= en su FlagSpec.
     "STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED",
+    # ── Plan 292 — el sync de GitLab pide solo lo que cambio ──────────────────
+    # Nace ON. No cae en (A): no enciende loop, daemon, barrido ni llamada a
+    # modelo — abarata un poll que ya corria cada 45 s desde el tablero, asi que
+    # el gasto en reposo BAJA, no sube. No cae en (B): es camino de lectura, no
+    # publica, no commitea, no escribe en el tracker del operador ni le saca
+    # ninguna decision; al contrario, APAGA la unica regla del sync que marca
+    # filas como cerradas. Con OFF el comportamiento vuelve byte-identico al de
+    # hoy: existe solo como palanca de rollback.
+    # Su hermana STACKY_GITLAB_SYNC_FULL_CADA_N NO figura aca a proposito: es
+    # numerica y por eso NO declara default= en su FlagSpec.
+    "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED",
 }
 
 

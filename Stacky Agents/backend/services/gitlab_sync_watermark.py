@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from datetime import datetime, timedelta
 from typing import Optional
 
 import config  # el MÓDULO: la instancia de opciones es `config.config`
+import runtime_paths
 from runtime_paths import data_dir
 
 logger = logging.getLogger(__name__)
@@ -63,10 +65,40 @@ def _load() -> dict:
         return {}
 
 
+def _escritura_bloqueada_por_modo_test(p) -> bool:
+    """R8 — bajo pytest, NADIE escribe en la carpeta `data/` del operador.
+
+    MEDIDO AL IMPLEMENTAR, no previsto por el plan: `tests/test_plan276_gitlab_sync.py`
+    ejercita `sync_gitlab_tickets` entero y aísla la BD por `DATABASE_URL`, pero
+    NO aísla `data_dir()`. Apenas el sync empezó a guardar la marca, esa suite
+    ajena dejó un `gitlab_sync_watermark.json` real en `backend/data/` — el mismo
+    camino por el que ya está ahí `integration_breaker.json`.
+
+    Por qué no alcanza con "es gitignored y degrada a completo": una marca escrita
+    por un test podría quedar lo bastante FRESCA como para que la primera corrida
+    real del operador salga PARCIAL apoyada en un reloj inventado, y eso es
+    correctitud, no higiene.
+
+    El guard es preciso: sólo corta cuando (a) estamos en modo test y (b) la ruta
+    NO fue redirigida. Los tests propios de este plan parchean `data_dir` a
+    `tmp_path`, así que sus escrituras pasan y se siguen probando de verdad.
+    Precedente del idioma: services/error_fingerprints.py:95-100.
+    """
+    if os.environ.get("STACKY_TEST_MODE", "").strip().lower() not in ("1", "true", "yes"):
+        return False
+    try:
+        return p.parent.resolve() == runtime_paths.data_dir().resolve()
+    except Exception:   # noqa: BLE001 — ante la duda NO se bloquea: degradar es del otro lado
+        return False
+
+
 def _save(datos: dict) -> None:
     """Best-effort. Si no se puede escribir, la próxima corrida es completa."""
     try:
         p = _path()
+        if _escritura_bloqueada_por_modo_test(p):
+            logger.debug("Plan 292: modo test sin ruta aislada; no se guarda la marca")
+            return
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(datos, indent=2, sort_keys=True), encoding="utf-8")
     except Exception:   # noqa: BLE001
@@ -148,6 +180,49 @@ def escribir_marca(proyecto: str, marca: Optional[str], contador: int) -> None:
             "contador": max(0, int(contador)),
         }
         _save(datos)
+
+
+def decidir_modo_de_sync(proyecto: str, *, forzar_full: bool = False,
+                         ahora: Optional[datetime] = None) -> tuple[str, str, Optional[str], int]:
+    """(modo, motivo, marca, contador). modo es "completo" o "incremental".
+
+    Función PURA salvo por la lectura del archivo y de las opciones: no escribe,
+    no llama a la red, y `ahora` es inyectable para poder probar el vencimiento
+    sin dormir. El orden de las condiciones es de EVALUACIÓN, no de prioridad:
+    se devuelve el primer motivo que aplica (ver plan 292 §3.2).
+
+    EL MODO COMPLETO ES EL DEFAULT DE TODO CAMINO DE ERROR. Perder el archivo,
+    corromperlo, borrarlo a mano, un disco lleno — todo termina en COMPLETO, que
+    es el comportamiento de hoy. NUNCA en "no sincronizar": ninguna condición
+    puede llevar a que el sync haga MENOS de lo que hace hoy.
+    """
+    ahora = ahora or datetime.utcnow()
+    if forzar_full:
+        return ("completo", "pedido_explicito", None, 0)
+    if not bool(getattr(config.config, "STACKY_GITLAB_SYNC_INCREMENTAL_ENABLED", True)):
+        return ("completo", "opcion_apagada", None, 0)
+    marca, contador = leer_marca(proyecto)
+    if marca is None:
+        # Cubre a la vez "primera corrida" y "archivo ilegible": leer_marca ya
+        # colapsó los dos en (None, 0). El motivo se distingue por la existencia
+        # del archivo, que es lo único que los separa para el operador.
+        return ("completo", "sin_marca" if not _path().exists() else "marca_ilegible", None, 0)
+    momento = parsear(marca)
+    if momento is None or (ahora - momento) > timedelta(hours=_EDAD_MAX_MARCA_H):
+        return ("completo", "marca_vencida", None, 0)
+    # La marca del FUTURO también vence: si el reloj de GitLab (o una edición a
+    # mano del archivo) dejó una marca posterior a `ahora`, el delta siguiente
+    # vendría vacío para siempre y el tablero se congelaría en silencio. Se
+    # degrada a COMPLETO, que es el default de todo camino anómalo (§3.2).
+    if momento > ahora + timedelta(hours=1):
+        return ("completo", "marca_vencida", None, 0)
+    try:
+        cuota = max(1, int(getattr(config.config, "STACKY_GITLAB_SYNC_FULL_CADA_N", 10)))
+    except (TypeError, ValueError):
+        cuota = 10
+    if contador >= cuota:
+        return ("completo", "cuota_cumplida", None, 0)
+    return ("incremental", "", marca, contador)
 
 
 # ── Plan 292 v2 §3.1-bis — la barrera de admisión del delta ────────────────────

@@ -232,7 +232,7 @@ def _upsert_ticket_gitlab(
     return "updated" if cambio else "noop"
 
 
-def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
+def sync_gitlab_tickets(project_name: str, *, provider=None, forzar_full: bool = False) -> dict:
     """Trae los issues ABIERTOS de GitLab a la tabla `tickets`.
 
     Returns:
@@ -250,16 +250,39 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
 
         provider = get_tracker_provider(project_name)
 
-    # `state="open"` EXPLÍCITO. El default de TrackerQuery ya es "open"
-    # (tracker_provider.py) y daría lo mismo hoy, pero ese default es un detalle de
-    # otro módulo que puede cambiar sin que este sync se entere — y la semántica de
-    # `removed` de más abajo depende de que la query sea de abiertos.
-    items = provider.fetch_open_items(TrackerQuery(state="open"))
+    # ── Plan 292 — el modo se decide ANTES de armar la query ────────────────
+    # El docstring de este módulo (:21-25) anticipó exactamente este cambio: la
+    # query de abiertos y la regla de `removed` "van juntas". Acá se cumple esa
+    # advertencia — cuando la query deja de ser de abiertos, la regla se APAGA.
+    from services import gitlab_sync_watermark as _wm
+
+    modo, motivo, marca, contador_previo = _wm.decidir_modo_de_sync(
+        ctx.stacky_project_name, forzar_full=forzar_full
+    )
+    if modo == "incremental":
+        # `state="all"` a propósito: con `state="open"` un issue CERRADO después
+        # de la marca no vendría en la respuesta y el cierre sería INDETECTABLE
+        # (ni por presencia ni por ausencia, que está apagada). Con "all" viene
+        # con state="closed" y `_upsert_ticket_gitlab` lo refleja solo (:227).
+        # `_query_to_gitlab_params` no emite `state` para "all" (gitlab_provider
+        # .py:124-127) y GitLab sin `state` devuelve todos.
+        consulta = TrackerQuery(state="all", updated_after=marca)
+    else:
+        # `state="open"` EXPLÍCITO. El default de TrackerQuery ya es "open"
+        # (tracker_provider.py) y daría lo mismo hoy, pero ese default es un detalle
+        # de otro módulo que puede cambiar sin que este sync se entere — y la
+        # semántica de `removed` de más abajo depende de que la query sea de
+        # abiertos. BYTE-IDÉNTICO a lo que había antes de este plan.
+        consulta = TrackerQuery(state="open")
+    items = provider.fetch_open_items(consulta)
 
     stacky_name = ctx.stacky_project_name
     tracker_project = ctx.tracker_project
 
     creados = actualizados = salteados = cerrados = 0
+    # Plan 292 §3.1-bis — arranca SIEMPRE en 0, igual que los contadores del 277:
+    # una clave que aparece y desaparece es peor que una en cero.
+    omitidos_cerrados_desconocidos = 0
     vistos_external: set[int] = set()
     # Plan 277 F6 — los iid que las etiquetas de padre nombraron durante el bucle.
     # Se declara ACÁ (no adentro) porque el bloque que trae los faltantes corre
@@ -291,6 +314,41 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
 
             vistos_external.add(external_id)
 
+            # ── Plan 292 v2 §3.1-bis — la barrera de admisión ────────────────
+            # `state="all"` no sólo LEE distinto: haría que un issue CERRADO y
+            # desconocido localmente se INSERTE como fila nueva (la rama
+            # `if fila is None` del upsert no mira el estado). Hoy esa fila no
+            # existe, nadie la borra nunca, y `list_tickets` la mostraría arriba
+            # del tablero comiéndose una de las 500 posiciones. Ver §2.7.
+            #
+            # EL SELECT SOLO SE PAGA EN MODO PARCIAL. `admitir_del_delta` ya
+            # devuelve True de entrada en modo completo, así que consultar la
+            # existencia ahí sería un SELECT por ítem (63 en RIPLEY) para una
+            # respuesta que no se mira. En estado estable el delta es de 0 ítems,
+            # así que el costo real es CERO. No se optimiza a un `IN` masivo por
+            # adelantado: sería una abstracción prematura sobre un camino que casi
+            # siempre está vacío.
+            _existe = modo == "incremental" and (
+                session.query(Ticket.id)
+                .filter(
+                    Ticket.stacky_project_name == stacky_name,
+                    Ticket.tracker_type == _TRACKER,
+                    Ticket.external_id == external_id,
+                )
+                .first()
+                is not None
+            )
+            if not _wm.admitir_del_delta(item, fila_existe=_existe, modo=modo):
+                omitidos_cerrados_desconocidos += 1
+                # SALE de `vistos_external`: no vino a decir que sigue abierto.
+                # Hoy ningún camino lo consume —el bloque de ausencia sólo corre
+                # en modo completo, donde la barrera nunca saltea nada—, pero el
+                # conjunto tiene que significar exactamente una cosa: "GitLab lo
+                # listó como parte del universo consultado". Un conjunto con dos
+                # significados es cómo nace el próximo bug de esta familia.
+                vistos_external.discard(external_id)
+                continue
+
             parent_del_item = _padre_del_item(item)
             if parent_del_item:
                 parents_vistos.add(parent_del_item)
@@ -309,7 +367,13 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
 
         # Lo que dejó de venir en el listado de ABIERTOS se marca cerrado. NO se
         # borra: el operador conserva su historial y el grafo sigue mostrando el ítem.
-        if vistos_external:
+        #
+        # Plan 292 — LA REGLA DE AUSENCIA SOLO ES VALIDA EN MODO COMPLETO.
+        # En modo parcial la respuesta NO contiene todo lo abierto, así que este
+        # bloque marcaría `closed` todo lo que no cambió: medido, un delta de 1
+        # ítem sobre 3 filas cierra 2. La condición NO es "hay flag": es "la query
+        # fue de abiertos". Van juntas, tal como avisa el docstring de :21-25.
+        if modo == "completo" and vistos_external:
             pendientes = (
                 session.query(Ticket)
                 .filter(
@@ -388,6 +452,37 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
                 )
                 padres_traidos += 1
 
+    # ── Plan 292 — avanzar la marca ────────────────────────────────────────
+    # Se hace DESPUÉS de cerrar la sesión: si la transacción falla, `session_scope`
+    # levanta y no se llega acá, así que la marca NUNCA avanza sobre datos que no
+    # se guardaron. El orden importa y es deliberado.
+    nueva = _wm.marca_maxima([i.get("updated_at") for i in items])
+    # `marca_maxima` devuelve None con la tanda vacía o toda inválida, y
+    # `escribir_marca` con None CONSERVA la marca anterior: un delta vacío
+    # significa "no cambió nada", nunca "avanzá el reloj".
+    _wm.escribir_marca(
+        stacky_name, nueva, 0 if modo == "completo" else contador_previo + 1
+    )
+
+    # ── Plan 292 v2 [ADICIÓN ARQUITECTO] — el ahorro se mide solo ───────────
+    # El tamaño serializado de lo que GitLab mandó. NO es el byte exacto del
+    # cable (falta compresión y cabeceras) y por eso el nombre dice "recibidos"
+    # y no "transferidos": lo que interesa es la SERIE, no el valor absoluto.
+    # En estado estable esta clave cae a 0 y el operador lo ve en su propio log,
+    # sin que nadie le pregunte nada a GitLab.
+    #
+    # LA TANDA VACIA VALE 0, NO 2. `json.dumps([])` son los dos bytes de "[]",
+    # que son ENVOLTORIO y no carga: contarlos dejaría el KPI en 2 para siempre y
+    # el operador no vería nunca el cero que el plan promete.
+    # Best-effort: un ítem no serializable NO puede tumbar un sync que ya
+    # terminó bien.
+    try:
+        import json as _json
+
+        bytes_recibidos = len(_json.dumps(items, default=str).encode("utf-8")) if items else 0
+    except Exception:  # noqa: BLE001
+        bytes_recibidos = -1
+
     resultado = {
         "fetched": len(items),
         "created": creados,
@@ -402,6 +497,12 @@ def sync_gitlab_tickets(project_name: str, *, provider=None) -> dict:
         "padres_traidos": padres_traidos,
         "padres_fallidos": padres_fallidos,
         "padres_omitidos_por_tope": padres_omitidos_por_tope,
+        # Plan 292 — ADITIVO. El consumidor (api/tickets.py) lee
+        # created/updated/removed y sigue andando sin tocar una línea.
+        "modo_sync": modo,
+        "motivo_modo": motivo,
+        "omitidos_cerrados_desconocidos": omitidos_cerrados_desconocidos,
+        "bytes_recibidos": bytes_recibidos,
     }
     logger.info("Plan 276 sync GitLab '%s': %s", project_name, resultado)
     return resultado

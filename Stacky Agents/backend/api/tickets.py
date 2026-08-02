@@ -1141,7 +1141,7 @@ def list_tickets():
         return jsonify(out)
 
 
-def _sync_via_provider_or_ado(project_name: str | None) -> dict:
+def _sync_via_provider_or_ado(project_name: str | None, *, forzar_full: bool = False) -> dict:
     """Plan 70 F10 — GAP-A: branch provider vs ADO para sync de tickets.
 
     - Flag OFF o provider.name == "azure_devops": delegamos a sync_tickets (ADO legacy).
@@ -1207,7 +1207,7 @@ def _sync_via_provider_or_ado(project_name: str | None) -> dict:
             getattr(config.config, "STACKY_GITLAB_SYNC_ENABLED", True)
         ):
             from services.gitlab_sync import sync_gitlab_tickets
-            return sync_gitlab_tickets(project_name, provider=provider)
+            return sync_gitlab_tickets(project_name, provider=provider, forzar_full=forzar_full)
         raise CapabilityUnavailable(
             "tracker.sync.full", provider.name,
             reason="el sync de ítems de este tracker todavía no está implementado",
@@ -1224,7 +1224,11 @@ def sync_from_ado():
     from services.tracker_provider import CapabilityUnavailable
     try:
         # Plan 70 F10 — branch provider/GAP-A: sync para trackers no-ADO
-        result = _sync_via_provider_or_ado(project_name=project_name)
+        # Plan 292 — este camino lo dispara el operador a mano desde el selector
+        # de tickets. Un pedido explícito trae TODO: es la forma que ya tiene el
+        # operador de forzar una corrida completa, sin agregar ni un control nuevo
+        # a la interfaz.
+        result = _sync_via_provider_or_ado(project_name=project_name, forzar_full=True)
     except CapabilityUnavailable as e:
         # Plan 218 F6 — degradación DECLARADA: el hueco se ve, no revienta el proceso.
         import config as _config

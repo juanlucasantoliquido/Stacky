@@ -224,6 +224,7 @@ _FROZEN_BOUNDS: dict[str, tuple[float | None, float | None]] = {
     "STACKY_QA_UAT_HEALTH_PROBE_TIMEOUT_S": (1, 30),
     "STACKY_QA_UAT_HEALTH_PROBE_CONFIRM_S": (0, 15),
     "QA_NAV_RETRIES": (0, 10),
+    "STACKY_GITLAB_SYNC_FULL_CADA_N": (1, 1000),   # Plan 292
 }
 
 

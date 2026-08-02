@@ -36,15 +36,14 @@
 
 | # | Decisión | Default implementado (el más conservador) |
 |---|---|---|
-| **D9** | **Dónde viven las capturas.** Hoy:  — el área de datos de Stacky, **nunca** dentro del repositorio del operador (un archivo ahí aparecería como cambio sin confirmar y le ensuciaría el tablero) | Ya implementado así |
-| **D10** | **Retención.** Hoy **no se borran solas**. Acumulan como los sidecars de  | Sin purga automática: borrar datos del operador sin que lo pida es exactamente lo que el riel prohíbe |
+| **D9** | **Dónde viven las capturas.** Hoy en `data_dir()/work_evidence/<tanda>/` — el área de datos de Stacky, **nunca** dentro del repositorio del operador (un archivo ahí aparecería como cambio sin confirmar y le ensuciaría el tablero) | Ya implementado así |
+| **D10** | **Retención.** Hoy **no se borran solas**, igual que los sidecars de `incident_dev_pr/` | Sin purga automática: borrar datos del operador sin que lo pida es exactamente lo que el riel prohíbe |
 | **D11** | **Topes.** 10 archivos, 10 MB c/u, 25 MB en total — los mismos valores ya probados del intake de incidencias | Ya implementado así |
 | **D12** | **Formatos.** PNG, JPG, GIF, BMP, WEBP y PDF, **verificados por firma real** | Ya implementado así |
 
 ### Pendientes reales, con nombre y apellido
 
-1. **Evidencias (`work_evidence.py`)** — subir capturas y embeberlas en la propuesta. **No existe.** El renderizador de la descripción ya acepta el parámetro `evidencias` y lo pinta; lo que falta es el almacenamiento y el `upload_attachment`.
-2. **F14** — `docs/sistema/17-tablero-de-trabajo.md` y la huella de regresión en `error_fingerprints.json`.
+1. **F14** — `docs/sistema/17-tablero-de-trabajo.md` y la huella de regresión en `error_fingerprints.json`. **Es lo único del MVP que queda sin hacer.**
 2. **Humo con credenciales reales** (§11.3): trabajo del operador, **no** es criterio de ninguna fase.
 3. **Basura a limpiar:** quedaron sin commitear `frontend/src/components/ReposGitPanel.tsx` y su `.module.css`, de un intento anterior **abandonado y sin test**. La pantalla buena es `pages/WorkbenchPage.tsx`. Son archivos muertos: borrarlos es decisión del operador.
 

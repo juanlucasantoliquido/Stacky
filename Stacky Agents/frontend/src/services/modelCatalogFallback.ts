@@ -14,6 +14,7 @@ export const EMERGENCY_MODEL_CATALOG: Record<string, RuntimeModelCatalog> = {
     default_model: "claude-sonnet-5",
     default_effort: "medium",
     models: [
+      { id: "claude-opus-5", label: "Opus 5 (máxima calidad)", recommended: false },
       { id: "claude-sonnet-5", label: "Sonnet 5 (recomendado)", recommended: true },
       { id: "claude-opus-4-8", label: "Opus 4.8", recommended: false },
       { id: "claude-haiku-4-5", label: "Haiku 4.5", recommended: false },
@@ -31,12 +32,14 @@ export const EMERGENCY_MODEL_CATALOG: Record<string, RuntimeModelCatalog> = {
       "claude-sonnet-5": ["low", "medium", "high", "max"],
       "claude-sonnet-4-6": ["low", "medium", "high", "max"],
       "claude-opus-4-8": ["low", "medium", "high", "xhigh", "max"],
+      "claude-opus-5": ["low", "medium", "high", "xhigh", "max"],
     },
     effort_degrade: {
       "claude-haiku-4-5": { xhigh: "high", max: "high" },
       "claude-sonnet-5": { xhigh: "high" },
       "claude-sonnet-4-6": { xhigh: "high" },
       "claude-opus-4-8": {},
+      "claude-opus-5": {},
     },
   },
 };

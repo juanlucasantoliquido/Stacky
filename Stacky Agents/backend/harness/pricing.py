@@ -23,6 +23,8 @@ logger = logging.getLogger("stacky.harness.pricing")
 # Anthropic: catálogo oficial 2026 (sonnet-5/sonnet-4-6 = 3/15, haiku-4-5 = 1/5).
 DEFAULT_PRICES: dict[str, tuple[float, float]] = {
     "claude-opus-4": (5.0, 25.0),
+    # Plan 288 — Opus 5. Prefijo propio: "claude-opus-5" NO matchea "claude-opus-4".
+    "claude-opus-5": (5.0, 25.0),
     # Primario actual del CLI (config.CLAUDE_CODE_CLI_MODEL). Prefijo propio
     # porque "claude-sonnet-5" NO matchea "claude-sonnet-4" (prefijos distintos).
     "claude-sonnet-5": (3.0, 15.0),

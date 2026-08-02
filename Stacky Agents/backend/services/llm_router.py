@@ -31,8 +31,22 @@ MOCK_MODELS = ["mock-1.0"]
 # tope superior de este clamp.
 CLAUDE_CAP_MODEL = "claude-sonnet-5"
 _FORBIDDEN_CLAUDE_TIER = ("opus", "fable")
-# Plan 43 F1 — Opus explícitamente permitido cuando allow_opus=True (solo brief→épica).
-_OPUS_ALLOWLIST = {"claude-opus-4-8"}
+# Plan 43 F1 — modelos de tier alto que el operador puede elegir EXPLICITAMENTE
+# para una corrida puntual. Plan 288: se pone al dia contra el catalogo. La lista
+# NO afecta el ruteo automatico: `clamp_model` sigue capando en CLAUDE_CAP_MODEL
+# cuando `allow_opus=False`, que es el default de todos los caminos.
+# INVARIANTE (tests/test_plan288_catalogo_vivo.py): todo id de tier prohibido que
+# el catalogo EFECTIVO ofrezca tiene que estar aca, o el runner lo degrada en
+# silencio. El filtro de admision de services/claude_account_models.py lo mantiene
+# cierto tambien para los ids que llegan de la cuenta local.
+# FABLE SIGUE FUERA A PROPOSITO (Plan 288 §8.9): lo congelan
+# tests/test_llm_router_opus_flag.py::test_fable_still_blocked_with_allow_opus y
+# tests/test_plan212_opus_end_to_end.py::{test_decide_allow_opus_true_still_blocks_fable,
+# test_is_opus_allowlisted}. Sacarlo de ahi es una decision de costo del operador.
+# NO CAMBIAN: CLAUDE_CAP_MODEL sigue siendo "claude-sonnet-5"; _FORBIDDEN_CLAUDE_TIER
+# sigue siendo ("opus", "fable"); el cuerpo de clamp_model no se toca (el cambio es
+# de DATO, no de logica); CLAUDE_MODELS no se toca (alimenta /api/agents/models).
+_OPUS_ALLOWLIST = {"claude-opus-4-8", "claude-opus-5"}
 
 
 def clamp_model(model: str | None, allow_opus: bool = False) -> str:

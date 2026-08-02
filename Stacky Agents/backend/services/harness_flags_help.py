@@ -2476,6 +2476,13 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagas: el selector muestra solo la lista fija que viene con Stacky, sin mirar tu cuenta.",
         example="Tu cuenta usa Opus 5 desde hace semanas; con esto aparece en la lista en vez de quedar invisible.",
     ),
+    # ── Plan 289 — el agente deja de trabajar a ciegas sobre un ticket de GitLab ─
+    "STACKY_TRACKER_CONTEXT_ENABLED": PlainHelp(
+        what="Hace que el agente lea los comentarios del ticket también cuando el proyecto usa GitLab, no solo con Azure DevOps.",
+        on_effect="Si la activás: antes de trabajar, el agente ve lo último que se conversó en el ticket, así que no vuelve a preguntar lo que ya está respondido.",
+        off_effect="Si la apagás: el agente arranca sin los comentarios del ticket de GitLab, igual que antes de este cambio.",
+        example="Como leer los mensajes anteriores de una conversación antes de contestar, en vez de responder viendo solo el asunto.",
+    ),
 }
 
 

@@ -2700,4 +2700,15 @@ class Config:
         "STACKY_TRACKER_CAPABILITIES_API_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 289 — El agente deja de trabajar a ciegas sobre un ticket de GitLab
+    # Nace ON. Leer los comentarios de un issue es SOLO LECTURA: no enciende loop,
+    # daemon, barrido ni llamada a modelo (corre unicamente cuando el operador lanza
+    # una ejecucion) y no escribe en ningun sistema del operador ni le saca ninguna
+    # decision. No cae en (A) ni en (B).
+    # Este es el default EFECTIVO: sin atributo aca, el getattr del consumidor cae
+    # siempre al default hardcodeado y el panel del operador no apaga nada.
+    STACKY_TRACKER_CONTEXT_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_CONTEXT_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
 config = Config()

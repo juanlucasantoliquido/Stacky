@@ -1103,6 +1103,12 @@ _CURATED_DEFAULTS_ON = {
     # catalogo. No cae en (B): no escribe en ningun sistema, no borra nada y no
     # decide nada por el operador; ademas NUNCA resta modelos del catalogo.
     "STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED",
+    # ── Plan 289 — el agente deja de trabajar a ciegas sobre un ticket de GitLab ─
+    # Nace ON. No cae en (A): no enciende loop, daemon, barrido, sondeo ni llamada
+    # a modelo — corre solo cuando el operador lanza una ejecucion. No cae en (B):
+    # es SOLO LECTURA de los comentarios del issue, no escribe en el tracker, no
+    # borra nada y no decide nada por el operador.
+    "STACKY_TRACKER_CONTEXT_ENABLED",
 }
 
 

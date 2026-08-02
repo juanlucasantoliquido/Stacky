@@ -75,7 +75,8 @@ def proyecto_gitlab(monkeypatch):
 
 # -- PATA A - el bloque que hoy no existe (verde en F6) -----------------------
 
-@pytest.mark.xfail(strict=True, reason="Plan 289 F6 lo pone verde: hoy el enriquecimiento es ADO-only")
+# F6 (2026-08-02): el marcador `xfail(strict=True)` se RETIRA en el mismo commit que
+# enciende el dispatcher. Con strict=True dejarlo daria XPASS(strict) = FAILED.
 def test_un_issue_de_gitlab_con_3_notas_produce_un_bloque_con_las_3(proyecto_gitlab):
     from services.ado_context import build_ado_context_blocks
 
@@ -477,3 +478,60 @@ def test_el_bloque_lleva_sello_de_procedencia_y_de_recorte():
     sin, _ = construir_bloques_de_comentarios(coms, titulo="Comentarios ADO del ticket")
     assert not sin[0]["content"].startswith("_(")
     assert sin[0]["content"].startswith("**A** (2026-01-01):")
+
+
+# -- F6.4 - contrato: enrich NO se come ninguna clave de stats -----------------
+
+def test_enrich_propaga_TODAS_las_claves_que_produce_el_armador(monkeypatch):
+    """Guard de CLASE: si manana alguien agrega una clave a stats y se olvida de la
+    whitelist de enrich (:389-394), este test se pone rojo NOMBRANDO la clave.
+
+    ANTI-FALSO-VERDE (obligatorio): el detector se calibra PRIMERO con una clave
+    inventada, para probar que de verdad detecta la perdida.
+    """
+    from services import ado_context
+
+    producidas = {
+        "comments_count": 3, "attachments_count": 0, "attachments_text_inlined": 0,
+        "errors": [], "comments_truncated": True, "comments_total_disponibles": 200,
+        "attachments_skipped_reason": "provider_sin_descarga_de_adjuntos",
+        "_clave_centinela_inventada": "x",
+    }
+    monkeypatch.setattr(
+        ado_context, "build_ado_context_blocks",
+        lambda *a, **k: ([], dict(producidas)),
+    )
+    _, stats = ado_context.enrich(
+        ticket_id=1, agent_type="technical", existing_blocks=[], ado_id=1,
+        return_stats=True,
+    )
+    # (a) calibracion: la centinela SI se pierde => el detector funciona.
+    assert "_clave_centinela_inventada" not in stats, (
+        "enrich dejo de filtrar: este test ya no prueba nada, reescribilo"
+    )
+    # (b) contrato: las 3 claves del camino por proveedor SI llegan.
+    perdidas = {k for k in (
+        "comments_truncated", "comments_total_disponibles", "attachments_skipped_reason",
+    ) if k not in stats}
+    assert not perdidas, (
+        f"enrich se comio {sorted(perdidas)}: agregalas al bucle de :395 (Plan 289 F6.3). "
+        f"El dato existe en build_stats y NUNCA llega a metadata['ado_context']."
+    )
+
+
+def test_enrich_no_inventa_esas_claves_en_el_camino_ADO(monkeypatch):
+    """P1: con un productor que NO las emite, el metadata queda byte-identico a hoy."""
+    from services import ado_context
+
+    monkeypatch.setattr(
+        ado_context, "build_ado_context_blocks",
+        lambda *a, **k: ([], {"comments_count": 2, "attachments_count": 0,
+                              "attachments_text_inlined": 0, "errors": []}),
+    )
+    _, stats = ado_context.enrich(
+        ticket_id=1, agent_type="technical", existing_blocks=[], ado_id=1,
+        return_stats=True,
+    )
+    assert set(stats) == {"comments_count", "attachments_count", "attachments_text_inlined",
+                          "skipped", "skipped_reason", "errors"}
+    assert stats["comments_count"] == 2

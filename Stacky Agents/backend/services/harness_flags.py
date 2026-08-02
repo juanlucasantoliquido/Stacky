@@ -606,6 +606,8 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         # Plan 287 — la ficha lee del puerto, igual para los dos trackers
         "STACKY_TICKET_HISTORY_API_ENABLED",        # Plan 287 F1 — historial por fetch_item_updates
         "STACKY_TRACKER_CAPABILITIES_API_ENABLED",  # Plan 287 F2 — la matriz de capacidades, publicada
+        # Plan 289 — los comentarios del issue llegan al contexto del agente
+        "STACKY_TRACKER_CONTEXT_ENABLED",           # Plan 289 F6 — dispatcher de contexto por tracker
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -7242,6 +7244,23 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,
         default=True,
         # SIN requires= a proposito: ver Plan 288 seccion 5.2 pata 5.
+    ),
+    # ── Plan 289 — el agente deja de trabajar a ciegas sobre un ticket de GitLab ──
+    FlagSpec(
+        key="STACKY_TRACKER_CONTEXT_ENABLED",
+        type="bool",
+        label="Comentarios del ticket en el contexto del agente (GitLab)",
+        description=(
+            "Plan 289 — Cuando el proyecto no usa Azure DevOps, Stacky lee los "
+            "comentarios del ticket por la costura de proveedor y los inyecta al "
+            "contexto del agente, igual que ya hace con Azure DevOps. Solo LECTURA: "
+            "no escribe nada en el tracker. Apagarla devuelve el comportamiento "
+            "previo al plan (el agente trabaja sin los comentarios del issue)."
+        ),
+        group="global",
+        env_only=False,
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        default=True,
     ),
 )
 

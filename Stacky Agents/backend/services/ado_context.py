@@ -262,6 +262,39 @@ def construir_bloques_de_comentarios(
     return bloques, len(lineas)
 
 
+def _bloques_por_proveedor(
+    *, item_id: int, project_name: str | None, stats: dict,
+) -> tuple[list[dict], dict]:
+    """Plan 289 F6 — rama no-ADO: comentarios por la costura de proveedor.
+
+    Los ADJUNTOS quedan fuera a proposito (§6.1 del plan 289): el proveedor de
+    GitLab no descarga contenido, solo saca links por regex de la descripcion
+    (gitlab_provider.py:526-542). `attachments_count` se queda en 0 y se DECLARA
+    el motivo, para que un 0 no se confunda con un fallo.
+    """
+    from services import tracker_context
+
+    comentarios, cstats = tracker_context.fetch_comentarios_normalizados(
+        project_name=project_name, item_id=item_id,
+    )
+    # v2, [ADICION ARQUITECTO] 2 — el sello viaja DENTRO del bloque, no solo en stats:
+    # `enrich` filtra stats por whitelist (§4.10) pero el content llega intacto al prompt.
+    total = cstats.get("comments_total_disponibles", len(comentarios))
+    sello = (
+        f"GitLab · {len(comentarios)} de {total} comentarios (los mas recientes)"
+        if cstats.get("comments_truncated")
+        else f"GitLab · {len(comentarios)} comentarios"
+    ) + ", del mas antiguo al mas reciente"
+    bloques, cantidad = construir_bloques_de_comentarios(
+        comentarios, titulo="Comentarios del ticket (GitLab)", sello=sello,
+    )
+    stats["comments_count"] = cantidad
+    stats["comments_truncated"] = cstats.get("comments_truncated", False)
+    stats["errors"].extend(cstats.get("errors") or [])
+    stats["attachments_skipped_reason"] = "provider_sin_descarga_de_adjuntos"
+    return bloques, stats
+
+
 def build_ado_context_blocks(
     ado_id: int,
     *,
@@ -285,6 +318,37 @@ def build_ado_context_blocks(
         "attachments_text_inlined": 0,
         "errors": [],
     }
+
+    # ── Plan 289 F6 — dispatcher por tracker. ADITIVO: si el proyecto es ADO
+    #    (o la flag esta apagada) el resto de la funcion corre BYTE-IDENTICO.
+    #    PROHIBIDO decidir leyendo la columna `tracker_type` del ticket: esa
+    #    columna miente (Plan 281/286) y ademas el DoD del 289 la censa por grep,
+    #    asi que ni siquiera se la nombra aca. Se pregunta al helper del Plan 286.
+    try:
+        from config import config as _cfg289
+
+        if getattr(_cfg289, "STACKY_TRACKER_CONTEXT_ENABLED", True):
+            from services.project_context import (
+                tracker_efectivo_de_ticket,
+                tracker_is_azure_devops,
+            )
+
+            if ticket is not None:
+                _tracker = tracker_efectivo_de_ticket(ticket)
+                _es_ado = _tracker == "azure_devops"
+            else:
+                # Sin ticket no hay a quien preguntarle la precedencia completa;
+                # el resolvedor canonico por nombre de proyecto alcanza y conserva
+                # el fail-closed a ADO del Plan 281 (project_context.py:64-65).
+                _es_ado = tracker_is_azure_devops(project_name)
+
+            if not _es_ado:
+                return _bloques_por_proveedor(
+                    item_id=ado_id, project_name=project_name, stats=stats,
+                )
+    except Exception as e:  # noqa: BLE001 — el dispatcher NUNCA tumba el enrich
+        logger.warning("ado_context — dispatcher por tracker falló: %s", e)
+        stats["errors"].append(f"tracker_dispatch_failed: {e}")
 
     try:
         from services.project_context import build_ado_client
@@ -431,6 +495,15 @@ def enrich(
         "attachments_text_inlined": build_stats.get("attachments_text_inlined", 0),
         "errors": build_stats.get("errors", []),
     })
+    # Plan 289 F6.3 — las claves del camino por proveedor NO estaban en la whitelist
+    # de arriba y se perdian en silencio: el operador veia comments_count=0 sin motivo
+    # y attachments_count=0 sin saber que el proveedor no descarga adjuntos.
+    # Se copian solo si el productor las puso: en el camino ADO no existen y el
+    # metadata queda BYTE-IDENTICO al de antes del plan.
+    for _clave in ("comments_truncated", "comments_total_disponibles",
+                   "attachments_skipped_reason"):
+        if _clave in build_stats:
+            stats[_clave] = build_stats[_clave]
 
     if log and (ado_blocks or stats["errors"]):
         log(

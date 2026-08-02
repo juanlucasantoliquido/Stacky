@@ -1066,6 +1066,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan287_ficha_ticket.py
   tests/test_plan288_catalogo_vivo.py
   tests/test_plan288_cuenta_local.py
+  # Plan 289 - El agente deja de trabajar a ciegas sobre un ticket de GitLab
+  tests/test_plan289_contexto_por_tracker.py
 )
 
 pass=0

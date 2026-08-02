@@ -25,6 +25,7 @@ comentario.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -281,3 +282,79 @@ def enviar_cambios(*, raiz: Path, rama: str, remoto: str = "origin", project: st
         return _fallo("no_se_pudo_enviar", "No se pudo enviar tu trabajo al servidor.")
 
     return {"ok": True, "codigo": None, "rama": rama, "remoto": remoto}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Plan 293 F9 — Crear y cambiar de version de trabajo (rama)
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Borrar ramas NO existe en este plan: `branch` no esta en el catalogo, ni
+# siquiera detras de una opcion. `switch` sin -f se NIEGA solo cuando el cambio
+# pisaria trabajo sin confirmar, y esa negativa es la barrera: se traduce a
+# castellano en vez de forzarse.
+
+_NOMBRE_RAMA = re.compile(r"^(?!-)(?!.*\.\.)(?!.*\.lock$)[A-Za-z0-9._/-]{1,100}$")
+
+
+def _nombre_valido(nombre: str) -> bool:
+    return bool(nombre) and bool(_NOMBRE_RAMA.match(nombre))
+
+
+def _cambiar(*, raiz: Path, args: list[str], nombre: str) -> dict:
+    if not getattr(config, "STACKY_WORKBENCH_WRITE_ENABLED", False):
+        return _fallo(
+            "escritura_apagada",
+            "La opcion que permite cambiar de version de trabajo esta apagada.",
+        )
+    if not _nombre_valido(nombre):
+        return _fallo(
+            "nombre_invalido",
+            "Ese nombre no sirve para una version de trabajo. Usa letras, numeros, "
+            "puntos, guiones y barras, sin espacios.",
+        )
+    if _hay_index_lock(raiz):
+        return _fallo(
+            "otra_operacion_en_curso",
+            "Hay otra operacion en curso sobre esta carpeta. Espera unos segundos "
+            "y volve a intentar.",
+        )
+
+    try:
+        res = gw._run_git(args, raiz, escritura=True)
+    except gw.GitVetado:
+        return _fallo("nombre_invalido", "Ese nombre no sirve para una version de trabajo.")
+
+    if res is None:
+        return _fallo("no_se_pudo_cambiar", "No se pudo cambiar de version de trabajo.")
+
+    if res.returncode != 0:
+        salida = f"{res.stdout or ''}\n{res.stderr or ''}".lower()
+        if "would be overwritten" in salida or "local changes" in salida or "overwritten by checkout" in salida:
+            return _fallo(
+                "cambio_bloqueado_por_trabajo_sin_guardar",
+                "Tenes cambios sin guardar que se perderian al cambiar de version. "
+                "Guardalos primero y despues cambia.",
+            )
+        if "already exists" in salida:
+            return _fallo(
+                "la_version_ya_existe",
+                "Ya existe una version de trabajo con ese nombre. Elegi otro.",
+            )
+        if "invalid reference" in salida or "did not match" in salida:
+            return _fallo(
+                "version_inexistente",
+                "No existe una version de trabajo con ese nombre.",
+            )
+        return _fallo("no_se_pudo_cambiar", "No se pudo cambiar de version de trabajo.")
+
+    return {"ok": True, "codigo": None, "rama": nombre}
+
+
+def crear_rama(*, raiz: Path, nombre: str) -> dict:
+    """Crea una version de trabajo nueva y se para en ella."""
+    return _cambiar(raiz=Path(raiz), args=["switch", "-c", nombre], nombre=nombre)
+
+
+def cambiar_rama(*, raiz: Path, nombre: str) -> dict:
+    """Se para en una version de trabajo que ya existe."""
+    return _cambiar(raiz=Path(raiz), args=["switch", nombre], nombre=nombre)

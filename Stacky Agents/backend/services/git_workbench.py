@@ -443,6 +443,89 @@ def operacion_en_curso(raiz: Path) -> str | None:
 # fallar al final. Ademas la re-evalua el servidor antes de escribir, asi que la
 # interfaz nunca es la autoridad.
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Plan 293 F9 (listar ramas) y F10 (historial) — ambas de SOLO LECTURA
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Separador de campos del historial: \x1f (unit separator). NUNCA un caracter que
+# pueda aparecer en el asunto de un commit — un '|' o un ';' parten el registro.
+_SEP = "\x1f"
+_MAX_COMMITS = 100
+
+
+def listar_ramas(workspace: Path) -> dict:
+    """Ramas locales, marcando la actual. NUNCA lanza."""
+    raiz = resolver_raiz(Path(workspace))
+    if raiz is None:
+        return {"ok": True, "available": False, "ramas": [], "reason": "esta carpeta no esta preparada para guardar historial de cambios"}
+
+    actual = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], raiz)
+    nombre_actual = (actual.stdout or "").strip() if actual and actual.returncode == 0 else ""
+
+    res = _run_git(
+        ["for-each-ref", f"--format=%(refname:short){_SEP}%(committerdate:iso8601)", "refs/heads"],
+        raiz,
+    )
+    if res is None or res.returncode != 0:
+        return {"ok": True, "available": False, "ramas": [], "reason": "no se pudieron leer las versiones de trabajo"}
+
+    ramas = []
+    for linea in (res.stdout or "").splitlines():
+        if not linea.strip():
+            continue
+        partes = linea.split(_SEP)
+        nombre = partes[0].strip()
+        if not nombre:
+            continue
+        ramas.append({
+            "nombre": nombre,
+            "actual": nombre == nombre_actual,
+            "fecha": partes[1].strip() if len(partes) > 1 else "",
+        })
+    return {"ok": True, "available": True, "ramas": ramas, "reason": None}
+
+
+def historial(workspace: Path, n: int = 20) -> dict:
+    """Ultimos `n` commits. `n` se acota en el SERVIDOR: la interfaz no manda."""
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        n = 20
+    n = max(1, min(n, _MAX_COMMITS))
+
+    raiz = resolver_raiz(Path(workspace))
+    if raiz is None:
+        return {"ok": True, "available": False, "commits": [], "n": n,
+                "reason": "esta carpeta no esta preparada para guardar historial de cambios"}
+
+    formato = _SEP.join(["%H", "%h", "%an", "%aI", "%s"])
+    res = _run_git(["log", f"-n{n}", f"--format={formato}"], raiz)
+    if res is None:
+        return {"ok": True, "available": False, "commits": [], "n": n,
+                "reason": "no se pudo leer lo que se guardo antes"}
+    if res.returncode != 0:
+        # Un repositorio sin ningun commit todavia NO es un error: es un
+        # repositorio recien creado.
+        salida = f"{res.stdout or ''}{res.stderr or ''}".lower()
+        if "does not have any commits" in salida or "unknown revision" in salida:
+            return {"ok": True, "available": True, "commits": [], "n": n, "reason": None}
+        return {"ok": True, "available": False, "commits": [], "n": n,
+                "reason": "no se pudo leer lo que se guardo antes"}
+
+    commits = []
+    for linea in (res.stdout or "").splitlines():
+        if not linea.strip():
+            continue
+        partes = linea.split(_SEP)
+        if len(partes) < 5:
+            continue
+        commits.append({
+            "sha": partes[0], "sha_corto": partes[1],
+            "autor": partes[2], "fecha": partes[3], "asunto": partes[4],
+        })
+    return {"ok": True, "available": True, "commits": commits, "n": n, "reason": None}
+
+
 CODIGOS_BLOQUEO = frozenset({
     "repo_no_disponible", "conflictos_presentes", "sin_cambios", "nada_seleccionado",
     "escritura_apagada", "push_apagado", "sin_upstream",

@@ -1,13 +1,50 @@
 # Plan 293 — El trabajo se publica sin terminal: tablero de Git guiado para quien no sabe Git
 
-**Estado:** **v2 — CRITICADO Y CORREGIDO.** 2026-08-02, rama `docs/plan-279`, sin push. (v1 → v2: **RECHAZADO** con 7 bloqueantes; corregidos abajo.)
-**Juez v2: subagente independiente, misma corrida, contexto limpio**
+**Estado:** **v3 — EJE CAMBIADO POR DECISIÓN DEL OPERADOR (D2 = git local).** 2026-08-02, rama `docs/plan-279`, sin push.
+**Juez v2: subagente independiente, misma corrida, contexto limpio.** El eje de publicación del v2 quedó **DEROGADO** por el operador; ver **CHANGELOG v2 → v3**.
 **Fecha:** 2026-08-02
 **Rama en la que se escribió:** `docs/plan-279`
 **Alcance:** backend (`services/` + `api/`) y frontend (una pantalla nueva). **Cero migraciones de esquema. Cero escritura en la base del operador. Cero threads nuevos.**
 **Depende de:** Plan 265 F4 (`services/console_repo.py`, el panel de repositorio de solo lectura), Plan 73 F4 (`services/repo_writer.py`, el puerto `RepoWriter`), Plan 110 (`services/merge_request_provider.py`, el puerto `MergeRequestProvider`), Plan 177/291 (`services/incident_dev_autocommit.py`, el auto-PR que ya publica por REST), Plan 175 F1 (`frontend/src/services/confirmGateway.ts`), Plan 273 (`frontend/src/services/gateState.ts`, el gate de tres estados), Plan 283 (`backend/api/meetings.py`, el molde de tab nuevo con `/health`).
 
 > Todo número, ruta y línea de este documento se midió **abriendo el archivo o ejecutando el comando** el 2026-08-02 sobre `docs/plan-279`. Lo que **no** se pudo medir sin tocar el GitLab/ADO del operador está marcado **NO VERIFICABLE DESDE EL REPO** y **no se usa como criterio de aceptación**.
+
+---
+
+## CHANGELOG v2 → v3 — **el eje cambió: git LOCAL, no REST**
+
+**Decisión D2 del operador:** el tablero opera con **git local sobre el working tree**. Las dos
+variantes REST quedan **derogadas** como eje de publicación.
+
+| Qué | v2 (derogado) | v3 |
+|---|---|---|
+| Commit | `RepoWriter.commit_file` (REST, un archivo por contenido) | **`git commit -F <msg> -- <pathspec>`** local |
+| Push | no existía (el REST ya escribía en el remoto) | **`git push` local**, reusando la autenticación de `pre_run_git` |
+| Ramas | rama creada por la API del tracker | **`git switch -c` / `git switch`** locales |
+| Historial | fuera del MVP | **dentro** (F10) |
+| Estado local tras publicar | quedaba sucio (§3.3 del v2, el "precio de M1") | **coherente**: es un commit local de verdad |
+| PR / MR | REST | **sigue REST** — `create_merge_request` es el único camino, y no tiene equivalente en git |
+
+**Lo que la decisión DISUELVE:**
+- **C1 y §3.4 (candado optimista de GitLab)** dejan de ser el eje del riesgo de sobrescritura:
+  git rechaza el **non-fast-forward** de fábrica. **D7 sigue vivo como deuda separada**, porque
+  `commit_file` lo sigue usando el auto-PR, el editor y el generador de pipelines.
+- **§3.3 (el precio de M1)** desaparece: ya no hay desfase entre lo local y lo publicado.
+
+**Lo que la decisión AGRANDA (querido):** vuelven al MVP `commit`, `push`, `pull`, **crear y
+cambiar de rama** e **historial** — los cuatro los pedía el pliego original **por nombre**.
+
+**Lo que SIGUE afuera** (la decisión no lo cambia): leer comentarios y aprobaciones de PR (**no
+existen en el puerto**, §2.2-3), conflictos asistidos, multi-repo por proyecto.
+
+**Lo que NO se toca** (la decisión no lo alcanza): evidencias, checklist de pruebas, diccionario
+de errores, auditoría por `SystemLog`, y **D1/RBAC** con su respuesta honesta.
+
+**El riesgo #1 cambió de lugar y subió de categoría.** Ver **§3 nueva** y **R1**: correr git con
+verbos de escritura sobre el repo real del operador, que **ahora mismo** tiene ~30 archivos
+sucios de otras series y una **sesión paralela viva commiteando**. La promesa *"la pérdida de
+trabajo es estructuralmente imposible"* **queda prohibida** salvo anclaje en un mecanismo
+verificable; lo que este plan sí puede probar está en R1 y F6.
 
 ---
 
@@ -158,59 +195,118 @@ Estas **seis** asimetrías se **declaran** (§5.4), no se esconden. Un plan que 
 
 ---
 
-## 3. La decisión de arquitectura, con su alternativa perdedora escrita
+## 3. La arquitectura: git LOCAL, con catálogo cerrado — **y el riesgo #1 del plan**
 
-### 3.1. Los dos caminos posibles para "publicar mi trabajo"
+> **Decisión D2 tomada por el operador.** El tablero opera sobre el **working tree real**.
+> El único paso que sigue siendo REST es **abrir la propuesta de cambio**, porque
+> *"abrir una PR" no tiene equivalente en git*. Es **híbrido a propósito**, no por omisión.
 
-| | **M1 — por REST del tracker** (el elegido) | **M2 — git local** (`add`/`commit`/`push`) |
+### 3.1. El reparto exacto
+
+| Acción del usuario | Mecanismo | Verbo/función |
 |---|---|---|
-| Qué usa | `RepoWriter.commit_file` + `create_merge_request` | subprocess nuevo con `add`/`commit`/`push` |
-| ¿Existe hoy? | **Sí**, y en producción (`services/incident_dev_autocommit.py:151,170`) | **No** (§2.2-1) |
-| ¿Puede hacer force push? | **Estructuralmente imposible**: el endpoint `POST /projects/:id/repository/commits` no tiene ese verbo | Sí, salvo que un guard lo impida |
-| ¿Puede reescribir historia o borrar ramas? | **No** | Sí |
-| **¿Puede pisar el commit de otro?** | **SÍ en GitLab** — sin `last_commit_id` es último-que-escribe-gana. **No en ADO**. Ver §3.4 y R13 | Sí |
-| Credenciales | Ya resueltas por el provider | Habría que meter el PAT en `http.extraheader` (camino nuevo de secreto) |
-| Estado local después de publicar | **Queda igual**: los archivos siguen modificados localmente | Coherente |
-| Archivos binarios / >1 MB | **Se descartan** (`services/incident_dev_autocommit.py:139`, `:210-225`) | Los sube |
+| Ver estado, rama, al día/atrasado, conflictos | git local, **lectura** | `status --porcelain=v2 --branch`, `rev-parse` |
+| Ver diferencias de un archivo | git local, **lectura** | `diff --` (ya existe: `console_repo.repo_diff`) |
+| Ver historial | git local, **lectura** | `log --format=... -n` |
+| Listar ramas | git local, **lectura** | `for-each-ref` |
+| Elegir archivos y **confirmar cambios** | git local, **escritura** | `add -- <pathspec>` + `commit -F <archivo> -- <pathspec>` |
+| **Traer** cambios | git local, **escritura** | `fetch --prune` + `merge --ff-only` (ya existe: `run_pull_check`) |
+| **Enviar** cambios | git local, **escritura** | `push <remote> <rama>` |
+| Crear / cambiar de rama | git local, **escritura** | `switch -c <n>` / `switch <n>` |
+| **Abrir la propuesta de cambio** | **REST** | `create_merge_request(source, target, title, description)` — 4 parámetros y nada más (§2.4) |
 
-### 3.2. Por qué el MVP elige M1
+### 3.2. EL RIESGO #1 — correr git de escritura sobre un repo con trabajo ajeno vivo
 
-1. **El requisito de seguridad más duro del pliego se cumple por construcción, no por checklist.** El pliego dice *"NUNCA acciones destructivas, sobrescrituras, force push o borrado de ramas"*. Con M1 esos verbos **no son expresables**. Con M2 dependerían de que un guard esté bien escrito — y el repo ya tiene el contraejemplo: `services/doc_documenter.py:651` usa denylist `{"push","merge","stash"}` y **se olvidó de `branch`**, así que `git branch -D` (`:714`) llega al repo del operador por `POST /api/docs/documenter/decide`.
-2. **Reusa un camino ya ejercitado**, en vez de abrir una superficie de escritura nueva.
-3. **No agrega un camino nuevo para el PAT.**
+**Esto no es un caso borde: es el estado normal de esta máquina.** Medido al escribir el v3:
+el working tree tiene **~30 archivos modificados sin commitear** de las series 286·289·290·291·292
+y del 287, y hay una **sesión paralela VIVA commiteando entre mis commits** que
+`git worktree list` **no detecta** (se quedó con el número de plan 294 mientras yo escribía el 293).
 
-### 3.3. El precio de M1, dicho de frente (y el supuesto de capacidad que casi hunde este plan)
+Los dos modos de falla, concretos:
 
-**Después de publicar, los archivos locales siguen apareciendo como modificados.** Es correcto —el commit fue en el remoto— pero para una persona no técnica es desconcertante. El plan lo resuelve **diciéndolo**, no escondiéndolo: F5 obliga a que la pantalla de resultado muestre la frase exacta y ofrezca el botón de traer cambios.
+1. **Robo de trabajo ajeno.** Un botón *"Confirmar mis cambios"* que ejecute `git add -A` o
+   `git add .` mete en el commit los ~30 archivos de otra serie y **los publica**.
+2. **Destrucción de trabajo ajeno.** Un *"descartar cambios"* con `checkout --`, `reset --hard`
+   o `clean -fd` **borra trabajo real de otro** sin recuperación.
 
-Y acá está el supuesto de capacidad que hay que matar antes de escribir una línea:
+**Las reglas del servicio de escritura — no negociables:**
+
+- **ALLOWLIST de verbos, JAMÁS denylist.** El contraejemplo está medido dentro de este mismo repo:
+  `services/doc_documenter.py:651` usa denylist `{"push","merge","stash"}` y **se olvidó de
+  `branch`** ⇒ `git branch -D` (`:714`) llega al repo del operador por
+  `POST /api/docs/documenter/decide`. El molde correcto es
+  `services/night_foundry_workers.py:44-51`, que usa **allowlist** y **lanza `ValueError`**.
+  Con denylist, olvidarse **abre** un agujero; con allowlist, olvidarse **cierra** una función y
+  se ve en el acto.
+- **Prohibidos y no expresables, ni detrás de flag:** `add -A`, `add .`, `stash`, `reset`,
+  `checkout --`, `clean`, `commit --amend`, `rebase`, `push --force`/`-f`, `branch -D`, `filter-branch`.
+- **Stage SIEMPRE por pathspec explícito**, únicamente sobre los archivos tildados en la UI.
+- **`pull` sólo `--ff-only`** (ya era así).
+- **La UI muestra los archivos NO seleccionados** y los deja intactos, sin insinuar que se incluyen.
+
+**El mecanismo que lo hace cierto, no la buena intención:** el commit se arma como
+`git commit -F <archivo-mensaje> -- <ruta1> <ruta2> …`. **La pathspec en el `commit` es lo que
+salva**: git commitea *esas rutas* desde el working tree **sin importar qué haya en el índice**,
+así que aunque la sesión paralela deje archivos suyos stageados, **no entran**. Los `??`
+(sin seguimiento) sí necesitan un `add -- <ruta>` previo, porque git no los conoce.
+
+> **Lo único que este plan puede prometer sobre pérdida de trabajo**, y está probado en F6:
+> *"el commit contiene exactamente los archivos que tildaste, aunque haya trabajo ajeno sucio en
+> la misma carpeta"*. **No** promete que sea imposible perder trabajo: `merge --ff-only` puede
+> fallar, `push` puede ser rechazado, y ninguna de esas dos cosas es un daño — son negativas
+> seguras. Lo que sí queda cerrado es que **ningún verbo de este plan puede destruir ni
+> sobrescribir** trabajo no commiteado.
+
+### 3.3. Autenticación del `push`, sin inventar un camino nuevo
+
+Se **reusa exactamente** el mecanismo de `services/pre_run_git.py:248-311` `_run_git`, que ya
+autentica operaciones de red no interactivas y ya está en producción:
+
+- `-c credential.helper=` **siempre** (desactiva el gestor de credenciales aunque no haya PAT, así
+  no cuelga esperando un prompt) y `-c core.longpaths=true` (rutas profundas en Windows).
+- `-c http.extraheader=Authorization: <header>` sólo cuando hay PAT, resuelto por
+  `_resolve_auth_header_for_project` (`:351-365`), que usa el PAT DPAPI del proyecto.
+- Entorno: `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=Never`, `GIT_ASKPASS=""`, `SSH_ASKPASS=""`.
+- **`_redact_command` (`:313-321`) enmascara el PAT** antes de que el comando llegue a un log o a
+  la respuesta HTTP. **Ningún comando sin redactar sale del backend.**
+
+### 3.4. El supuesto de capacidad que el cambio de eje NO disuelve
+
+El botón *Traer cambios* lo sigue necesitando, y sigue siendo el más caro de este plan:
 
 > **`run_pull_check` NO mergea con la configuración de fábrica, y `policy` no es un parámetro.**
 > `services/pre_run_git.py:102` hace `policy = config.STACKY_PRE_RUN_GIT_WORKSPACE_POLICY or "fetch_only_warn"`. El bloque que mergea (`:231-240`) sólo corre `if policy == "ff_only_block_on_dirty"`. El default de fábrica es `"fetch_only_warn"` (`backend/config.py:865-866`).
 > **Un plan que dijera "el botón *Traer cambios* reusa `run_pull_check`" entregaría un botón que hace `fetch` y no baja nada, en verde, sin que ningún test lo note.** F4 agrega el parámetro `policy` (retrocompatible, `None` → sigue leyendo config).
 
-### 3.4. El modelo de concurrencia — **el hueco de la v1, y el eje crítico del pliego**
+### 3.5. Concurrencia con git local: las tres barreras que git ya trae
 
-La v1 afirmaba que con M1 *"perder trabajo es estructuralmente imposible"*. **Es falso en GitLab, y se verificó leyendo el cuerpo de la request:**
+El cambio de eje **mueve** el problema de concurrencia, no lo elimina. Con git local:
 
-```python
-# services/gitlab_provider.py:877-881 — el cuerpo REAL del POST
-cuerpo = {
-    "branch": branch,
-    "commit_message": message,
-    "actions": [{"action": action, "file_path": path, "content": content}],
-}
-```
+| Escenario | Qué pasa | Barrera |
+|---|---|---|
+| La sesión paralela tiene el índice tomado | `git` falla con `index.lock` | Ya detectado antes de correr nada (`console_repo.py:90-94`) y **se repite** en el escritor |
+| Otro pusheó a la misma rama antes que yo | `push` **rechazado** por non-fast-forward | **Barrera de git, de fábrica.** No se fuerza nunca: `--force` no está en la allowlist |
+| El remoto avanzó y mi copia quedó atrás | `merge --ff-only` **falla** en vez de fusionar | Ya era así (`pre_run_git.py:232`) |
+| La sesión paralela dejó archivos suyos **stageados** | **No entran al commit** | La pathspec del `commit --` (§3.2) |
 
-**No hay `last_commit_id`.** La API de commits de GitLab lo acepta por acción justamente para el candado optimista, y `commit_file` **no lo manda**. Consecuencia exacta: entre el GET de `_detect_commit_action` (`gitlab_provider.py:861-863`, que sólo decide *crear/actualizar/sin-cambios*) y el POST, **cualquier commit ajeno sobre ese archivo en esa rama se pisa sin aviso y sin error**. ADO **no** tiene el problema: resuelve `old_object_id` del ref (`ado_provider.py:163-193`) y el push falla si el ref se movió.
+> **Lo que NO se arregla, dicho de frente:** si el usuario tilda un archivo y la sesión paralela
+> lo modifica en ese mismo instante, se commitea **la versión del disco al momento del `commit`**,
+> que puede no ser la que el usuario vio en el diff. Es una carrera inherente a trabajar sobre un
+> working tree compartido y **ninguna herramienta la cierra sin bloquear la carpeta**. Se mitiga
+> mostrando el `oid` corto de cada archivo en el paso de confirmación, y se **declara** en R15.
 
-**Qué hace este plan al respecto — tres medidas, ninguna toca el contrato compartido de `commit_file`** (cambiarlo afectaría al Dev Resolutor, al editor y al generador de pipelines: es otro plan):
+### 3.6. Dos capacidades que hay que verificar, no suponer
 
-1. **La rama es nueva y única.** `stacky/trabajo-<AAAAMMDD-HHMMSS>-<4 hex>`. El sufijo aleatorio existe porque **el timestamp al segundo colisiona** entre dos pestañas o dos publicaciones seguidas — y una colisión de rama es exactamente el escenario donde el último-que-escribe-gana muerde.
-2. **`preview` consulta `branch_exists(rama)` y, si existe, NO deja publicar**: regenera el nombre. Publicar sobre una rama preexistente es el único camino por el que este tablero podría pisar algo, y queda cerrado.
-3. **El reintento de U13 reusa la MISMA rama a propósito** (es lo que hace idempotente al reintento), y por eso el reintento **sólo se ofrece dentro de la misma sesión de publicación**, nunca como un botón suelto.
-
-> **Lo que este plan NO arregla, dicho de frente:** si el operador enciende el anillo 3 y **dos personas** publican con el mismo PAT sobre GitLab, el candado optimista sigue sin existir en la capa compartida. Se declara como degradación `git.commit.optimistic_lock` (§5.4) y se documenta en D7. Arreglarlo de verdad es agregar `last_commit_id` a `RepoWriter.commit_file`, lo que cambia un contrato que hoy usan **3 consumidores** — **plan aparte**.
+1. **`git commit` falla si el repo no tiene `user.name` / `user.email`.** No hay ningún lugar del
+   backend que los configure ni los verifique (verificado: 0 hits de `user.email` en llamadas git
+   de `backend/`, más allá de `memory_git_sync`). El error nativo de git es largo y en inglés. El
+   tablero **sondea `config --get user.email` antes de ofrecer el botón** y, si falta, lo dice en
+   castellano. **`config` entra a la allowlist SÓLO con la forma exacta `["config","--get",<clave>]`**
+   — `git config <clave> <valor>` **escribe**, así que el verbo solo no alcanza: se valida la forma.
+2. **La rama por defecto del remoto** no se puede suponer `main`. Se resuelve leyendo
+   `origin/HEAD` con `rev-parse --abbrev-ref origin/HEAD` y, si no está, `main` y después `master`,
+   **verificando existencia** con `for-each-ref`. Sin esto, la propuesta de cambio apunta a una
+   rama destino inexistente y el REST falla con un error del proveedor.
 
 ---
 
@@ -404,314 +500,462 @@ $env:STACKY_DATA_DIR  = "$env:TEMP\stacky_test_data"   # <- OBLIGATORIO, ver aba
 
 ### F0 — Baselines medidos (sin código de producto)
 
-**Objetivo:** que todos los criterios de este plan sean **delta**, nunca absolutos. **Ya medido el 2026-08-02** con el comando de arriba:
+**MEDIDO el 2026-08-02 con el comando de arriba.** Todos los criterios del plan son **delta** contra esto:
 
-| Suite / métrica | Valor **medido hoy** | Cómo se usa como criterio |
+| Suite / métrica | Valor **medido** | Criterio |
 |---|---|---|
-| `tests/test_harness_flags.py` | **59 passed, 0 failed** — **VERDE** | Absoluto permitido: debe quedar en **59 + N, 0 failed** |
-| `tests/test_harness_flags_help.py` | **4 failed, 4 passed** — ROJO DE FÁBRICA | **Sólo delta**: sigue en `4 failed / 4 passed`. Ver la trampa abajo |
-| `tests/test_harness_flags_bounds.py` | **1 failed, 17 passed** — ROJO DE FÁBRICA | Congelado. Este plan **no declara flags numéricas**, así que no lo toca |
-| `tests/test_harness_ratchet_meta.py` | **4 passed, 0 failed** — **VERDE** (la v1 decía "1 failed"; **se re-midió y el rojo ya no existe**) | Absoluto permitido: debe quedar en **4 passed, 0 failed** |
-| `tests/test_plan259_ratchet_script_parity.py` | **12 passed, 0 failed** — **VERDE** | Absoluto permitido: **12 passed, 0 failed** |
-| `FLAG_REGISTRY` | **495** flags (`bool` 367, `int` 73, `csv` 26, `float` 14, `str` 14, `json` 1) | Debe quedar en **498** tras F1.b |
-| `PLAIN_HELP` | **403** entradas (faltan **92**) | Debe quedar en **406** |
-| Ratchet `.sh` (`run_harness_tests.sh`) | **836** rutas (v1 decía 835) | **836 + 9 = 845** (9 archivos: los 8 de la v1 + `semaforo` de F2.b) |
-| Ratchet `.ps1` (`run_harness_tests.ps1`) | **772** rutas (v1 decía 771) | **772 + 9 = 781** |
-| Brecha `.sh − .ps1` | **64** | `_PS1_LAG_MAX` (`tests/test_plan259_ratchet_script_parity.py:46`) = **64**. `64 <= 64` pasa con **HOLGURA CERO** |
-| `harness_ratchet_allowlist.txt` | **194** entradas efectivas | No cambia: los 8 tests nuevos van al ratchet, no al allowlist |
-| `_CURATED_DEFAULTS_ON` | **12** keys | **13** tras F1.b (sólo `STACKY_WORKBENCH_ENABLED`) |
+| `tests/test_harness_flags.py` | **59 passed, 0 failed** — VERDE | **59 + N, 0 failed** |
+| `tests/test_harness_flags_help.py` | **4 failed, 4 passed** — ROJO DE FÁBRICA | sigue **exactamente** en `4F/4P` |
+| `tests/test_harness_flags_bounds.py` | **1 failed, 17 passed** — ROJO DE FÁBRICA | congelado (no hay flags numéricas) |
+| `tests/test_harness_ratchet_meta.py` | **4 passed, 0 failed** — **VERDE** | **absoluto: 0 failed** |
+| `tests/test_plan259_ratchet_script_parity.py` | **12 passed, 0 failed** — **VERDE** | **absoluto: 0 failed** |
+| `tests/test_pre_run_git.py` | **5 passed** | **5 + N** |
+| `tests/test_plan265_git_readonly.py` | **13 passed** | **13** (delta cero) |
+| `tests/test_plan265_secret_mask.py` | **8 passed** | **8** (delta cero) |
+| `frontend .../consoleRepoPanel.test.ts` | **6 passed** | pasa a **20** (F5) |
+| `FLAG_REGISTRY` | **495** | **498** tras F2 |
+| `PLAIN_HELP` | **403** | **406** tras F2 |
+| Ratchet `.sh` / `.ps1` / brecha | **836 / 772 / 64** | `medido + 10` en **cada uno**, brecha **64** |
+| `harness_ratchet_allowlist.txt` | **194** | sin cambio |
 
-**Comando exacto para re-medir los dos ratchets — el mismo regex del test, no uno propio:**
+**Las tres trampas que estos baselines desactivan:**
 
-```powershell
-.\.venv\Scripts\python.exe -c "import re,pathlib; sh=pathlib.Path('scripts/run_harness_tests.sh').read_text(encoding='utf-8',errors='replace'); ps=pathlib.Path('scripts/run_harness_tests.ps1').read_text(encoding='utf-8',errors='replace'); SH=re.compile(r'^\s*(tests/[\w/]+\.py)\s*$',re.M); PS=re.compile(r'^\s*\"(tests/[\w/]+\.py)\"\s*,?\s*$',re.M); a=set(SH.findall(sh)); b=set(PS.findall(ps)); print('sh',len(a),'ps1',len(b),'brecha',len(a)-len(b))"
-```
+1. **La brecha de ratchets está EXACTAMENTE en su límite** (`_PS1_LAG_MAX = 64`,
+   `tests/test_plan259_ratchet_script_parity.py:46`). Registrar en uno y no en el otro pone rojo
+   el gate **al instante**. Los **10** archivos nuevos van en los **dos**, en el mismo commit.
+   Sintaxis **divergente**: `.sh` ruta pelada; `.ps1` `"ruta",` **entrecomillada** — sin comillas
+   PowerShell la lee como nombre de comando y **la pierde muda**.
+2. **Los 4 rojos de la ayuda llana son asserts de CONJUNTO**: omitir una entrada de `PLAIN_HELP`
+   **no cambia** el `4 failed`. Un criterio "delta cero en el conteo" **no discrimina nada**.
+   Por eso F2 exige archivo propio con **caso de discriminación**.
+3. **Los ratchets están VERDES** (v1 creía que había un rojo de fábrica). Eso **endurece** el
+   criterio: absoluto `0 failed`, no delta.
 
-**Las CUATRO trampas que estos baselines desactivan:**
-
-1. **La brecha de ratchets está EXACTAMENTE en su límite.** Registrar **un solo** archivo en el `.sh` sin registrarlo en el `.ps1` pone rojo `test_el_ps1_no_pierde_terreno` (`:85`) al instante. **Los 9 archivos van en los DOS, en el mismo commit.** Y la sintaxis **difiere**: `.sh` = ruta pelada sin comillas ni coma; `.ps1` = `"ruta",` con comillas. Una ruta sin comillas en el `.ps1` **no rompe el parseo: PowerShell la lee como nombre de comando y la pierde MUDA**.
-2. **Los 4 rojos de la ayuda llana son asserts de CONJUNTO.** Omitir la entrada `PLAIN_HELP` de una flag nueva **no cambia el `4 failed`**. Un criterio *"delta cero en el conteo"* **no discrimina nada**. Por eso F1.b exige archivo propio con caso de discriminación.
-3. **El ratchet está VERDE, y eso ENDURECE el criterio en vez de ablandarlo** *(corrección C5 de la v2)*. La v1 se apoyaba en un rojo ajeno que **ya no existe** para relajar F10 a *"ningún archivo de este plan aparece en sin-clasificar"*. Con la suite verde, ese criterio es **estrictamente más débil de lo alcanzable**: pasaría aunque el plan pusiera rojo el archivo. **El criterio de F10 vuelve a ser el absoluto: `test_harness_ratchet_meta.py` termina en 4 passed / 0 failed.** `test_ratchet_clasifica_todos_los_tests` (`tests/test_harness_ratchet_meta.py:43-52`) asertea `not sin_clasificar` sobre `todos - ratchet - allow`: **un solo archivo de este plan sin registrar lo pone rojo**, y eso es exactamente lo que queremos que vigile.
-4. **Los conteos de ratchet SE MUEVEN entre corridas** *(corrección C4)*. Entre la v1 y la v2 subieron de 835/771 a **836/772** porque la sesión paralela registró un archivo. **Por eso los objetivos de F10 se expresan como `medido_en_F0 + 9`, nunca como el literal `845`/`781`**: si al implementar el baseline volvió a moverse, el objetivo se recalcula y se anota el desvío. Un plan que hardcodea el literal condena al implementador a parar en el número equivocado y dejar un archivo sin registrar.
-
-**Criterio binario:** los **11** valores de la tabla se re-miden **con los comandos de arriba** antes de tocar código y **coinciden uno por uno**; si alguno se movió (sesión paralela), se re-ancla, **se recalculan los objetivos derivados de F10** y se anota el desvío en el commit de F0.
-**Flag:** ninguna. **Trabajo del operador: ninguno.** **Runtimes:** N/A.
+**Criterio binario:** los 13 valores se re-miden **antes de tocar código** y coinciden; si alguno
+se movió (sesión paralela), se re-ancla y se anota el desvío.
+**Flag:** ninguna. **Operador: ninguno.** **Runtimes:** N/A.
 
 ---
 
-### F1.b — Las tres opciones y sus guardianes
+### F1 — El catálogo cerrado de verbos git *(el corazón de la seguridad — R1)*
 
-**Objetivo:** registrar las 3 flags del plan de forma que pasen **todos** los guardianes.
+**Objetivo:** que sea **imposible** que este plan ejecute un verbo git fuera de un conjunto cerrado,
+y que las formas peligrosas de los verbos permitidos tampoco sean expresables.
 
-**Son 7 archivos en 8 bloques** para una booleana `default OFF` (medido):
+> 🚨 **GUARDIÁN G1 — el que decide DÓNDE puede vivir este código.**
+> `tests/test_plan265_git_readonly.py:228-238` (`test_11_barrido_de_escritura`) lee el **texto
+> crudo** de **`backend/api/git.py`** y **`backend/services/console_repo.py`** y falla si aparece
+> **como subcadena literal** cualquiera de 11 subcomandos entrecomillados
+> (`"commit"`, `'add'`, `"push"`, `"checkout"`, `"reset"`, `"rm"`, `"merge"`, `"rebase"`,
+> `"stash"`, `"clean"`, `"apply"`, y sus variantes con comilla simple — `:213-225`).
+> **No es AST: es `if bad in text`.** No se puede escribir esa palabra ni en un comentario.
+> **Consecuencia dura:** el escritor **NO puede vivir** en esos dos archivos, y el blueprint
+> **NO puede ser `api/git.py`**. Por eso este plan crea `services/git_workbench.py`,
+> `services/git_local_writer.py` y `api/workbench.py`. **Importar** `console_repo` desde ellos
+> **sí está permitido** — el barrido mira el texto de esos dos archivos, no el de quien los usa.
+> Los tests 1/2/3/10 del mismo archivo además exigen `subprocess.run` **cero veces** con entrada
+> inválida o flag apagada, y el 9 exige lista de argumentos con `shell` falsy.
 
-| # | Archivo | Bloque | Qué se agrega |
-|---|---|---|---|
-| 1 | `backend/services/harness_flags.py` | `FLAG_REGISTRY` (`:624`–`:7407`) | **Las dos OFF:** `FlagSpec(key=..., type="bool", label=..., description=..., group="global", env_only=False)` — **sin `default=`**. **La ON (`STACKY_WORKBENCH_ENABLED`): el MISMO `FlagSpec` PERO con `default=True` explícito.** Ver la trampa de abajo |
-| 2 | `backend/services/harness_flags.py` | `_CATEGORY_KEYS` (`:120`–`:620`) | la key en **una** categoría — se propone `capacidades_optin` |
-| 3 | `backend/config.py` | `class Config` (`:60`–`:2745`) | `STACKY_X: bool = os.getenv("STACKY_X", "false").strip().lower() in ("1","true","yes")` |
-| 4 | `backend/services/harness_flags_help.py` | `PLAIN_HELP` (`:25`–`:2517`) | `PlainHelp(what, on_effect, off_effect, example)` |
-| 5 | `backend/scripts/run_harness_tests.sh` | `HARNESS_TEST_FILES` (`:20`–`:1091`) | ruta **pelada** |
-| 6 | `backend/scripts/run_harness_tests.ps1` | `$HarnessTestFiles` (`:13`–`:1007`) | `"ruta",` **entrecomillada** |
-| 7 | `backend/tests/test_plan293_flags.py` | archivo nuevo | el guardián **real** |
-| **8** | `backend/tests/test_harness_flags.py` | `_CURATED_DEFAULTS_ON` (`:467`–`:1132`) | **SÓLO** para `STACKY_WORKBENCH_ENABLED`, que nace **ON** |
+**Archivo nuevo:** `backend/services/git_workbench.py`
 
-> ⚠️ **`_CURATED_DEFAULTS_ON` es igualdad EXACTA de conjuntos** (`test_default_known_only_for_curated`, `tests/test_harness_flags.py:1207`: `assert known_keys == _CURATED_DEFAULTS_ON`). La flag **ON** debe estar ahí; las dos **OFF** **NO** deben estar. No hay término medio: cualquiera de los dos errores pone rojo un test hoy verde.
->
-> ⚠️⚠️ **La trampa que hundió la v1 (C6): el conjunto y el `default=` son DOS ediciones, y la v1 sólo pedía una.** Hay **dos** tests que se miran entre sí:
-> - `test_declared_default_true_set` (`tests/test_harness_flags.py:1196-1204`) exige, para **cada** key de `_CURATED_DEFAULTS_ON`, que `declared_default(spec) is True` **y** `default_is_known(spec) is True`.
-> - `test_default_known_only_for_curated` (`:1207-1218`) exige que `{s.key for s in FLAG_REGISTRY if default_is_known(s)}` sea **igual** a `_CURATED_DEFAULTS_ON`.
->
-> `default_is_known` es True **sólo si el `FlagSpec` declara `default=`**. Entonces: agregar `STACKY_WORKBENCH_ENABLED` a `_CURATED_DEFAULTS_ON` **sin** poner `default=True` en su `FlagSpec` pone **rojos los dos** (uno por "no es True", el otro por "faltante"). Y poner `default=False` en cualquiera de las dos OFF pone rojo el segundo por "extras". **La regla operativa, sin ambigüedad para un modelo menor: `default=` se declara si y sólo si la key está en `_CURATED_DEFAULTS_ON`, y ahí vale siempre `True`.**
+```python
+_VERBOS_LECTURA = frozenset({"status","rev-parse","diff","for-each-ref","log","config","ls-files"})
+_VERBOS_ESCRITURA = frozenset({"add","commit","switch","push","fetch","merge"})
+_FORMAS_PROHIBIDAS = ("--force","-f","--hard","--amend","-A","--all","-D","--allow-empty")
 
-> ⚠️ **Reglas de `PLAIN_HELP` que rompen si se ignoran:** `what` entre 10 y 200 chars; `on_effect` y `off_effect` ≤ **240** y **ambos empiezan con `"Si "`** — *sin tilde*; `example` ≤ 300; prohibida la `JARGON_DENYLIST` (`tests/test_harness_flags_help.py:17-20`, 19 términos con plural), las keys SCREAMING_SNAKE y los `F<n>`.
+def _validar(args): ...   # verbo en la allowlist Y forma permitida, o ValueError
+def _run_git(args, cwd, *, escritura=False, auth_header=None, timeout=None): ...
+```
+
+**Reglas que valida `_validar`, cada una con su caso de test:**
+1. Verbo vacío ⇒ `ValueError`.
+2. Verbo fuera de `_VERBOS_LECTURA | _VERBOS_ESCRITURA` ⇒ `ValueError`.
+3. Verbo de escritura pedido con `escritura=False` ⇒ `ValueError` (el camino de lectura **no puede** escribir).
+4. Cualquier token en `_FORMAS_PROHIBIDAS` ⇒ `ValueError`, **en cualquier posición**.
+5. `add` sin `--` ⇒ `ValueError`. `add` con `.` o sin rutas ⇒ `ValueError`.
+6. `commit` sin `--` ⇒ `ValueError` (la pathspec es obligatoria, §3.2).
+7. `config` que no tenga **exactamente** la forma `["config","--get",<clave>]` ⇒ `ValueError`
+   (`git config <k> <v>` escribe).
+8. `push` con más de `["push", <remote>, <rama>]` ⇒ `ValueError`.
+9. `merge` que no sea exactamente `["merge","--ff-only", …]` ⇒ `ValueError`.
+10. `switch` con `-f`/`--discard-changes` ⇒ `ValueError`.
+
+`_run_git` copia el hardening probado: lista de argumentos (nunca string), `shell=False` implícito,
+`timeout`, `encoding="utf-8"`, `errors="replace"`, `CREATE_NO_WINDOW`, y para escritura los
+`-c credential.helper=` / `-c core.longpaths=true` / `http.extraheader` + env no interactivo de
+`services/pre_run_git.py:248-311`, con **`_redact_command` reusado** para que el PAT no salga nunca.
+
+**Test:** `backend/tests/test_plan293_catalogo.py` — un caso por regla (10) · los verbos prohibidos
+uno por uno: `reset`, `clean`, `stash`, `rebase`, `checkout`, `branch`, `filter-branch`,
+`cherry-pick` (8) · `push --force` y `push -f` (2) · `commit --amend` (1) · `add -A` y `add .` (2) ·
+lectura feliz no lanza (1) · escritura feliz con `escritura=True` no lanza (1) ·
+**censo por REFERENCIA**: `subprocess.run` aparece **una sola vez** en el módulo y está dentro de
+`_run_git` (1). **26 casos.**
+
+**Mitad de contraste (obligatoria):** se comenta la llamada a `_validar` dentro de `_run_git`,
+se corre, **≥20 casos fallan**, se revierte.
+**Criterio binario:** 26 passed; con `_validar` desactivado, ≥20 fallan.
+**Flag:** ninguna (módulo sin consumidor). **Operador: ninguno.** **Runtimes:** N/A.
+
+---
+
+### F2 — Las tres opciones y sus ocho guardianes
+
+**Son 7 archivos en 8 bloques** para una booleana `default OFF`:
+
+| # | Archivo | Bloque |
+|---|---|---|
+| 1 | `backend/services/harness_flags.py` | `FLAG_REGISTRY` — `FlagSpec(...)`. **Con default OFF NO se declara `default=`** |
+| 2 | `backend/services/harness_flags.py` | `_CATEGORY_KEYS` — categoría `capacidades_optin` |
+| 3 | `backend/config.py` | `class Config` — `os.getenv(...)` |
+| 4 | `backend/services/harness_flags_help.py` | `PLAIN_HELP` — `PlainHelp(what, on_effect, off_effect, example)` |
+| 5 | `backend/scripts/run_harness_tests.sh` | ruta **pelada** |
+| 6 | `backend/scripts/run_harness_tests.ps1` | `"ruta",` **entrecomillada** |
+| 7 | `backend/tests/test_plan293_flags.py` | el guardián real |
+| **8** | `backend/tests/test_harness_flags.py` | `_CURATED_DEFAULTS_ON` — **SÓLO** la flag ON |
+
+> ⚠️ **`_CURATED_DEFAULTS_ON` son DOS ediciones acopladas**, no una: la key en el conjunto
+> **y** `default=True` en su `FlagSpec`. `test_declared_default_true_set`
+> (`tests/test_harness_flags.py:1196-1204`) exige `declared_default(spec) is True` para toda key
+> curada, y `test_default_known_only_for_curated` (`:1207`) exige **igualdad exacta de conjuntos**.
+> Hacer una sola de las dos ediciones pone rojos **dos tests distintos por razones distintas**.
+
+> ⚠️ **`PLAIN_HELP`:** `what` 10-200 chars; `on_effect`/`off_effect` ≤ **240** y **ambos empiezan
+> con `"Si "` — SIN TILDE**; `example` ≤ 300; prohibida la `JARGON_DENYLIST`
+> (`tests/test_harness_flags_help.py:17-20`).
 
 **Las tres flags:**
 
 | Flag | Default | Justificación |
 |---|---|---|
-| `STACKY_WORKBENCH_ENABLED` | **ON** | Es **solo lectura**: mira el estado del repo, agrupa y muestra diffs. Ninguna de las 2 excepciones aplica, y el riel dice que lo de solo lectura **nunca** es excepción. Precedente medido: `STACKY_CONSOLE_REPO_PANEL_ENABLED` nace `"true"` (`backend/config.py:2622-2623`) |
-| `STACKY_WORKBENCH_PULL_ENABLED` | **OFF — excepción (B)** | `merge --ff-only` **escribe en el árbol de trabajo real del operador** (`services/pre_run_git.py:232`), cambiando archivos de su disco sin que los haya pedido. Precedente exacto: `STACKY_PRE_RUN_GIT_PULL_ENABLED` nace `"false"` (`backend/config.py:859-860`) por esta misma razón |
-| `STACKY_WORKBENCH_PUBLISH_ENABLED` | **OFF — excepción (B)** | **Publica en el GitLab/ADO real del operador**: crea rama, commits y una propuesta de cambio. Precedente exacto: `STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED` nace apagada por lo mismo |
+| `STACKY_WORKBENCH_ENABLED` | **ON** | **Solo lectura**: estado, diff, historial, ramas. Ninguna excepción aplica y el riel dice que lo de solo lectura **nunca** es excepción. Precedente: `STACKY_CONSOLE_REPO_PANEL_ENABLED` nace `"true"` (`backend/config.py:2622-2623`) |
+| `STACKY_WORKBENCH_WRITE_ENABLED` | **OFF — excepción (B)** | Habilita `add`/`commit`/`switch` **sobre el working tree real del operador**: cambia el índice, la historia local y la rama activa de su disco. Precedente: `STACKY_PRE_RUN_GIT_PULL_ENABLED` nace `"false"` (`backend/config.py:859-860`) por tocar su árbol |
+| `STACKY_WORKBENCH_PUSH_ENABLED` | **OFF — excepción (B)** | **Publica en el remoto real del operador** (`push`) y abre la propuesta de cambio en su GitLab/ADO. Precedente: `STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED` nace apagada por lo mismo |
 
-**Test:** `backend/tests/test_plan293_flags.py`, acotado a **estas 3 keys** (molde vigente: `tests/test_plan292_flags.py`, 12 passed):
-las 3 están en el registro (1) · `WORKBENCH_ENABLED` nace **ON** y las otras dos **OFF** (3) · las 3 existen en `config.py` (1) · ninguna declara `requires` (1) · las 3 categorizadas (1) · las 3 tienen ayuda llana (1) · la ayuda respeta la denylist (1) · empieza con `"Si "` **sin tilde** (1) · `WORKBENCH_ENABLED` **está** en `_CURATED_DEFAULTS_ON` y las otras dos **no** (1) · **caso de discriminación** (molde `tests/test_plan271_flags.py:74-93`): se borra la entrada de `PLAIN_HELP` de una de las 3 y **se exige que el gate se ponga rojo** (1) · **[v2, C6] `default_is_known(spec) is True` para `WORKBENCH_ENABLED` y `is False` para las dos OFF** — el caso que ataja el error que la v1 no veía (1). **13 casos.**
+> **Por qué `push` va en flag separada de `commit`:** un commit local es **reversible por el
+> usuario** y no sale de su máquina; un push **es visible para todo el equipo**. Son dos niveles de
+> compromiso distintos y el riel de partir la flag (ver/planear ON vs escribir OFF) pide separarlos.
 
-**Criterio binario:** 13 passed · `FLAG_REGISTRY` 495 → **498** · `PLAIN_HELP` 403 → **406** · `_CURATED_DEFAULTS_ON` 12 → **13** · `test_harness_flags.py` sigue en **0 failed** (de 59 a **60**: `test_declared_default_true_set` es paramétrico sobre el conjunto, así que verificar el conteo exacto tras la edición y anotarlo) · `test_harness_flags_help.py` sigue **exactamente** en `4 failed / 4 passed` · **el caso de discriminación ejecutado y fallando** con la entrada borrada, y revertido.
+**Test:** `backend/tests/test_plan293_flags.py`, acotado a **estas 3 keys** — las 3 en el registro (1) ·
+`WORKBENCH_ENABLED` nace ON y las otras dos OFF (3) · las 3 en `config.py` (1) · ninguna declara
+`requires` (1) · las 3 categorizadas (1) · las 3 con ayuda llana (1) · denylist respetada (1) ·
+`"Si "` sin tilde (1) · `WORKBENCH_ENABLED` **está** en `_CURATED_DEFAULTS_ON` y las otras **no** (1) ·
+`declared_default` de la ON es **True** (1) · **caso de discriminación**: se borra la entrada de
+`PLAIN_HELP` de una de las 3 y el gate **se pone rojo** (1). **13 casos.**
 
-> **Mitad de contraste obligatoria de F1.b:** correr `test_harness_flags.py` **con `default=True` quitado** de `STACKY_WORKBENCH_ENABLED` pero la key ya en `_CURATED_DEFAULTS_ON`. **Tienen que fallar 2 casos** (`test_declared_default_true_set` y `test_default_known_only_for_curated`). Se revierte y se pega el fallo en el commit. Es la prueba de que se entendió C6 y no se copió la plantilla equivocada.
-**Operador:** enciende las dos de escritura cuando quiera (§11.1). **Runtimes:** las flags son del backend; idénticas en los 3.
-
----
-
-### F1 — El catálogo cerrado de verbos git
-
-**Objetivo:** que sea **imposible** que este plan ejecute un verbo git que no sea de lectura.
-
-**Archivo nuevo:** `backend/services/git_workbench.py` — `_VERBOS_PERMITIDOS`, `_run_git` (§5.2), con el mismo hardening de `services/console_repo.py:66-80` (lista de argumentos, `shell=False` implícito, `timeout`, `encoding="utf-8"`, `errors="replace"`, nunca lanza hacia afuera salvo el `ValueError` del catálogo).
-
-**Test primero:** `backend/tests/test_plan293_catalogo_cerrado.py`
-1. `_run_git(["status", ...])` no lanza.
-2. `_run_git(["push"], ...)` lanza `ValueError`; ídem `reset`, `clean`, `checkout`, `branch`, `rebase`, `stash`, `commit`, `add`, `merge` (**10 casos**).
-3. `_run_git([], ...)` lanza `ValueError` y el mensaje dice `<vacio>`.
-4. **Censo por REFERENCIA** (no por AST del nombre: si la llamada va por alias, el AST cuenta cero): se lee el archivo y se exige que **toda** aparición de `subprocess.run` en `git_workbench.py` esté precedida por el guard — conteo de `subprocess.run` == conteo de llamadas a `_run_git` internas + 1.
-
-**Mitad de contraste (obligatoria):** se borra la línea del guard, se corre, **tiene que fallar**, se revierte y se pega el fallo en el commit. Un gate que no se probó contra su defecto es un adorno.
-
-**Criterio binario:** 13 casos passed; y con el guard borrado, ≥10 fallan.
-**Flag:** ninguna (módulo sin consumidor todavía). **Operador: ninguno.** **Runtimes:** idéntico en los 3 (no hay runtime involucrado).
+**Criterio binario:** 13 passed · `FLAG_REGISTRY` 495→**498** · `PLAIN_HELP` 403→**406** ·
+`test_harness_flags.py` de 59 a **59+**, **0 failed** · `test_harness_flags_help.py` **exactamente
+4F/4P** · caso de discriminación **ejecutado y fallando**, y revertido.
+**Operador:** enciende las dos de escritura cuando quiera. **Runtimes:** idénticas en los 3.
 
 ---
 
-### F2 — Estado enriquecido del repositorio
+### F3 — Estado enriquecido del repositorio
 
-**Objetivo:** entregar rama, upstream, adelante/atrás y archivos **con conflictos** en una sola pasada.
+**Objetivo:** rama, upstream, adelante/atrás y **conflictos**, en una pasada.
 
 **Archivo:** `backend/services/git_workbench.py` — `repo_overview(workspace: Path) -> dict`.
 - Resuelve el repo real con `rev-parse --show-toplevel` (**R11**: el `workspace_root` puede no ser la raíz).
-- Corre `status --porcelain=v2 --branch` y parsea `# branch.head`, `# branch.upstream`, `# branch.ab +N -M`, y las líneas `1`/`2`/`u`/`?`.
-- Las líneas `u` son **conflictos** (es lo que v2 entrega y v1 no distingue).
-- Reusa `console_repo.resolve_known_workspace` para el allow-list; **no** reimplementa la validación.
-- Degrada como `console_repo`: `{ok:True, available:False, reason:"..."}`, **nunca** lanza.
+- `status --porcelain=v2 --branch`; parsea `# branch.head`, `# branch.upstream`, `# branch.ab +N -M`
+  y las líneas `1`/`2`/`u`/`?`. **Las `u` son conflictos** — v1 no las distingue.
+- Reusa `console_repo.resolve_known_workspace` (allow-list) — **no** reimplementa la validación.
+- Sonda `config --get user.email` (§3.6-1) y devuelve `identidad_ok: bool`.
+- Degrada como `console_repo`: `{ok:True, available:False, reason:"..."}`, **nunca lanza**.
 
-**Test:** `backend/tests/test_plan293_overview.py` — repo sin `.git`; `index.lock` presente; rama sin upstream; `+3 -0`; `+0 -2`; una línea `u` ⇒ aparece en `conflictos`; HEAD desprendido; salida vacía ⇒ 0 archivos; `workspace` no registrado ⇒ `None`. **9 casos.**
+**Test:** `backend/tests/test_plan293_overview.py` — sin `.git`; `index.lock` presente; rama sin
+upstream; `+3 -0`; `+0 -2`; línea `u` ⇒ `conflictos`; HEAD desprendido; salida vacía ⇒ 0 archivos;
+workspace no registrado ⇒ `None`; `user.email` ausente ⇒ `identidad_ok=False`; rutas con espacios
+(el `-z` no se usa: v2 no cita, así que se parsea por posición). **11 casos.**
 
-**Criterio binario:** 9 passed **y** un caso que corre `--porcelain=v1` sobre el mismo fixture y **comprueba que NO trae `branch.head`** — la mitad de contraste que prueba que el cambio de versión era necesario.
-**Flag:** `STACKY_WORKBENCH_ENABLED` (**ON**), ya registrada en F1.b.
-**Operador: ninguno.** **Runtimes:** igual en los 3.
+**Criterio binario:** 11 passed **y** un caso que corre `--porcelain=v1` sobre el mismo fixture y
+comprueba que **NO** trae `branch.head` — la mitad de contraste de por qué se cambió de versión.
+**Flag:** `STACKY_WORKBENCH_ENABLED` (ON). **Operador: ninguno.** **Runtimes:** igual en los 3.
 
 ---
 
-### F2.b — **[ADICIÓN ARQUITECTO]** El semáforo de "¿es seguro publicar?", calculado en UN lugar
+### F4 — El semáforo de "¿es seguro operar?", calculado en UN lugar
 
-**Por qué existe esta fase (y por qué la v1 la necesitaba sin saberlo).** La v1 repartía las condiciones que impiden publicar por **cinco** lugares distintos: el banner de conflictos (F8/U4), el aviso de flag apagada (F9), el chequeo de tracker (U7), el de rama de GitLab (U8) y el de rama preexistente (U15, nuevo de la v2). Cinco dueños de la misma pregunta es **exactamente** el patrón que produce la pantalla que deja apretar *Publicar* y falla después — el defecto que `PipelineCopilotSection.tsx:246-256` ya documentó para el copiloto de pipelines (*"evita que el operador recorra los 8 pasos para chocarse al final"*). La v1 heredó esa **regla** pero no la **estructura** que la hace cumplible.
+*(Heredado del v2 como `[ADICIÓN ARQUITECTO]`; los códigos cambian con el eje.)*
 
-**Archivo:** `backend/services/git_workbench.py` — una función **pura**:
+**Archivo:** `backend/services/git_workbench.py` — función **pura**:
 
 ```python
-def evaluar_publicacion(*, repo: dict, tracker_type: str, flags: dict, rama_libre: bool) -> dict:
+def evaluar_operacion(*, repo: dict, accion: str, flags: dict, seleccion: list[str]) -> dict:
     """{'puede': bool, 'bloqueos': [{'codigo','severidad'}], 'avisos': [...]}.
-    NO decide textos: sólo códigos. El castellano lo pone F7."""
+    NO decide textos: sólo códigos. El castellano lo pone F12."""
 ```
 
-**Los 6 códigos de bloqueo, cerrados y enumerados:** `conflictos_presentes` · `sin_cambios` · `tracker_sin_propuestas` · `publicar_apagado` · `gitlab_rama_apagada` · `rama_ya_existe`. Y 2 de aviso: `local_quedara_modificado` (§3.3) · `sin_candado_optimista` (§3.4, sólo GitLab).
+**Códigos de bloqueo, cerrados (8):** `conflictos_presentes` · `sin_cambios` · `nada_seleccionado` ·
+`escritura_apagada` · `push_apagado` · `sin_identidad_git` · `repo_no_disponible` · `sin_upstream`.
+**Avisos (3):** `hay_cambios_no_seleccionados` (§3.2, **el que evita el robo silencioso**) ·
+`rama_sin_upstream` · `carrera_working_tree` (R15).
 
-**Lo que compra:** `/overview` devuelve el veredicto ya calculado, así que **el paso 1 del asistente lo muestra completo** sin re-derivar nada; `/publish` lo **vuelve a evaluar en el servidor** antes de escribir (la UI nunca es la autoridad); y el botón *Publicar* se deshabilita con `puede === false` en un solo sitio. Sin esta función, la regla *"la degradación se avisa en el paso 1, no en el 5"* de F9 es una **buena intención sin mecanismo**: seis condiciones dispersas se avisan tarde por construcción.
+**Lo que compra:** `/overview` devuelve el veredicto ya calculado ⇒ el paso 1 del asistente lo
+muestra **completo** sin re-derivar; cada endpoint de escritura lo **re-evalúa en el servidor**
+antes de tocar nada (**la UI nunca es la autoridad**); y el botón se deshabilita en un solo sitio.
 
-**Test:** `backend/tests/test_plan293_semaforo.py` — un caso por código de bloqueo (6) · uno por aviso (2) · sin bloqueos ⇒ `puede=True` (1) · **bloqueos acumulables**: conflictos + flag apagada ⇒ los **dos** en la lista, no el primero que aparece (1) · el orden de `bloqueos` es **estable** (1). **11 casos.**
+**Test:** `backend/tests/test_plan293_semaforo.py` — un caso por bloqueo (8) · uno por aviso (3) ·
+sin bloqueos ⇒ `puede=True` (1) · **bloqueos acumulables** (1) · orden **estable** (1) · la función
+**no importa nada de `api/` ni de Flask** (1). **15 casos.**
 
-**Criterio binario:** 11 passed **y** la mitad de contraste: se le saca **un** código al `frozenset` de bloqueos ⇒ el caso de ese código **falla**. Además, un caso que asertea que `evaluar_publicacion` **no importa nada de `api/` ni de Flask** (es pura y testeable sin app).
-**Flag:** ninguna (función pura sin consumidor todavía). **Operador: ninguno.** **Runtimes:** N/A.
-**Dónde entra en el orden:** después de F2 y **antes** de F6/F8/F9, que la consumen.
-
----
-
-### F3 — El agrupador deja de mentir sobre los conflictos
-
-**Objetivo:** cerrar el defecto de §2.3.
-
-**Archivo:** `frontend/src/services/consoleRepoPanel.ts` — se agrega el grupo `conflictos` y `renombrados` a `GroupedRepoFiles` (`:11-17`), y **el orden de evaluación pasa a ser: conflictos primero**. Se conserva `otros` como red de seguridad.
-
-> ⚠️ **[C2 — la v1 pedía algo imposible.] El test existente NO se puede "sólo ampliar": hay que REESCRIBIR dos de sus casos.** Medido abriendo `frontend/src/services/__tests__/consoleRepoPanel.test.ts`:
-> - **Caso 5 (`:34-39`)** se llama literalmente *"status desconocido cae en 'otros', nunca se pierde"* y usa **`status: "UU"`**, aserteando `g.otros == ["f.py"]`. F3 manda `UU` a `conflictos`: **este caso TIENE que fallar**, y su título además **miente** (`UU` no es desconocido, es un conflicto).
-> - El mismo caso 5 cierra con `const total = g.modified + g.new + g.deleted + g.untracked + g.otros` y `expect(total).toBe(1)`: esa suma **enumera las 5 claves viejas a mano**, así que con `UU` en `conflictos` da **0** y falla por segunda razón.
-> - **Caso 1 (`:9-16`)** se llama *"entrada vacía -> los 5 grupos vacíos"*: sigue verde (sólo verifica 5 de las 7), pero su **título queda desactualizado** y hay que corregirlo a **7**.
->
-> **Por eso el criterio de la v1 ("pasa de N a N+14 y los casos previos siguen verdes") era mutuamente insatisfacible.** El criterio correcto está abajo.
-
-**Test:** `frontend/src/services/__tests__/consoleRepoPanel.test.ts` — se **amplía Y se corrigen 2 casos**:
-- **Reescribir el caso 5:** `UU` pasa a aserteear `g.conflictos`, el título pasa a *"UU es conflicto, no desconocido"*, y la suma `total` pasa a enumerar **las 7 claves**. Se agrega un caso 5.b con un status realmente desconocido (p. ej. `"XY"`) → `otros`, que es lo que el caso 5 **creía** estar probando.
-- **Corregir el título del caso 1** a *"los 7 grupos vacíos"* y agregar las 2 claves nuevas a sus asserts.
-- **Casos nuevos:** `AA`, `DD`, `UU`, `AU`, `UA`, `DU`, `UD` → `conflictos` (7); `R`/`RM` → `renombrados` (2); regresión de `??`, `M`, `A`, `D` (4); status desconocido `"XY"` → `otros` (1). **14 casos nuevos.**
-
-**Consumidor de producción — NOMBRADO, no "grepear y ver" (C3/R14):** **`frontend/src/components/CodexConsoleFull.tsx:415-422`** construye `const groups: Array<[string, ...]>` enumerando **a mano** `["Modificados", grouped.modified] … ["Otros", grouped.otros]` — las 5 claves viejas. **Sin tocarlo, los archivos en conflicto y renombrados DESAPARECEN de la pantalla de Repositorio que hoy funciona** (hoy caen en "Otros" y **sí se ven**). Es una regresión visible, silenciosa para `tsc` y para todos los tests. **Se agregan las dos filas `["En conflicto", grouped.conflictos]` (primera, porque es lo urgente) y `["Renombrados", grouped.renombrados]` en el MISMO commit.** Es el único consumidor: verificado con `grep -rn "groupFilesByStatus" frontend/src` → 2 sitios de producción (`CodexConsoleFull.tsx:28` import, `:419` uso) + el test.
-
-**Criterio binario:** el archivo de test pasa de **6** casos a **20** (6 − 0 borrados + 14 nuevos, con 2 reescritos), **0 fallidos**; `npx tsc --noEmit` limpio; **y un caso de texto que lee `CodexConsoleFull.tsx` y exige que las 7 claves de `GroupedRepoFiles` aparezcan en el array `groups`** — el gate de que el consumidor se actualizó.
-**Mitad de contraste (obligatoria):** revertir sólo la edición de `CodexConsoleFull.tsx` ⇒ el caso de texto **tiene que fallar**. Un gate de consumidor que nunca falló no prueba nada.
-**Flag:** ninguna (corrección de defecto). **Operador: ninguno.** **Runtimes:** N/A.
+**Criterio binario:** 15 passed **y** la mitad de contraste: se saca **un** código del `frozenset`
+⇒ el caso de ese código **falla**.
+**Flag:** ninguna (pura). **Runtimes:** N/A.
 
 ---
 
-### F4 — Traer cambios, sin poder pisar nada
+### F5 — El agrupador deja de mentir sobre los conflictos
 
-**Objetivo:** que el botón *"Traer cambios"* **traiga cambios de verdad** (§3.3).
+*(Sin cambios respecto del v2 — la decisión no lo toca. Se conserva íntegro, incluida la
+advertencia C2/C3 sobre reescribir 2 casos y actualizar `CodexConsoleFull.tsx:415-422`.)*
 
-**Archivo:** `backend/services/pre_run_git.py` — se agrega el parámetro `policy: str | None = None` a `run_pull_check`, y la línea 102 pasa a `policy = policy or config.STACKY_PRE_RUN_GIT_WORKSPACE_POLICY or "fetch_only_warn"`. **Retrocompatible**: los **CINCO** llamadores de producción **no pasan `policy` y no cambian de comportamiento** (la v1 decía "6" contando los tests; **son 5**, censados con `grep -rn "run_pull_check(" backend --include=*.py`):
+**Archivo:** `frontend/src/services/consoleRepoPanel.ts` — se agregan `conflictos` y `renombrados`
+a `GroupedRepoFiles`, y **el orden de evaluación pasa a ser: conflictos primero**.
 
-| # | Llamador | Ruta **exacta desde `backend/`** |
-|---|---|---|
-| 1 | `run_pull_check(workspace_root, project=project_name, log=log)` | **`agent_runner.py:627`** — ojo: está en la **raíz** de `backend/`, **no** en `services/` |
-| 2 | `run_pull_check(...)` | `api/diag.py:737` |
-| 3 | `run_pull_check(workspace_root, log=log)` | `services/claude_code_cli_runner.py:3085` |
-| 4 | `run_pull_check(workspace_root, log=log)` | `services/codex_cli_runner.py:1904` |
-| 5 | `run_pull_check(...)` | `services/memory_validator.py:497` |
-
-`merge --ff-only` es el **único** verbo de merge, y no puede perder trabajo: ante divergencia **falla**, no fusiona. Con la copia local sucia y la política bloqueante, `pre_run_git.py:171-174` corta antes de tocar nada (caso U14).
-
-**Test:** `backend/tests/test_plan293_pull.py` — `policy=None` ⇒ lee config (2 casos: config en cada valor); `policy="ff_only_block_on_dirty"` con config en `fetch_only_warn` ⇒ **sí** entra al bloque de merge (`pre_run_git.py:231-232`); sucio + política bloqueante ⇒ `ok=False` y **cero** llamadas a `merge`; sin upstream ⇒ aviso y sin merge (el `and result.upstream` de `:231`); y **el caso de retrocompatibilidad, ahora ejecutable**: en vez de "correr los 6 llamadores" (que no es un test — la v1 contaba los tests como llamador), se verifica **por firma** con `inspect.signature(run_pull_check)` que `policy` tiene `default=None` y es **keyword-or-positional al final**, y se llama `run_pull_check` **sin** `policy` con la config en cada uno de los 2 valores comprobando que el resultado es idéntico al de antes. **7 casos.**
-
-**Criterio binario:** 7 passed **y** `test_pre_run_git.py` (suite existente) mantiene exactamente su conteo de F0.
-**Mitad de contraste:** poner `policy` **antes** de un parámetro existente en la firma ⇒ el caso de `inspect.signature` **falla**. Es lo que ataja que un modelo menor rompa a los 5 llamadores posicionales.
-**Flag:** `STACKY_WORKBENCH_PULL_ENABLED` (**OFF**, excepción **(B)**), ya registrada y justificada en F1.b.
-**Operador:** enciende la opción una vez si quiere el botón. **Runtimes:** el pull es del backend; idéntico en los 3.
+**Criterio binario:** el test pasa de **6** a **20** casos, 0 fallidos; `npx tsc --noEmit` limpio; y
+el caso de texto que exige que las **7** claves aparezcan en el array `groups` de
+`CodexConsoleFull.tsx`. **Mitad de contraste:** revertir sólo esa edición ⇒ el caso **falla**.
+**Flag:** ninguna. **Runtimes:** N/A.
 
 ---
 
-### F5 — El renderizador de la descripción
+### F6 — Elegir archivos y confirmar cambios *(EL RIESGO #1 — la fase más importante del plan)*
 
-**Objetivo:** meter en el único campo libre que hay (§2.4) todo lo que el pliego pide.
+**Objetivo:** que el commit contenga **exactamente** los archivos tildados, con trabajo ajeno sucio
+en la misma carpeta.
 
-**Archivo:** `backend/services/change_proposal.py` — `build_description(...) -> str`. Secciones fijas y en este orden: **Qué cambié** (texto del usuario) · **Archivos incluidos** (lista con el grupo de cada uno) · **Archivos NO incluidos y por qué** · **Pruebas que hice** (checklist) · **Evidencia adjunta** · **⚠️ Revisar antes de integrar** (sospechas de secreto) · **Nota sobre el estado local** (§3.3, texto **obligatorio**).
+**Archivo nuevo:** `backend/services/git_local_writer.py`
 
-**Test:** `backend/tests/test_plan293_description.py` — orden de secciones estable; sin evidencia ⇒ la sección no aparece; con sospechas ⇒ el bloque de aviso aparece **siempre**; la nota de estado local aparece **siempre** (caso que la busca literal); markdown sin inyección (un título con `#` no rompe la estructura); lista vacía de incluidos ⇒ error de validación. **8 casos.**
+```python
+def confirmar_cambios(*, workspace, rutas: list[str], mensaje: str) -> dict:
+    # 1. re-evaluar el semáforo en el servidor (F4). Si no puede -> return, sin tocar nada.
+    # 2. validar CADA ruta con console_repo.resolve_safe_path -> descarta absolutas y '..'
+    # 3. rechazar si .git/index.lock existe
+    # 4. add SOLO de las rutas sin seguimiento:  ["add","--", *nuevas]
+    # 5. mensaje a archivo temporal UTF-8 ->     ["commit","-F",<tmp>,"--", *rutas]
+    # 6. devolver {ok, sha, archivos, no_incluidos}
+```
 
-**Criterio binario:** 8 passed; y la **mitad de contraste**: se borra la línea de la nota de estado local ⇒ el caso que la exige **falla**.
-**Flag:** ninguna (función pura sin efecto). **Operador: ninguno.** **Runtimes:** N/A.
+**Por qué `-F` y no `-m`:** un mensaje con comillas, backticks o saltos de línea **rompe** el
+armado por argumentos y en Windows es un camino de inyección. El repo ya pagó ese error con
+`git commit -m` y backticks. El archivo temporal se borra siempre en `finally`.
 
----
+**Por qué la pathspec en el `commit`:** es **la** barrera. `git commit -- <rutas>` commitea esas
+rutas desde el working tree **sin importar el índice**, así que lo que la sesión paralela haya
+stageado **no entra**.
 
-### F6 — Publicar: previsualizar y ejecutar
+**Test:** `backend/tests/test_plan293_commit.py`, sobre un **repo git de verdad creado en un
+temporal** (no dobles: acá el comportamiento de git *es* lo que se prueba):
 
-**Objetivo:** el acto de publicar, con todo lo que hay que ver **antes**.
+1. **EL CASO QUE JUSTIFICA LA FASE.** Repo con 5 archivos modificados; se seleccionan **2**; se
+   hace `git add -A` **por fuera** para simular a la sesión paralela dejando todo stageado;
+   `confirmar_cambios` con las 2 rutas ⇒ `git show --stat HEAD` lista **exactamente 2** archivos, y
+   los otros 3 **siguen modificados y sin commitear**.
+2. Un archivo **sin seguimiento** seleccionado ⇒ entra (se le hizo `add --` primero).
+3. Un archivo sin seguimiento **NO** seleccionado ⇒ **no** entra y sigue sin seguimiento.
+4. Ruta absoluta en la selección ⇒ rechazada, **cero** comandos git corridos.
+5. Ruta con `..` ⇒ rechazada.
+6. `index.lock` presente ⇒ `ok=False` con motivo, **cero** comandos.
+7. Selección vacía ⇒ bloqueo `nada_seleccionado`, sin commit.
+8. Mensaje con comillas, backticks y salto de línea ⇒ commitea y el mensaje llega **literal**
+   (`git log -1 --format=%B`).
+9. Sin `user.email` ⇒ `ok=False` con motivo en castellano, **sin** dejar el índice tocado.
+10. Conflictos presentes ⇒ bloqueado.
+11. El archivo temporal del mensaje **no existe** al terminar (ni en el camino de error).
+12. **`add -A` nunca se ejecuta**: se espía la lista de comandos y se exige que ninguno contenga `-A`.
 
-**Archivo:** `backend/services/change_proposal.py` — `preview(...)` (no escribe) y `publish(...)`.
-`preview` calcula: **rama propuesta `stacky/trabajo-<AAAAMMDD-HHMMSS>-<4 hex>`** (el sufijo aleatorio es de la v2: §3.4-1, el timestamp al segundo colisiona), destino, incluidos, **excluidos con motivo** (binario / >1 MB / no-utf8, reusando el criterio de **`services/incident_dev_autocommit.py:227-244`** `_read_text_or_none` — v1 decía `:210-225`; el sitio que lo aplica es **`:156`**, v1 decía `:139`), sospechas de secreto (los **6 patrones de alta confianza** de `incident_dev_autocommit.py:41-48`, **importados, no reescritos**), el veredicto de **`evaluar_publicacion` (F2.b)** y la `description` de F5.
-**`preview` llama `branch_exists(rama)` y si la rama existe REGENERA el nombre** (hasta 3 intentos; al tercero devuelve el bloqueo `rama_ya_existe`). Es la medida §3.4-2 contra el último-que-escribe-gana de GitLab.
-`publish` **re-evalúa `evaluar_publicacion` en el servidor** (la UI no es la autoridad), recorre los incluidos con `commit_file`, sube evidencias, y crea la propuesta en **una** llamada con la `description` ya armada.
+**Mitad de contraste (OBLIGATORIA, y es la del riesgo #1):** se cambia el paso 4 por
+`["add","-A"]` y el paso 5 por `["commit","-F",tmp]` **sin pathspec**; se corre; **el caso 1 y el
+caso 12 tienen que fallar**; se revierte y se pega el fallo en el commit. **Si el caso 1 no se
+puede poner rojo, el gate es un adorno y la fase no está hecha.**
 
-**Test:** `backend/tests/test_plan293_publish.py`, con dobles (**cero red**) — U9 excluido y con motivo; U10 sospecha listada; U11 >60 archivos rechazado (tope `_MAX_FILES = 60`, `incident_dev_autocommit.py:24`); U12 evidencia falla y la propuesta **igual se crea**; U13 reintento idempotente (`"unchanged"`); U7 tracker sin propuestas ⇒ error claro; `confirm` ausente ⇒ 400; orden **commits antes de crear la propuesta**; `link_attachment` **nunca** se llama (caso negativo explícito, §8); `redact_secrets` de `pr_review_sanitize` **nunca** se importa en este módulo (caso negativo, R5); **[v2] `branch_exists` devuelve True ⇒ el nombre cambia y `commit_file` recibe la rama NUEVA** (caso U15/R13); **[v2] `publish` con un bloqueo activo ⇒ `commit_file` recibe CERO llamadas** (la re-evaluación del servidor). **14 casos.**
-
-**Criterio binario:** 14 passed, incluidos **los cuatro casos negativos** (`link_attachment`, `redact_secrets`, rama preexistente, bloqueo del servidor), **cada uno con su mitad de contraste ejecutada y el fallo pegado en el commit**. El de la rama preexistente es el que vigila R13: sin él, el plan vuelve a prometer una seguridad que no tiene.
-**Flag:** `STACKY_WORKBENCH_PUBLISH_ENABLED` (**OFF**, excepción **(B)**), ya registrada y justificada en F1.b.
-**Operador:** enciende la opción una vez. **Runtimes:** es backend + REST; idéntico en los 3.
-
----
-
-### F7 — El diccionario de errores en castellano llano
-
-**Objetivo:** que ningún mensaje técnico llegue crudo (K4).
-
-**Archivo:** `frontend/src/services/workbenchErrors.ts` — `traducir(codigo: string): {titulo, queSignifica, queHacer}`. **Sin default mudo**: un código desconocido devuelve un texto genérico **útil** y se registra.
-
-Entradas mínimas (**14**): los 4 de `console_repo` (§K4), `index.lock`, no-es-repo, sin-upstream, conflictos-presentes, rama-no-se-puede-crear-en-gitlab (**nombra la opción**), tracker-sin-propuestas, archivo-muy-grande, archivo-binario, sospecha-de-secreto, sin-cambios.
-
-**Test:** `frontend/src/services/__tests__/workbenchErrors.test.ts` — un caso por entrada (14) + código desconocido (1) + **caso que exige que ninguna traducción contenga las palabras `git`, `commit`, `branch`, `HEAD`, `upstream`, `merge`, `porcelain`** (1). **16 casos.**
-
-**Criterio binario:** 16 passed, y el caso anti-jerga **falla** si se agrega una entrada con jerga (mitad de contraste ejecutada).
-**Flag:** ninguna. **Operador: ninguno.** **Runtimes:** N/A.
-
----
-
-### F8 — La pantalla, con sus 13 patas
-
-**Objetivo:** que el tab exista, se vea, y el enlace directo funcione.
-
-**Las 13 patas, numeradas y con anclaje** (ninguna salvo 2 y 4 rompe la compilación; **las otras 11 fallan en silencio**):
-
-| # | Archivo:línea | Qué se agrega |
-|---|---|---|
-| 1 | `frontend/src/services/routes.ts:5-9` | `\| "trabajo"` en `type Tab` |
-| 2 | `frontend/src/services/routes.ts:15-23` | `trabajo: "/trabajo"` en `TAB_PATHS` (**tsc lo exige**) |
-| 3 | `frontend/src/components/shell/shellNav.ts:5-9` | `\| "trabajo"` en `type ShellTab` (unión **duplicada a mano**) |
-| 4 | `frontend/src/components/shell/shellNav.ts:16` | entrada en `TAB_META` (**tsc lo exige**) |
-| 5 | `frontend/src/components/shell/shellIcons.ts:2-14` | importar un icono **nuevo** de lucide **y** agregarlo a `ICON_BY_NAME` (dos ediciones; olvidar la segunda es el fingerprint `docs/sistema/error_fingerprints.json:265`) |
-| 6 | `frontend/src/components/shell/shellNav.ts:45` | agregar el tab al grupo cuyo `id` es `"trabajo"` (`SHELL_NAV_GROUPS[0]`, hoy `["team","tickets","incidencias","reuniones","review","unblocker"]`). **Sin esto el tab NO aparece y no hay error** |
-| 7 | `frontend/src/components/shell/shellNav.ts:52-62` | `trabajoEnabled?: boolean` en `VisibilityInput` |
-| 8 | `frontend/src/components/shell/shellNav.ts:70-86` | regla en `computeVisibleTabs` |
-| 9 | `frontend/src/App.tsx:106-135` | `const [trabajoGate, setTrabajoGate] = useState<GateState>("unknown")` |
-| 10 | `frontend/src/App.tsx:183-213` | `probeFlagHealth("/api/workbench/health")` |
-| 11 | `frontend/src/App.tsx:339-378` | redirección con aviso si el gate está `"off"` |
-| 12 | `frontend/src/App.tsx:380-396` | `trabajoEnabled: isGateOn(trabajoGate)` |
-| 13 | `frontend/src/App.tsx:409-450` + import | montaje `{tab === "trabajo" && (isGateResolving(...) ? <Skeleton/> : isGateOn(...) && <WorkbenchPage/>)}` |
-
-**Patas extra obligatorias:** nav v1 (`App.tsx:479-627`, sigue viva con literales JSX) y `NAV_COMMANDS` (`frontend/src/components/commandPaletteData.ts:84-101`).
-
-**Tests existentes que se ponen rojos y hay que actualizar en el MISMO commit:** `shellNav.test.ts:11-16` (`ALL_TABS`, hoy **19**) y el **título literal** del caso `:19` (*"TAB_META cubre exactamente los 19 tabs"* → 20); `shellIconsCoverage.test.ts:10-11`; `plan273GateState.test.ts:23-31` (hace **grep de texto sobre `App.tsx`**); `plan282Censo.test.ts:59`.
-
-**Regla no negociable:** usar **`isGateOn(...)`**, nunca `{trabajoGate && <X/>}` — `"off"` es **truthy** y el tab se mostraría apagado con `tsc` verde y cero tests rojos (`frontend/src/services/gateState.ts:43-47`).
-
-> ⚠️ **Colisión de nombres detectada en la v2 — decisión de D6.** El `id` del **grupo** de la barra lateral ya es **`"trabajo"`** (`shellNav.ts:45`, label *"Trabajo"*). Ponerle `id: "trabajo"` al **tab** deja un tab *Trabajo* **dentro** del grupo *Trabajo*. `tsc` no se queja (`ShellTab` y `ShellNavGroup.id` son tipos distintos), pero en pantalla se lee raro y cualquier código futuro que mezcle los dos `id` se confunde en silencio. **Se resuelve en D6:** el `id` técnico del tab es **`"publicar"`** (ruta `/publicar`, `TAB_PATHS.publicar`) y su **label visible** sigue siendo **"Publicar mi trabajo"**. Un `id` distinto del `id` del grupo, y un rótulo que dice el verbo en vez del sustantivo — que es además lo que la persona no técnica busca. **Las 13 patas usan `publicar`, no `trabajo`.**
-
-**Test:** `frontend/src/services/__tests__/plan293Patas.test.ts` — lee los archivos como texto y verifica **una aserción por pata** (13) + `tsc --noEmit` limpio + `shellNav.test.ts` actualizado a 20. **13 casos + 2 comandos.**
-
-**Criterio binario:** 13 passed; `npx tsc --noEmit` sin errores; `shellNav.test.ts` verde con el nuevo conteo.
-**Flag:** el tab se muestra según `STACKY_WORKBENCH_ENABLED` (ON). **Operador: ninguno.** **Runtimes:** N/A (es UI).
+**Criterio binario:** 12 passed, y los casos 1 y 12 **demostrados rojos** con el defecto inyectado.
+**Flag:** `STACKY_WORKBENCH_WRITE_ENABLED` (**OFF**, excepción **(B)**).
+**Operador:** enciende la opción. **Runtimes:** backend; idéntico en los 3.
 
 ---
 
-### F9 — El asistente de 5 pasos, y las evidencias
+### F7 — Traer cambios *(pull `--ff-only`)*
 
-**Objetivo:** el flujo de §4.1, con la lógica **fuera** del `.tsx`.
+**Archivo:** `backend/services/pre_run_git.py` — se agrega `policy: str | None = None` a
+`run_pull_check`; la línea 102 pasa a `policy = policy or config.STACKY_… or "fetch_only_warn"`.
+**Retrocompatible**: los **5** llamadores de producción (`agent_runner.py:627` —**en la raíz de
+`backend/`, no en `services/`**—, `api/diag.py:737`, `services/claude_code_cli_runner.py:3085`,
+`services/codex_cli_runner.py:1904`, `services/memory_validator.py:497`) no pasan `policy`.
 
-**Archivos nuevos:** `frontend/src/services/publishWizardModel.ts` (**toda** la lógica: `type Paso`, `PASOS`, `pasoSiguiente`, `puedeAvanzar`, `resumenSeleccion`, `validarEvidencias`) y los `.tsx` cascarón de §5.3. Molde: `PipelineCopilotSection.tsx:35-38`.
-**Backend:** `backend/services/work_evidence.py` + el endpoint `/evidence` con el guard de `content_length` (§6) y `sanitize_filename` **importado** de `incident_store`.
+**Test:** `backend/tests/test_plan293_pull.py` — `policy=None` lee config (2) · `policy` explícito
+gana sobre la config (1) · sucio + política bloqueante ⇒ `ok=False` y **cero** `merge` (1) · sin
+upstream ⇒ aviso y sin merge (1) · **retrocompatibilidad por firma** con `inspect.signature`:
+`policy` tiene `default=None` y va **al final** (1) · llamada sin `policy` da idéntico resultado (1).
+**7 casos.**
 
-**Regla de UX heredada, obligatoria:** la degradación se avisa **en el paso 1, no en el 5** — `PipelineCopilotSection.tsx:246-256` documenta por qué: *"evita que el operador recorra los 8 pasos para chocarse al final"*. Si falta la flag de publicar, o el tracker no soporta propuestas, se dice en la primera pantalla.
-
-**Test:** `frontend/src/services/__tests__/publishWizardModel.test.ts` — no se avanza de "Elegir" con 0 archivos; no se avanza de "Describir" sin título; con conflictos presentes **no se puede avanzar en absoluto**; evidencia que excede el tope se rechaza con motivo; el resumen cuenta bien por grupo; retroceder conserva lo cargado. **10 casos.** Backend: `backend/tests/test_plan293_evidence.py` — tope por archivo, tope total, extensión no permitida, nombre con `../` saneado, `content_length` excedido ⇒ **413 antes de leer**, y un caso que verifica que **nada se escribió fuera del directorio temporal**. **7 casos.**
-
-> ⚠️ **`test_plan293_evidence.py` DEBE monkeypatchear `runtime_paths.data_dir()`**, además de setear `STACKY_DATA_DIR`. Es el único archivo de test de este plan que escribe en disco, y en todo el repo **sólo 3 archivos** hacen ese monkeypatch. Sin él, correr este test suelto **deja archivos reales en `backend/data/` del operador**. El molde vivo es `tests/test_plan291_guardia_repo.py`.
-
-**Criterio binario:** 10 + 7 passed. El caso de `413` corre **antes** de leer el cuerpo, y el caso de aislamiento verifica que `backend/data/work_evidence/` **no existe** al terminar.
-**Flag:** `STACKY_WORKBENCH_ENABLED` (ON) para ver; `STACKY_WORKBENCH_PUBLISH_ENABLED` (OFF) para ejecutar. **Operador: ninguno para ver.** **Runtimes:** N/A.
+**Criterio binario:** 7 passed **y** `test_pre_run_git.py` sigue en **5 passed** (delta cero).
+**Mitad de contraste:** poner `policy` **antes** de un parámetro existente ⇒ el caso de
+`inspect.signature` **falla** (ataja que un modelo menor rompa a los 5 llamadores posicionales).
+**Flag:** `STACKY_WORKBENCH_WRITE_ENABLED` (OFF). **Runtimes:** idéntico en los 3.
 
 ---
 
-### F10 — Auditoría, paridad de runtimes, documentación y no-regresión
+### F8 — Enviar cambios *(push, sin fuerza posible)*
 
-**Objetivo:** cerrar.
+**Archivo:** `backend/services/git_local_writer.py` — `enviar_cambios(*, workspace, rama) -> dict`.
+- `["push", remote, rama]` y nada más. `--force`/`-f` **no son expresables** (F1, regla 4 y 8).
+- Autenticación **reusada** de `pre_run_git` (§3.3); comando **redactado** con `_redact_command`
+  antes de cualquier log o respuesta.
+- Un rechazo por **non-fast-forward** **no es un error del tablero**: es la barrera funcionando.
+  Se traduce a *"alguien más subió cambios antes que vos; traé los cambios y volvé a intentar"* (F12).
+- Timeout de red: `STACKY_PRE_RUN_GIT_TIMEOUT_SECONDS` (**30 s** de fábrica, `backend/config.py:868`).
 
-1. **Auditoría:** las 7 acciones de §7 emiten su fila de `system_logs`. Test: `backend/tests/test_plan293_auditoria.py` — una fila por acción, `context_json` **sin contenido de archivo** y **sin rutas absolutas**, y un caso que falla si alguna acción no emite. **8 casos.**
-2. **Paridad de los 3 runtimes:** todo este plan es **backend + UI**; no invoca a Codex, Claude Code ni Copilot. La única superficie sensible es que el tablero **lee el árbol de trabajo que los tres runtimes modifican**. Test: con un árbol modificado por cada runtime (dobles), `repo_overview` devuelve lo mismo. **3 casos.** Fallback: si el runtime dejó el repo bloqueado (`index.lock`), el tablero degrada con el aviso de U5 en los tres.
-3. **Documentación:** `docs/sistema/17-tablero-de-trabajo.md` nuevo + enlace desde `docs/sistema/INDEX.md`, con los pasos de activación, lo que **no** se puede prometer (§1.2) y las degradaciones por proveedor.
-4. **Ratchets:** registrar los **9** archivos de test nuevos del backend (`catalogo_cerrado`, `flags`, `overview`, **`semaforo`**, `pull`, `description`, `publish`, `evidence`, `auditoria`) en los **DOS** ratchets, **en el mismo commit y con la misma cantidad en cada uno**: `.sh` **836 → 845**, `.ps1` **772 → 781**, brecha **64 → 64**.
-   > ⚠️ **[C4] Los objetivos se expresan como `medido_en_F0 + 9`, y el literal es sólo informativo.** Los conteos se movieron **entre la v1 y la v2** (835/771 → **836/772**) porque la sesión paralela registró un archivo. **Si al implementar F0 midió otra cosa, el objetivo es ese número + 9, no 845/781.** Un implementador que se aferre al literal para en el número equivocado y deja un archivo **sin registrar**, poniendo rojo un test hoy verde.
-   La brecha ya está **exactamente** en `_PS1_LAG_MAX = 64` (`tests/test_plan259_ratchet_script_parity.py:46`), así que registrar de más en uno solo pone rojo el gate al instante. Sintaxis **divergente**: `.sh` ruta pelada sin comillas ni coma; `.ps1` `"ruta",` entrecomillada — una ruta sin comillas en el `.ps1` **se pierde MUDA**. Sin rutas con espacios.
-5. **No-regresión:** delta **cero** contra los baselines de F0 en todas las suites vecinas.
+**Test:** `backend/tests/test_plan293_push.py` — push feliz contra un **remoto local de verdad**
+(`git init --bare` en un temporal) (1) · non-fast-forward ⇒ `ok=False` con código
+`push_rechazado`, **sin** reintento con fuerza (1) · el comando **jamás** contiene `--force`/`-f` (1) ·
+el PAT **no aparece** en la respuesta ni en el comando devuelto (1) · sin upstream ⇒ se usa
+`push <remote> <rama>` y funciona (1) · flag apagada ⇒ bloqueo `push_apagado`, **cero** comandos (1).
+**6 casos.**
 
-**Criterio binario:** 8 + 3 passed; `.sh` = **F0.sh + 9** y `.ps1` = **F0.ps1 + 9** medidos con **el comando de F0** (los mismos regex del test, `_SH_RE:26` / `_PS1_RE:28`), brecha **= 64**; **[C5] `test_harness_ratchet_meta.py` termina en 4 passed / 0 failed y `test_plan259_ratchet_script_parity.py` en 12 passed / 0 failed** — el criterio absoluto, porque **las dos suites están VERDES hoy** y `test_ratchet_clasifica_todos_los_tests` (`:43-52`) se pone rojo con **un solo** archivo sin registrar; delta cero contra F0.
-**Mitad de contraste (obligatoria):** sacar **uno** de los 9 archivos del `.sh` ⇒ `test_el_ps1_no_pierde_terreno` o `test_ratchet_clasifica_todos_los_tests` **tiene que fallar**. Se revierte y se pega el fallo. Sin esto, el registro de ratchets es un trámite que nadie verificó.
-**Flag:** ninguna nueva. **Operador: ninguno.** **Runtimes:** cubierto por el punto 2.
+**Criterio binario:** 6 passed. **Mitad de contraste:** agregar `--force` al comando ⇒ el caso 3
+falla **y** F1 lanza `ValueError` (doble red).
+**Flag:** `STACKY_WORKBENCH_PUSH_ENABLED` (**OFF**, excepción **(B)**). **Runtimes:** idéntico en los 3.
+
+---
+
+### F9 — Ramas: listar, crear, cambiar
+
+**Archivo:** `backend/services/git_workbench.py` (`listar_ramas`) y
+`backend/services/git_local_writer.py` (`crear_rama`, `cambiar_rama`).
+- Listar: `for-each-ref --format=... refs/heads` (lectura).
+- Crear: `["switch","-c",<nombre>]`. Cambiar: `["switch",<nombre>]`.
+- **`switch` sin `-f` se niega solo** si el cambio pisaría trabajo no commiteado. Esa negativa es
+  **la barrera**, y se traduce a castellano en vez de forzarse.
+- Validación del nombre: `^[A-Za-z0-9._/-]{1,100}$`, sin `..`, sin empezar con `-`, sin terminar en
+  `.lock`. Un nombre inválido **no llega a git**.
+- **`branch -D` no existe en este plan**: borrar ramas no está en la allowlist (F1).
+
+**Test:** `backend/tests/test_plan293_ramas.py` — listar devuelve las ramas y marca la actual (1) ·
+crear con nombre válido (1) · crear con nombre inválido ⇒ rechazado **sin llamar a git** (5 formas: `-x`, `a..b`, `x.lock`, vacío, 101 chars) · cambiar con árbol sucio que colisiona ⇒ `ok=False` traducido, **trabajo intacto** (1) · cambiar limpio (1) · **ningún comando contiene `-D` ni `-f`** (1). **10 casos.**
+
+**Criterio binario:** 10 passed. **Mitad de contraste:** pasar `-f` a `switch` ⇒ F1 lanza.
+**Flag:** `STACKY_WORKBENCH_WRITE_ENABLED` (OFF). **Runtimes:** N/A.
+
+---
+
+### F10 — Historial de commits
+
+**Archivo:** `backend/services/git_workbench.py` — `historial(workspace, n=20) -> dict`.
+`["log", f"-n{n}", "--format=%H%x1f%h%x1f%an%x1f%aI%x1f%s"]`, separador `\x1f` (**nunca** un carácter
+que pueda aparecer en un asunto). `n` acotado a **1..100** en el servidor.
+
+**Test:** `backend/tests/test_plan293_historial.py` — repo con 3 commits ⇒ 3 entradas en orden (1) ·
+asunto con `|`, comillas y tildes ⇒ intacto (1) · repo sin commits ⇒ lista vacía, `available=True` (1) ·
+`n` fuera de rango ⇒ acotado, no error (2) · campos completos (1). **6 casos.**
+
+**Criterio binario:** 6 passed. **Flag:** `STACKY_WORKBENCH_ENABLED` (ON). **Runtimes:** N/A.
+
+---
+
+### F11 — La propuesta de cambio *(el único paso REST)* + descripción + evidencias
+
+**Archivos:** `backend/services/change_proposal.py` (`build_description`, `abrir_propuesta`) y
+`backend/services/work_evidence.py`.
+
+- `build_description(...)`: **Qué cambié** · **Archivos incluidos** · **Pruebas que hice**
+  (checklist) · **Evidencia adjunta** · **⚠️ Revisar antes de integrar** (sospechas de secreto,
+  reusando los **6 patrones de alta confianza** de `services/incident_dev_autocommit.py:41-48`).
+  **Ya no lleva** la "nota sobre el estado local" del v2: con git local **no hay desfase**.
+- `abrir_propuesta(...)`: resuelve la rama destino (§3.6-2) y llama a
+  `get_merge_request_provider(project).create_merge_request(source, target, title, description)`.
+- Evidencias: se guardan en `runtime_paths.data_dir()/work_evidence/<id>/` con los topes ya
+  probados de `services/incident_store.py:23-30` (10 archivos, 10 MB c/u, 25 MB total) y
+  **`sanitize_filename` importado, no reescrito** (`:61-67`).
+- GitLab: `upload_attachment` → se **embebe el `markdown`** en la `description` **al crearla**.
+  **PROHIBIDO `link_attachment`** (`services/gitlab_provider.py:521-537`): si el GET previo falla
+  asume `""` y **pisa la descripción entera**. ADO: **degradación declarada** (§5.4).
+
+**Test:** `backend/tests/test_plan293_propuesta.py` — orden de secciones estable (1) · sin evidencia
+la sección no aparece (1) · con sospechas el aviso aparece **siempre** (1) · markdown sin inyección (1) ·
+rama destino resuelta por `origin/HEAD` y con los dos fallbacks (3) · `link_attachment` **nunca** se
+llama (**caso negativo**) (1) · `pr_review_sanitize.redact_secrets` **nunca** se importa acá
+(**caso negativo**, es camino de lectura y destruye código legítimo) (1) · falla la evidencia ⇒ la
+propuesta **igual se crea** (1) · tracker sin propuestas ⇒ error claro (1). **11 casos.**
+`backend/tests/test_plan293_evidence.py` — tope por archivo, tope total, extensión no permitida,
+nombre con `../` saneado, `content_length` excedido ⇒ **413 antes de leer**, y aislamiento verificado.
+**6 casos.**
+
+> ⚠️ **`test_plan293_evidence.py` DEBE monkeypatchear `runtime_paths.data_dir()`.** Es el único test
+> del plan que escribe en disco; sin el monkeypatch deja archivos reales en `backend/data/`.
+
+**Criterio binario:** 11 + 6 passed, **con los dos casos negativos y su mitad de contraste**.
+**Flag:** `STACKY_WORKBENCH_PUSH_ENABLED` (OFF, **(B)**). **Runtimes:** idéntico en los 3.
+
+---
+
+### F12 — El diccionario de errores en castellano llano
+
+**Archivo:** `frontend/src/services/workbenchErrors.ts` — `traducir(codigo) -> {titulo, queSignifica, queHacer}`.
+Sin default mudo. **Entradas mínimas (18):** los 4 de `console_repo` · `index.lock` · no-es-repo ·
+sin-upstream · conflictos-presentes · **sin-identidad-git** · **push-rechazado (non-fast-forward)** ·
+**cambio-de-rama-bloqueado** · nada-seleccionado · escritura-apagada · push-apagado ·
+tracker-sin-propuestas · archivo-muy-grande · sospecha-de-secreto · sin-cambios.
+
+**Test:** `frontend/src/services/__tests__/workbenchErrors.test.ts` — un caso por entrada (18) ·
+código desconocido ⇒ texto genérico útil (1) · **caso anti-jerga**: ninguna traducción contiene
+`git`, `commit`, `branch`, `HEAD`, `upstream`, `merge`, `porcelain`, `fast-forward`, `index` (1).
+**20 casos.**
+
+**Criterio binario:** 20 passed; el caso anti-jerga **falla** si se agrega una entrada con jerga
+(mitad de contraste ejecutada). **Flag:** ninguna. **Runtimes:** N/A.
+
+---
+
+### F13 — La pantalla: las 13 patas, el asistente y las evidencias
+
+*(Las 13 patas se conservan íntegras del v2 — la decisión no las toca. Ver la tabla de §F13.1.)*
+
+**Nombre del tab:** `publicar`, ruta `/publicar`, label **"Publicar mi trabajo"**. **No** `trabajo`:
+ese `id` **ya existe** como grupo de la barra lateral (`shellNav.ts:45`) y la colisión es invisible
+para `tsc`.
+
+**Lógica en `.ts` puro** (RTL/jsdom **no están instalados**: un `.test.tsx` con RTL reporta
+*"no tests"* y sale **exit 0** — falso verde perfecto):
+`frontend/src/services/publishWizardModel.ts` con `PASOS`, `pasoSiguiente`, `puedeAvanzar`,
+`resumenSeleccion`, `validarEvidencias`.
+
+**Regla de UX obligatoria:** la degradación se avisa **en el paso 1, no en el 5** — es lo que
+compra F4. Y **los archivos NO seleccionados se muestran** en una lista aparte rotulada
+*"No se van a incluir"* (R1: el usuario tiene que **ver** que existen y que quedan afuera).
+
+**Test:** `plan293Patas.test.ts` (13 casos de texto, uno por pata) + `publishWizardModel.test.ts`
+(10 casos) + `npx tsc --noEmit`.
+**Criterio binario:** 23 passed; `tsc` limpio; `shellNav.test.ts` actualizado de 19 a **20** tabs.
+**Flag:** `STACKY_WORKBENCH_ENABLED` (ON) para ver. **Runtimes:** N/A.
+
+---
+
+### F14 — Auditoría, paridad de runtimes, documentación y no-regresión
+
+1. **Auditoría:** 9 acciones emiten su fila en `system_logs` vía
+   `stacky_logger.info(source="git_workbench", action=...)`: `overview`, `diff`, `historial`,
+   `ramas`, `commit_intento`, `commit_ok`, `commit_error`, `push`, `propuesta`.
+   `context_json` **sin contenido de archivos y sin rutas absolutas**.
+2. **Paridad de los 3 runtimes:** el plan no invoca a Codex, Claude Code ni Copilot; la superficie
+   sensible es que **el tablero lee y escribe el mismo working tree que los tres modifican**.
+   Test: con el árbol tocado por cada runtime (dobles), `repo_overview` devuelve lo mismo, y
+   `confirmar_cambios` respeta la selección. **3 casos.** Fallback: `index.lock` ⇒ degrada igual en los 3.
+3. **Docs:** `docs/sistema/17-tablero-de-trabajo.md` + enlace desde `INDEX.md`.
+4. **Ratchets:** los **10** archivos de test nuevos en los **DOS** scripts, `medido + 10` en cada uno,
+   brecha **64**. Se registran **a medida que nacen**, no todos al final: con holgura cero, acumular
+   registros pendientes vuelve **imposible** que pase cualquier commit intermedio.
+   ⚠️ **Hay un CUARTO guardián** que el v2 no nombraba: `tests/test_plan266_harness_runner_paridad.py`
+   exige paridad `.sh`↔`.ps1` (`:65-66`) **y prohíbe la coma colgante** en el array del `.ps1`
+   (`:42`). La **última** entrada del array va **sin coma** (referencia: `scripts/run_harness_tests.ps1:466`).
+   Insertar en el medio, no al final, evita el problema.
+5. **Guardián G3:** `tests/test_plan202_workers.py:37-55` corre git **contra este repo** y compara
+   `status --porcelain` antes/después. Ningún módulo de este plan puede ser importado desde el
+   planner o los workers de la Fragua.
+5. **No-regresión:** delta **cero** contra los 13 baselines de F0.
+
+**Criterio binario:** 8 + 3 passed; `.sh` = 846 y `.ps1` = 782 (medido + 10), brecha **64**; los dos
+tests de ratchet en **0 failed**; delta cero en F0.
 
 ---
 
@@ -733,9 +977,9 @@ La v1 tenía tres **anillos de flag** pero **una sola entrega**: las 12 fases ha
 
 | Anillo | Qué se enciende | Riesgo | Reversión |
 |---|---|---|---|
-| **1 — Mirar** | `STACKY_WORKBENCH_ENABLED` (**ON de fábrica**) | Ninguno: solo lectura | Apagar la opción |
-| **2 — Traer** | `STACKY_WORKBENCH_PULL_ENABLED` (**OFF**) | Cambia archivos locales; `ff-only` no puede perder trabajo | Apagar. Lo ya traído no se deshace (se dice en pantalla) |
-| **3 — Publicar** | `STACKY_WORKBENCH_PUBLISH_ENABLED` (**OFF**) | Escribe en el tracker real | Apagar. **Las ramas y propuestas creadas NO se borran** — eso es decisión del operador, a mano |
+| **1 — Mirar** | `STACKY_WORKBENCH_ENABLED` (**ON de fábrica**) | Ninguno: solo lectura (estado, diff, historial, ramas) | Apagar la opción |
+| **2 — Confirmar y traer** | `STACKY_WORKBENCH_WRITE_ENABLED` (**OFF**) | Toca el working tree y la historia **local**: `add`/`commit`/`switch`/`merge --ff-only`. Nada sale de la máquina | Apagar. Un commit local ya hecho **no se deshace solo** — se dice en pantalla. **Este plan no ofrece deshacer** porque deshacer es `reset`, y `reset` no está en la allowlist |
+| **3 — Enviar** | `STACKY_WORKBENCH_PUSH_ENABLED` (**OFF**) | `push` al remoto real + abre la propuesta de cambio en su GitLab/ADO | Apagar. **Las ramas, commits y propuestas ya enviados NO se borran** — eso es decisión del operador, a mano |
 
 ### 11.2. Rollback
 
@@ -782,7 +1026,12 @@ Ninguna fase automatiza esto y **ninguna lo usa como criterio**: elegir un proye
 ## 14. Fuera del MVP *(entregable 18)*
 
 ### 14.1. Mejoras posteriores (plan propio, sin decisión pendiente)
-Historial de commits navegable · crear y cambiar de rama desde la UI · leer comentarios y aprobaciones de una propuesta (**no existen en el puerto**, §2.2-3) · estado de CI en vivo con reintento · diff lado a lado y resaltado de sintaxis · deshacer una selección con `UndoToastHost`.
+Leer comentarios y aprobaciones de una propuesta (**no existen en el puerto**, §2.2-3) · estado de
+CI en vivo con reintento · diff lado a lado y resaltado de sintaxis · `revert` guiado (§D8) ·
+`last_commit_id` en `RepoWriter.commit_file` (§D7, toca 3 consumidores).
+
+> **Historial** y **crear/cambiar de rama** ya **NO** están acá: la decisión D2 los devolvió al MVP
+> (F10 y F9). El pliego original los pedía por nombre.
 
 ### 14.2. Funcionalidades avanzadas
 Resolución de conflictos asistida dentro de Stacky · `cherry-pick`/`revert` guiados · múltiples repos por proyecto (hoy el config admite **exactamente uno**, clave `workspace_root`) · plantillas de propuesta por proyecto · firma de commits.
@@ -797,7 +1046,8 @@ Resolución de conflictos asistida dentro de Stacky · `cherry-pick`/`revert` gu
 | # | Decisión | Por qué no la toma el plan | Recomendación |
 |---|---|---|---|
 | **D1** | **Control de acceso por usuario / rol / cliente.** El pliego lo pide. **Stacky es mono-operador y no tiene autenticación**: `current_user` es una cabecera sin validar y un `403` significa *"opción apagada"*, no *"sin permiso"* | Construir RBAC acá sería **teatro de seguridad**: daría sensación de control sin control | **Honesto y suficiente hoy:** el control de acceso real es la **allow-list de carpetas** (`console_repo.resolve_known_workspace`) + el PAT del proyecto + la auditoría en `system_logs`. Si de verdad hace falta multiusuario, es **su propio plan**, con autenticación primero |
-| **D2** | **M1 (REST) vs M2 (git local).** El MVP elige M1 (§3) y por eso **no hay `commit`/`push` locales**, y los archivos quedan modificados después de publicar | Es un cambio de modelo mental, no un detalle técnico | Empezar con M1. Si el operador confirma que necesita historia local, M2 es un plan aparte **con allowlist de verbos desde el día uno** |
+| **D2** | ~~M1 (REST) vs M2 (git local)~~ — **RESUELTA POR EL OPERADOR: git local.** El eje REST del v2 queda derogado | — | **Cerrada.** El tablero usa git local para todo salvo abrir la propuesta de cambio, que no tiene equivalente en git |
+| **D8** | **No hay "deshacer".** Deshacer un commit local es `reset`, y `reset` **no está ni puede estar** en la allowlist (R1). El pliego pedía *"permitir deshacer cuando técnicamente sea posible"* | Un `reset` alcanzable por HTTP sobre un repo con trabajo ajeno vivo es exactamente el modo de falla #2 de §3.2 | **Aceptar que no hay deshacer en el MVP** y decirlo en pantalla. Si se quiere, un plan aparte puede estudiar `revert` (que **crea** un commit nuevo y no destruye nada) — es el único verbo de deshacer que sería admisible |
 | **D3** | **Encender los anillos 2 y 3.** Las dos flags de escritura nacen apagadas | Escriben en su disco y en su GitLab/ADO | Encenderlas después del humo de §11.3 |
 | **D4** | **GitLab: `STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED`.** Sin ella, publicar en GitLab falla porque no se puede crear la rama | Ya es una decisión suya de otro plan | Encenderla si el proyecto principal es GitLab. **Alcanza también al editor y al generador de pipelines** |
 | **D5** | **Evidencias en ADO.** No se pueden embeber en la propuesta como en GitLab | Es un límite de la API, no una decisión de diseño | Aceptar la degradación declarada, o pedir un plan de adjuntos de PR para ADO |
@@ -816,29 +1066,39 @@ Resolución de conflictos asistida dentro de Stacky · `cherry-pick`/`revert` gu
 - **Criterio delta** — "esta suite pasa de N a N+k", nunca "0 fallidos en el repo": hay rojos de fábrica ajenos.
 - **Las 13 patas** — los 13 lugares que hay que tocar para que un tab nuevo exista; 11 fallan en silencio.
 
-### Orden de implementación *(reordenado en v2 para respetar los tres cortes de §11.0)*
+### Orden de implementación *(v3 — reordenado por el cambio de eje, respetando los tres cortes)*
 
-**Corte A (desplegable, cero escritura):** 1. **F0** → 2. **F1** → 3. **F1.b** → 4. **F2** → 5. **F2.b** *(semáforo)* → 6. **F3** *(conflictos + el consumidor `CodexConsoleFull.tsx`)* → 7. **F7** *(errores)* → 8. **F8** *(las 13 patas)* → **F10 parcial** (ratchets + docs de lo hecho). **Acá se puede mergear y ya sirve.**
-**Corte B:** 9. **F4** (pull).
-**Corte C:** 10. **F5** (descripción) → 11. **F6** (publicar) → 12. **F9** (asistente + evidencias) → 13. **F10 completo** (auditoría, paridad, docs, ratchets).
+**Corte A (desplegable, CERO escritura):** **F0** → **F1** *(catálogo cerrado)* → **F2** *(las 3 opciones)* →
+**F3** *(overview)* → **F4** *(semáforo)* → **F5** *(conflictos + el consumidor `CodexConsoleFull.tsx`)* →
+**F10** *(historial)* → **F12** *(errores)* → **F13** *(las 13 patas)*. **Acá se puede mergear y ya sirve:**
+el tablero muestra estado, diferencias, historial y ramas, sin poder escribir nada.
+**Corte B (escritura local, nada sale de la máquina):** **F6** *(elegir y confirmar)* → **F7** *(traer)* → **F9** *(ramas)*.
+**Corte C (sale al remoto):** **F8** *(enviar)* → **F11** *(propuesta + evidencias)* → **F14** *(cierre)*.
 
-> **Dependencias, cruzadas y verificadas:** F1.b va **antes** de F2/F4/F6 porque las tres consumen sus flags. **F2.b va antes de F6/F8/F9**, que consumen `evaluar_publicacion`. F5 va **antes** de F6 porque `publish` consume `build_description`. F8 va **antes** de F9 porque el asistente se monta dentro del tab. F3 y F7 son independientes y pueden adelantarse. **Ninguna fase tiene un criterio que dependa de algo que se construya después** — se re-cruzaron los criterios de las 13 fases en la v2 y la única contradicción encontrada (F3, C2) está corregida.
+> **Dependencias, cruzadas y verificadas:** F1 va antes de todo lo que corra git. F2 va antes de
+> F3/F6/F7/F8/F9, que consumen sus flags. F4 va antes de F6/F8/F9/F13, que re-evalúan el semáforo
+> **en el servidor**. F13 va antes del asistente, que se monta dentro del tab. F5 y F12 son
+> independientes. **Ninguna fase tiene un criterio que dependa de algo que se construya después**
+> — se re-cruzaron los criterios de las 15 fases del v3.
 >
-> **Los 9 archivos de test se registran en los dos ratchets a medida que nacen**, no todos juntos en F10: la brecha está en su límite exacto y acumular 9 registros pendientes hasta el final convierte cualquier commit intermedio en un commit que **no puede pasar el gate**. F10 sólo **verifica** los conteos finales.
+> **Los 10 archivos de test se registran en los dos ratchets a medida que nacen.** La brecha está
+> en su límite exacto (64 = `_PS1_LAG_MAX`); acumular registros pendientes vuelve **imposible** que
+> pase cualquier commit intermedio. F14 sólo **verifica** los conteos finales.
 
 ### Definición de Hecho (global)
-- [ ] Los 3 anillos de §11.1 existen, con las dos flags de escritura **apagadas de fábrica** y su excepción **(B)** citada por escrito, y la de lectura **encendida** y presente en `_CURATED_DEFAULTS_ON`.
-- [ ] `K2 = 0` verbos destructivos, probado por el censo **por referencia** de F1 con su mitad de contraste ejecutada.
-- [ ] `K3 = 0` conflictos mal clasificados (F3).
-- [ ] `K4 = 0` mensajes crudos (F7), con el caso anti-jerga verde.
-- [ ] Las **13 patas** de F8 verificadas una por una; `npx tsc --noEmit` limpio.
-- [ ] Cero tablas nuevas, cero migraciones, **cero threads nuevos** (**`backend/app.py:641`** dice textual *"NO agregar threads nuevos"*; v1 decía `:635-636`).
-- [ ] `FLAG_REGISTRY` 495 → **498**; `PLAIN_HELP` 403 → **406**; `_CURATED_DEFAULTS_ON` 12 → **13** **con `default=True` declarado en el `FlagSpec` de la flag ON** (C6); `test_harness_flags.py` en **0 failed**; `test_harness_flags_help.py` **exactamente** en `4 failed / 4 passed`.
-- [ ] Los **9** archivos de test registrados en los **dos** ratchets: `.sh` = **F0.sh + 9**, `.ps1` = **F0.ps1 + 9** (referencia medida 2026-08-02: **836**/**772** ⇒ **845**/**781**), brecha **64**; y `test_harness_ratchet_meta.py` en **4 passed / 0 failed** (C4/C5).
-- [ ] **R13 cerrado:** la rama lleva sufijo aleatorio, `preview` verifica `branch_exists` y **nunca** se publica sobre una rama preexistente, con su caso negativo y su mitad de contraste corrida.
-- [ ] **R14 cerrado:** `CodexConsoleFull.tsx:415-422` muestra los 7 grupos; el caso de texto que lo vigila **falló** al revertir la edición.
+- [ ] Los 3 anillos de §11.1 existen, con las **dos** flags de escritura **apagadas de fábrica** y su excepción **(B)** citada por escrito, y la de lectura **encendida** y presente en `_CURATED_DEFAULTS_ON` **con `default=True` declarado en su `FlagSpec`** (las dos ediciones acopladas).
+- [ ] **`K2 = 0` verbos destructivos**: `reset`, `clean`, `stash`, `rebase`, `checkout`, `branch`, `add -A`, `commit --amend`, `push --force` **no son expresables**, probado por los 26 casos de F1 **con la mitad de contraste ejecutada**.
+- [ ] **EL GATE DEL RIESGO #1 (F6, caso 1) está VERDE y se demostró ROJO** con `add -A` + `commit` sin pathspec inyectados: con trabajo ajeno sucio y stageado en la misma carpeta, el commit contiene **exactamente** los archivos tildados.
+- [ ] `K3 = 0` conflictos mal clasificados (F5), con `CodexConsoleFull.tsx` mostrando los **7** grupos y su caso de texto demostrado rojo al revertir.
+- [ ] `K4 = 0` mensajes crudos (F12), con el caso anti-jerga verde y demostrado rojo.
+- [ ] Las **13 patas** de F13 verificadas una por una; `npx tsc --noEmit` limpio; `shellNav.test.ts` de 19 a **20** tabs.
+- [ ] El tab se llama **`publicar`**, no `trabajo` (colisión con el `id` del grupo de la barra).
+- [ ] Cero tablas nuevas, cero migraciones, **cero threads nuevos** (**`backend/app.py:641`** dice textual *"NO agregar threads nuevos"*).
+- [ ] `FLAG_REGISTRY` 495 → **498**; `PLAIN_HELP` 403 → **406**; `test_harness_flags.py` en **0 failed**; `test_harness_flags_help.py` **exactamente** en `4 failed / 4 passed`.
+- [ ] Los **10** archivos de test registrados en los **dos** ratchets: `.sh` **836 + 10 = 846**, `.ps1` **772 + 10 = 782**, brecha **64**; `test_harness_ratchet_meta.py` y `test_plan259_ratchet_script_parity.py` en **0 failed** (criterio **absoluto**: están verdes); y **sin coma colgante** en el `.ps1` (`test_plan266_harness_runner_paridad.py:42`).
+- [ ] **El escritor NO vive en `api/git.py` ni en `services/console_repo.py`** (guardián G1, barrido de texto literal), y `test_plan265_git_readonly.py` sigue en **13 passed**.
 - [ ] `test_plan293_evidence.py` monkeypatchea `data_dir()` y `backend/data/work_evidence/` **no existe** tras correrlo.
-- [ ] Delta **cero** contra los **11** baselines de F0, **re-medidos con los comandos de F0 al empezar**.
-- [ ] Los **tres cortes de §11.0** quedaron mergeables por separado; el corte A se puede mergear sin encender ninguna flag de escritura.
-- [ ] `docs/sistema/17-tablero-de-trabajo.md` escrito, con lo que **no** se puede prometer.
+- [ ] Delta **cero** contra los **13** baselines de F0, **re-medidos al empezar**.
+- [ ] Los **tres cortes** quedaron mergeables por separado; el corte A se mergea sin encender ninguna flag de escritura.
+- [ ] `docs/sistema/17-tablero-de-trabajo.md` escrito, con lo que **no** se puede prometer (incluido: **no hay deshacer**, §D8).
 - [ ] Un commit por fase, con pathspec explícito. **Sin push**, sin `--no-verify`, sin `amend`/`reset`/`rebase`/`stash`.

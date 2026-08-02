@@ -1,7 +1,17 @@
 # Plan 295 — La integración con GitLab deja de mentir sobre sí misma
 
-**Estado:** **v1 — PROPUESTO (sin implementar).** 2026-08-02, rama `docs/plan-279`.
+**Versión: v1 -> v2.** **Estado:** **v2 — CRITICADO Y CORREGIDO (sin implementar).** 2026-08-02, rama `docs/plan-279`.
 **Autor:** StackyArchitectaUltraEficientCode. **Serie:** continúa 286 · 289 · 290 · 291 · 292.
+**Juez v2: subagente independiente, misma corrida, contexto limpio.**
+
+> **VEREDICTO (v1): RECHAZADO.** Criterio binario aplicado: **≥ 1 hallazgo BLOQUEANTE ⇒ RECHAZADO**. Se encontraron **9** bloqueantes y **9** importantes (**18** hallazgos). Los cuatro decisivos, todos **medidos ejecutando**, no leídos:
+> 1. **C1** — `test_plan218_capability_matrix.py::test_full_y_partial_exigen_evidencia` exige evidencia `archivo.py:DÍGITOS` (`_EVIDENCE_RE = ^[\w/\.]+\.py:\d+$`) para **todo** `full`/`partial`. F2 y F4 convierten **8** entradas a `archivo:símbolo` ⇒ el test rompe con cada una. Y **ya está ROJO** hoy (`2 failed, 8 passed`) por la deuda que el 292 dejó en `tracker.sync.full`. El v1 declaraba ese archivo **verde con 10 passed** y lo usaba como gate de arranque: **el plan se auto-bloqueaba**.
+> 2. **C2** — `_CATEGORY_KEYS["global"]` **no existe** (hay 20 categorías, ninguna se llama así; la del 292 vive en `paridad_proveedores`). El guardián 3 de F10 y el caso 4 de su test daban `KeyError`.
+> 3. **C3** — el plan crea **9** archivos de test de backend y registraba **4**: `test_harness_ratchet_meta.py::test_ratchet_clasifica_todos_los_tests` habría quedado **ROJO al commitear**, y la vía del allowlist está cerrada (`194` entradas contra `_ALLOWLIST_MAX = 197`).
+> 4. **C18** — el gate de arranque de F0 exigía `4 passed` en `test_harness_ratchet_meta.py` y ordenaba, si salía rojo, "resolver eso antes de crear los propios". El archivo sale **`1 failed, 3 passed`** por `tests/test_plan293_commit.py`, **de la sesión paralela**: el gate, tal como estaba escrito, **sólo se satisfacía tocando trabajo ajeno**, que esta corrida tiene prohibido.
+>
+> **La v2 corrige los 18 hallazgos SIN relajar un solo criterio:** se **agrega** una fase (**F2a**), sube el número de casos de aceptación y no se borra ningún assert. El detalle está en `## CHANGELOG v1 -> v2`.
+> **Conteo de anclajes verificados abriendo los archivos: 149/171 OK · 18 DESFASADOS (corregidos en esta v2, no borrados) · 4 INEXISTENTES.**
 
 > ℹ️ **NUMERACIÓN: COLISIÓN DETECTADA Y RESUELTA — el número definitivo es `295`.**
 > Este plan se escribió como `293`, pinneado por el orquestador con una verificación en frío que decía "el máximo es 292 y `293_*` no existe". **Esa foto caducó DENTRO de la misma corrida:** mientras el arquitecto redactaba, una **sesión paralela viva** commiteó dos planes:
@@ -12,15 +22,49 @@
 >
 > **Forward-references:** todas las referencias al plan que va a construir I3 dicen **"PLAN DEL WEBHOOK"** en vez de un número, precisamente porque la numeración es disputada. **No hay ningún forward-reference numérico que pueda romperse.**
 
+## CHANGELOG v1 -> v2
+
+Una entrada por hallazgo resuelto. **Nada se resolvió borrando un criterio, un assert ni un archivo de test.** Delta declarado: **fases 13 → 14** (se agrega **F2a**), **archivos de test nuevos 13 → 13** (9 backend + 4 frontend; F2a no crea archivo, agrega 3 casos al de F2), **casos de aceptación 91 → 113**, **archivos de test ajenos modificados 0 → 1** (`test_plan218_capability_matrix.py`, declarado en F2a), **archivos de test registrados en los DOS ratchets 5 → 9**, **archivos ajenos en la batería de no-regresión 9 → 11**, **riesgos 12 → 14**.
+
+**Casos agregados, uno por uno (ninguno reemplaza a otro):** F2 `+3` (casos 5-7, el regex del guardián) · F3 `+1` (**[ADICIÓN ARQUITECTO 1]**, ningún símbolo repetido) · F5 `+1` (caso 9, bundle por entorno) y el caso 7 pasa de 5 a **6** escenarios parametrizados · F6 `+1` (caso 11, el 422 real) y el caso 6 sube de 6 a **7** mensajes · F7/F8 `+1` (caso 16, éxito ADO no toca `gitlab_sync`) · F10 `+1` (**[ADICIÓN ARQUITECTO 2]**, caso 8, los seis guardianes) · F11 `+1` (caso 6, la variable real `trackerType`).
+
+**Los dos `[ADICIÓN ARQUITECTO]` están en el CUERPO de su fase, no sólo acá:** la 1 en F3 (`test_ningun_simbolo_se_repite_entre_capacidades`, con su código completo) y la 2 en **F10.5.bis** (`test_los_seis_guardianes_de_la_flag_numerica`, con su código completo y su mitad de contraste).
+
+| # | Hallazgo | Severidad | Qué se cambió en la v2 |
+|---|---|---|---|
+| **C1** | `test_full_y_partial_exigen_evidencia` (`test_plan218_capability_matrix.py:60-67`) exige `archivo.py:DÍGITOS` para todo `full`/`partial`; F2 y F4 convierten 8 entradas a símbolo ⇒ insatisfacible. Y el archivo **ya está rojo** (`2 failed, 8 passed`) por `gitlab/tracker.sync.full`. | **BLOQ** | **Fase nueva `F2a`** que AMPLÍA `_EVIDENCE_RE` para aceptar línea **o** símbolo (sigue rechazando vacío y `archivo.py` pelado), con su mitad de contraste y 3 casos nuevos en `test_plan295_matriz_no_miente.py`. El criterio de F2/F4 pasa de "10 passed / delta cero" a "**de `2 failed, 8 passed` medido a `10 passed`**", declarado como mejora. |
+| **C2** | `_CATEGORY_KEYS["global"]` **no existe**: 20 categorías, la del 292 está en `paridad_proveedores` (`harness_flags.py:617`). El caso 4 de F10 daba `KeyError`. | **BLOQ** | Guardián 3 y caso 4 de F10 apuntan a **`paridad_proveedores`**. Se agrega el assert `categorize(key) != "otros"`. Se aclara que `group="global"` de la `FlagSpec` es **otro campo** (433 flags lo usan) y sí es correcto. |
+| **C3** | 9 archivos de test nuevos, 4 registrados ⇒ `test_harness_ratchet_meta.py` ROJO al commitear. Allowlist saturado (194 vs `_ALLOWLIST_MAX = 197`). El DoD decía 5. | **BLOQ** | Los **9** se registran en `.sh` **y** `.ps1` (tabla explícita en F12). `test_harness_ratchet_meta.py` entra en la batería de no-regresión. DoD y F12 corrigen 5 → 9. |
+| **C4** | `_CAPABILITY_TO_SYMBOL["links.item"]["gitlab"] = "services.gitlab_deep_links:url_de_issue"` — **el símbolo no existe** (el real es `compose_issue_url`) y el status es `full` ⇒ el gate nace rojo. | **BLOQ** | Mapa con el símbolo **verificado**: `services.gitlab_deep_links:compose_issue_url`. Se elimina el comando de "búsqueda" cuya interpretación quedaba al modelo. |
+| **C5** | Dos entradas del mapa apuntaban a `services.ado_client:AdoClient` — una clase que existe siempre ⇒ **el gate era adorno** para `azure_devops` e inflaba K1. | **BLOQ** | Símbolos que **hacen el trabajo**, verificados: `services.ado_sync:upsert_single_work_item` (`:235`) y `services.ado_client:_RETRY_AFTER_MAX` (`:49`). Más **[ADICIÓN ARQUITECTO 1]**: un caso que prohíbe que dos capacidades distintas compartan el mismo `módulo:símbolo` por proveedor — el antídoto mecánico y permanente a esta clase de adorno. |
+| **C6** | `_FROZEN_BOUNDS` **no puede avisar**: `test_bounds_map_is_frozen` ya está ROJO (`1 failed, 17 passed`) por 6 numéricas del plan 284. Con criterio "delta cero", F10 se cerraba sin la entrada y nada lo cazaba. | **BLOQ** | El criterio deja de apoyarse en el archivo rojo: **[ADICIÓN ARQUITECTO 2]** mete en `test_plan295_flag_intervalo.py` (verde) un caso que asertá los **seis** guardianes de la flag numérica de una sola vez, incluida la entrada exacta de `_FROZEN_BOUNDS`. |
+| **C7** | Dos rutas INEXISTENTES sostenían decisiones de "fuera de alcance": `frontend/src/lib/trackerUrls.ts` y `frontend/src/services/__tests__/plan288SuperficieClasificacion.test.ts`. | **BLOQ** | Rutas reales: **`frontend/src/utils/trackerUrls.ts`** (confirmado por `plan282Censo.test.ts:78`) y **`frontend/src/__tests__/plan288SuperficieClasificacion.test.ts`**. |
+| **C8** | F0 declaraba verdes dos archivos que están rojos y el "8 rojos de fábrica" no estaba medido (el real, en los 11 archivos que el plan nombra, es **13 fallos en 6 archivos**: 4+3+1+2+1+2). | **BLOQ** | Tabla de baseline **MEDIDA** en F0 (archivo por archivo, con el venv del repo) y todos los criterios reescritos como delta contra esos números. Actualizado también en el principio 9 de §3, el objetivo de F0, el riesgo R11 y el glosario. |
+| **C18** | **El gate de arranque de F0 le ORDENABA al implementador tocar trabajo ajeno.** Decía que `test_harness_ratchet_meta.py` tiene que salir `4 passed` y que "si sale rojo … hay que resolver eso antes de crear los propios". Re-medido: sale **`1 failed, 3 passed`** por **`tests/test_plan293_commit.py`**, de la **sesión paralela**, creado sin registrar **después** de la primera medición. "Resolverlo" = registrar el test de otro ⇒ violar el alcance. Y era un criterio **absoluto** sobre un archivo con rojo ajeno. | **BLOQ** | Baseline corregido a **`1 failed, 3 passed`** con la causa nombrada, y el gate convertido en **DELTA CON LISTA**: los no clasificados tienen que seguir siendo **exactamente** `['tests/test_plan293_commit.py']` en F0 **y** en F12, con **cero** `test_plan295_*`. Se declara por escrito que **este plan NO arregla ese rojo** y por qué. Riesgos **R13** y **R14** nuevos, y **§10.6** para el operador. |
+| **C9** | El `record_success("gitlab_sync", …)` de F7 **no consultaba el tracker**: corría en todo sync exitoso de `sync-v2`, reintroduciendo en el camino de éxito el acoplamiento cross-proveedor que F8 elimina del de fallo. | IMP | El bloque de éxito se mueve dentro del ruteo por tracker y se agrega el **caso 16**: "sync exitoso de un proyecto ADO ⇒ `gitlab_sync` intacto". |
+| **C10** | `_sesion_para` llamaba `crear_contexto_openssl(ca_bundle)` con el string crudo, salteando `resolver_ca_bundle` ⇒ la sonda **no** habla el TLS del sync si el bundle viene por entorno (`STACKY_GITLAB_CA_BUNDLE` / `REQUESTS_CA_BUNDLE`). | IMP | `_sesion_para` copia el idioma exacto del cliente (`gitlab_client.py:155-181`): `resolver_ca_bundle(...)` y después `crear_contexto_openssl(ruta)`. **Caso 9** nuevo: con el campo vacío y la env apuntando a un `.pem` real, el `mount()` ocurre. |
+| **C11** | El v1 contaba "cuatro `return` tempranos" y listaba cinco, y **olvidaba el `return out` final (`:173`)**: son **SEIS** caminos de salida. | IMP | Los 6 enumerados; el caso 7 asertá `len(checks) == 6` en **6** escenarios (era 5). |
+| **C12** | `_COPY_GITLAB_POR_KIND` ignoraba `"unknown"`, que `_kind_for_status` **sí produce** para 400/409/422 (y es el default de `TrackerApiError.__init__`). | IMP | Séptima entrada `"unknown"` con copy accionable; el caso 6 sube de "6 mensajes distintos" a "**7**". |
+| **C13** | Aritmética del ratchet mal: F2 convierte 2 entradas pero **sólo una** era por línea (la otra tenía evidencia vacía) ⇒ tras F2 son **103**, no 102; tras F4 son **95**, no 96. El output rojo literal ("102") era inalcanzable. | IMP | 104 → 103 → **95**, `_TOPE_EVIDENCIAS_POR_LINEA = 95`, y el output rojo literal corregido. Verificado que las dos regex (B2 sin anclar y la de F4 anclada) dan **el mismo 104**, así que el baseline es comparable. |
+| **C14** | F4 dejaba `<símbolo real>` ×3 y `<N>` ×1 para que el implementador adivinara. Y `tracker.updates.history` gitlab apuntaba a `:606`, que cae dentro de `find_child_by_marker` (`:587`), no de la capacidad. | IMP | Los cuatro nombres literales y verificados: `fetch_open_work_items` (`ado_client.py:319`), `_RETRY_AFTER_MAX` (`ado_client.py:49`), `fetch_item_updates` (`gitlab_provider.py:619`), y `tracker.items.get` gitlab hoy es `services/gitlab_provider.py:164` (no `<N>`). |
+| **C15** | El v1 decía que `EpicChildrenPanel` **no** recibe el tracker y abría una decisión (a)/(b). **Lo recibe**: `:45` ya tiene `trackerType` vía `useWorkbench` (Plan 282 F4). Y el JSX usaba `trackerActivo`, que no existe ⇒ `tsc` rojo. | IMP | Se usa la variable real **`trackerType`**, se borra la decisión (a)/(b) y el test asertá `nombreDeNivel(trackerType`. |
+| **C16** | Cuatro anclajes de `sync_from_ado` corridos 1-2 líneas y `import config` corrido 9. Insertar el `except` nuevo "entre `:1247` y `:1248`" lo mete **dentro** del handler de `AdoApiError`, antes de su `return`. | IMP | Líneas reales: `CapabilityUnavailable :1231`, `AdoConfigError :1244`, `AdoApiError :1247`, `Exception :1249`, `_sync_via_provider_or_ado :1230`, `import config :48`. El punto de inserción se ancla por **símbolo** y se dice cuál es la línea siguiente. |
+| **C17** | Frases y huecos que un modelo menor tiene que inferir: el archivo de `docs/sistema/` sin nombrar, `config.config` en un módulo que **no importa `config`**, `_FROZEN_BOUNDS` "junto a la del 292" cuando el propio archivo exige **al final**, "se BORRA esa entrada del mapa". | IMP | Todo literal: el `import config` explícito, la posición **AL FINAL** de `_FROZEN_BOUNDS` con la razón (`_first_key_with_min()` toma la primera key con `min_value`), y el archivo de `docs/sistema/` resuelto con un comando cuyo resultado es un nombre, no una decisión. |
+| — | `endpoints.ts` **no menciona** `gitlab_ca_bundle` en ningún lado (0 ocurrencias): la justificación del `slice` del caso 1 de F5 era falsa. El `slice` se conserva (es correcto igual) con la razón corregida. | MEN | Nota corregida en F5.4. |
+| — | Verificado **correcto** y sin cambio: la mecánica de `_CURATED_DEFAULTS_ON` (bool ON sí / numérica no y sin `default=`), `TrackerApiError` con `.status`/`.kind` y **sin** `status_code`/`retry_after`, `deployment/harness_defaults.env` **no** es guardián por flag, `len(CAPABILITY_KEYS) == 71`, `len(_CAPABILITY_TO_PORT_METHOD) == 17`, `TicketBoard.tsx` **sí** pasa `intervalMs` en dos lugares, el diferimiento de I3 (los 6 puntos de escritura existen y `gitlab_ca_bundle` está en los 6). | — | Se anotan como CONFIRMADOS para que nadie los vuelva a auditar. |
+
+---
+
 ## Estado de implementación por fase
 
 **A completar por quien implemente.** Una fila por fase, con el hash del commit y la evidencia medida (conteo de `passed` + el output de la mitad de contraste). Una fila sin evidencia **no cuenta como IMPLEMENTADA**.
 
 | Fase | Estado | Commit | Evidencia (conteo + mitad de contraste ejecutada) |
 |---|---|---|---|
-| **F0** — línea base medida | PENDIENTE | (sin commit propio) | B1..B6 + baseline de 7 archivos + `tsc --noEmit` |
+| **F0** — línea base medida | PENDIENTE | (sin commit propio) | B1..B6 + baseline MEDIDO de 11 archivos + `tsc --noEmit` |
 | **F1** — dead code `gitlabProfileModel` | PENDIENTE | | |
 | **F2** — la matriz deja de mentir | PENDIENTE | | |
+| **F2a** — el guardián del 218 admite evidencia por SÍMBOLO | PENDIENTE | | |
 | **F3** — gate de las transversales | PENDIENTE | | |
 | **F4** — ratchet de evidencias | PENDIENTE | | |
 | **F5** — la sonda habla el TLS del proyecto | PENDIENTE | | |
@@ -45,7 +89,8 @@ Este plan cierra esos seis defectos. No agrega capacidad nueva de integración: 
 | # | KPI | Hoy (MEDIDO 2026-08-02) | Después | Cómo se mide |
 |---|---|---|---|---|
 | K1 | Claves de la matriz de paridad que el gate anti-mentira puede vigilar | **17 de 71** (`_CAPABILITY_TO_PORT_METHOD`) | **≥ 24 de 71** (17 por método de puerto + ≥ 7 por símbolo) | `len(_CAPABILITY_TO_PORT_METHOD) + len(_CAPABILITY_TO_SYMBOL)` |
-| K2 | Entradas de la matriz cuya evidencia es `archivo:línea` (caduca al primer commit ajeno) | **104** (ADO 50 + GitLab 54) | **≤ 96** (ratchet descendente, −8 mínimo) | test `test_ratchet_evidencias_por_simbolo` |
+| K2 | Entradas de la matriz cuya evidencia es `archivo:línea` (caduca al primer commit ajeno) | **104** (ADO 50 + GitLab 54) | **≤ 95** (ratchet descendente, −9: F2 convierte 1 y F4 convierte 8) | test `test_ratchet_evidencias_por_simbolo` |
+| K2b | **[v2, C1]** Entradas `full`/`partial` cuya evidencia el guardián del 218 admite | **hoy el guardián RECHAZA toda evidencia por símbolo y ya está rojo por 1 entrada** | **todas** (línea o símbolo; sigue rechazando vacío y `archivo.py` pelado) | `test_plan218_capability_matrix.py` **de `2 failed, 8 passed` a `10 passed`** |
 | K3 | Capacidades declaradas `absent` para GitLab que en realidad existen | **2** (`tracker.sync.incremental`, y `tracker.rate_limit.clamp` declarada `partial` con la pérdida ya resuelta) | **0** | gate nuevo de F3 corrido contra el commit anterior |
 | K4 | Referencias a claves de circuit breaker en producción | `ado_sync` **7** · `jira_sync` **5** · `ado_identity` **2** · `gitlab_sync` **0** | `gitlab_sync` **≥ 3** | `grep -rn '"gitlab_sync"' backend --include=*.py \| grep -v /tests/` |
 | K5 | Errores de API de GitLab que salen como `500 unexpected` | **todos** (`TrackerApiError` no está en ningún `except` de `/sync` ni `/sync-v2`) | **0**: `502` + `kind` + copy que nombra GitLab | test de F6 con `TrackerApiError(401, kind="auth")` |
@@ -85,7 +130,7 @@ Este plan cierra el lazo: corrige las dos entradas, **extiende el gate a las tra
 6. **Mono-operador sin auth real.** Cero RBAC. Cero multiusuario. Un `403` en este plan significa **flag apagada**, nunca *permiso* (ver `backend/api/setup_guide.py:95-96`, que ya usa esa semántica).
 7. **No degradar. Backward-compatible. Reusar.** Se reusa `services/integration_breaker.py` **tal cual** (F7 no le agrega una función: le agrega dos constantes `REASON_*` y una key), los helpers de `frontend/src/lib/trackerLabels.ts` **tal cual** (F11 no escribe un helper nuevo), el adaptador `_AdaptadorOpenSSL` de `services/gitlab_client.py:60-79` (F5 lo importa, no lo copia), y `services/maintenance.py:17-42` si alguna vez hiciera falta un periódico (**no hace falta en este plan: cero threads nuevos**, ver `backend/app.py:641` "*NO agregar threads nuevos*").
 8. **`services/` no importa de `api/`.** Verificado y respetado en las 13 fases. F5 pone la lógica nueva en `services/gitlab_setup_check.py` y F7 en `services/integration_breaker.py`; los dos siguen sin importar nada de `api/`.
-9. **Sin falsos verdes** (gotcha **G7**). Cada fase nombra **archivos de test concretos** y el comando por archivo. **Sin `-k`** (`pytest -k` sin match da **exit 0**). Un archivo inexistente da **exit 4**, así que el criterio siempre exige un conteo de `passed`, nunca "no falló". `pytest tests` completo **no es un veredicto** (contaminación cruzada). Hay **8 rojos de fábrica** en el backend: todos los criterios de este plan son **delta**, no absolutos, y F0 los mide antes de tocar una línea.
+9. **Sin falsos verdes** (gotcha **G7**). Cada fase nombra **archivos de test concretos** y el comando por archivo. **Sin `-k`** (`pytest -k` sin match da **exit 0**). Un archivo inexistente da **exit 4**, así que el criterio siempre exige un conteo de `passed`, nunca "no falló". `pytest tests` completo **no es un veredicto** (contaminación cruzada). **[v2, C8+C18] Hay 13 tests rojos de fábrica repartidos en 6 de los 11 archivos que este plan nombra** (medido, tabla en F0 — el v1 decía "8" sin fuente): todos los criterios de este plan son **delta**, no absolutos. Y **donde el archivo rojo no puede discriminar** —`test_harness_flags_bounds.py`, `test_harness_flags_help.py`— **el criterio se muda a un archivo verde con un assert de contenido** (F10.5.bis), porque "delta cero sobre un archivo rojo" pasa igual con el cableado puesto y sin él.
 
 ---
 
@@ -152,7 +197,7 @@ Cada fase es **autocontenida y verificable sola**. Un implementador puede parar 
 
 ### F0 — Línea base medida (sin código de producción)
 
-**Objetivo:** medir el estado exacto del repo **antes** de tocar nada, para que los criterios de las fases siguientes sean **delta** y no absolutos. Sin esto, los 8 rojos de fábrica del backend se confunden con daño propio.
+**Objetivo:** medir el estado exacto del repo **antes** de tocar nada, para que los criterios de las fases siguientes sean **delta** y no absolutos. Sin esto, los **13 rojos de fábrica medidos** (en 6 archivos) se confunden con daño propio — y peor: **dos de esos archivos rojos no pueden discriminar si el cableado está o no**, así que "delta cero" sobre ellos no es un criterio.
 
 **Valor:** es la fase que hace que las otras doce sean auditables. Sin F0 no hay mitad de contraste creíble.
 
@@ -199,7 +244,21 @@ grep -rn "gitlabProfileModel" "Stacky Agents/frontend/src" | wc -l
 
 ⚠️ **B4 es la trampa de commit más peligrosa de este plan.** `backend/tests/test_plan259_ratchet_script_parity.py:46` fija `_PS1_LAG_MAX = 64` y el assert de `:93` es `len(solo_en_sh) <= _PS1_LAG_MAX`. La brecha real es **exactamente 64**. Consecuencia dura: **cada archivo de test nuevo que este plan agregue al `.sh` tiene que agregarse también al `.ps1`, en la misma corrida.** Registrar uno solo en el `.sh` deja la brecha en 65 y pone el ratchet **rojo**, y como es trampa de commit, revienta al final, cuando el implementador cree que terminó. El formato difiere: el `.sh` lleva la ruta **pelada** (`  tests/test_plan295_foo.py`) y el `.ps1` la lleva **entrecomillada y con coma** (`  "tests/test_plan295_foo.py",`). El **último** elemento del array `.ps1` va **sin** coma final (ver `backend/scripts/run_harness_tests.ps1:1008`).
 
-**Baseline de rojos de fábrica.** Correr y anotar el resultado exacto (passed/failed) de los siguientes archivos, que este plan **no** modifica y que son los que se sabe rojos o frágiles:
+**Baseline de rojos de fábrica — MEDIDO EN LA CRÍTICA v2, no estimado.** Se corrió cada archivo **por separado** con `backend/.venv/Scripts/python.exe -m pytest tests/<archivo> -q` desde `backend/`. **Estos son los números contra los que se mide el delta. El v1 declaraba verdes dos de ellos y no lo estaban.**
+
+| Archivo | Medido 2026-08-02 | Este plan lo modifica? | Nota |
+|---|---|---|---|
+| `tests/test_harness_flags_help.py` | **4 failed, 4 passed** | no | rojo ajeno conocido (`PLAIN_HELP` no se deriva de `description`) |
+| `tests/test_error_fingerprints_catalog.py` | **3 failed, 5 passed** | no | rojo ajeno conocido |
+| `tests/test_harness_flags.py` | **59 passed** | **sí** (`_CURATED_DEFAULTS_ON`, 2 booleanas ON) | **VERDE**: cualquier rojo acá es daño propio |
+| `tests/test_harness_flags_bounds.py` | **1 failed, 17 passed** | **sí** (`_FROZEN_BOUNDS`) | ⚠️ **el que falla es `test_bounds_map_is_frozen`**, por **6** numéricas del plan 284 (`STACKY_DOCS_*`) ausentes del mapa. **Ver C6: este guardián NO discrimina** |
+| `tests/test_plan218_capability_matrix.py` | **2 failed, 8 passed** | **sí** (F2a) | ⚠️ falla `test_full_y_partial_exigen_evidencia` (`gitlab/tracker.sync.full` trae un símbolo) y `test_doc_de_paridad_esta_sincronizado` (el doc en disco dice `gitlab \| 34 \| 14 \| 21 \| 2` y el render da `33 \| 14 \| 22 \| 2`). **Ver C1 y C8** |
+| `tests/test_plan259_ratchet_script_parity.py` | **12 passed** | no (sólo se le agregan rutas a los scripts) | VERDE |
+| `tests/test_harness_ratchet_meta.py` | **1 failed, 3 passed** | no | ⚠️ **el v1 no lo nombraba (C3), y su rojo es AJENO Y EN VUELO (C18).** Falla `test_ratchet_clasifica_todos_los_tests` por **`tests/test_plan293_commit.py`**, de la **sesión paralela** (su plan 293, el tablero de Git), creado sin registrar en el `.sh`/`.ps1` ni en el allowlist. **Este plan NO lo arregla** |
+| `tests/test_p7_sync_endpoints.py` | **3 passed** | roza (F10) | VERDE |
+| `tests/test_plan259_setup_guide_api.py` | **27 passed** | roza (F5) | VERDE |
+| `tests/test_plan259_setup_guide_data.py` | **14 passed** | roza (F5) | VERDE |
+| `tests/test_plan276_gitlab_sync.py` | **2 failed, 19 passed** | no | rojo ajeno; archivo tocado por la sesión paralela |
 
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_help.py" -q
@@ -208,12 +267,66 @@ grep -rn "gitlabProfileModel" "Stacky Agents/frontend/src" | wc -l
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_bounds.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_capability_matrix.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan259_ratchet_script_parity.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_ratchet_meta.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_p7_sync_endpoints.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan259_setup_guide_api.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan259_setup_guide_data.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan276_gitlab_sync.py" -q
 ```
 
-**Criterio de aceptación BINARIO:** la tabla B1..B6 está completa con números reales, y el baseline de los 7 archivos está anotado con su conteo `passed`/`failed`. Si algún número difiere de los medidos acá, se anota el nuevo y **se ajustan los criterios de la fase que lo usa** (F3 usa B1, F4 usa B2, F10 usa B3 y B4).
+> **[v2, C8 + C18] "8 rojos de fábrica" era un número sin fuente.** El real, en los 11 archivos que este plan nombra, es **13 tests fallando repartidos en 6 archivos** (4 + 3 + 1 + 2 + 1 + 2). Y **tres de esos seis** son guardianes sobre los que el v1 apoyaba criterios binarios: `test_plan218_capability_matrix.py` (C1), `test_harness_flags_bounds.py` (C6) y `test_harness_ratchet_meta.py` (C18). **Todo criterio de este plan es delta contra la tabla de arriba, y donde el archivo rojo no discrimina, el criterio se muda a un archivo verde (ver F10.5.bis).**
+>
+> ⚠️ **La foto se mueve DENTRO de la corrida.** El baseline de `test_harness_ratchet_meta.py` pasó de `4 passed` a `1 failed, 3 passed` **entre dos mediciones de esta misma crítica**, porque la sesión paralela creó `tests/test_plan293_commit.py` en el medio. **El implementador re-mide la tabla completa en F0 y gana lo que mide**, con una excepción que no es negociable: **si el rojo nuevo es un archivo de OTRA sesión, se anota y NO se arregla.**
 
-**Mitad de contraste:** F0 no tiene código, así que su mitad de contraste es **negativa y obligatoria**: si `test_plan218_capability_matrix.py` sale **rojo** en F0, este plan **no puede empezar** por F2 (estaría arreglando rojo ajeno). Se esperan **10 passed** en ese archivo (tiene 10 tests: `:39,44,50,60,70,80,84,99,107,136`).
+**B7 — el censo del ratchet meta (nuevo en v2, C3):**
+
+```bash
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+.venv\Scripts\python.exe -c "import pathlib,re; b=pathlib.Path('.'); al=b/'tests'/'harness_ratchet_allowlist.txt'; ent={l.split('#',1)[0].strip() for l in al.read_text(encoding='utf-8').splitlines() if l.split('#',1)[0].strip()}; sh=(b/'scripts'/'run_harness_tests.sh').read_text(encoding='utf-8'); r=set(re.findall(r'^[ \t]*(tests/[\w/]+\.py)[ \t]*$', sh, re.M)); todos={p.as_posix() for p in (b/'tests').rglob('test_*.py')}; todos={t[t.index('tests/'):] for t in todos}; print('allowlist',len(ent),'ratchet',len(r),'total',len(todos),'sin clasificar',sorted(todos-r-ent))"
+```
+
+| ID | Qué mide | Valor medido |
+|---|---|---|
+| B7 | entradas de `harness_ratchet_allowlist.txt` | **194** (tope `_ALLOWLIST_MAX = 197`, `test_harness_ratchet_meta.py:66`) |
+| B7 | rutas en `HARNESS_TEST_FILES` del `.sh` (parser del meta-test) | **838** |
+| B7 | archivos `tests/test_*.py` totales | **1032** |
+| B7 | **sin clasificar HOY** | **1** — `tests/test_plan293_commit.py`, **de la SESIÓN PARALELA** ⇒ el meta-ratchet está **rojo de fábrica** ([v2, C18]) |
+
+⚠️ **[v2, C3] Consecuencia dura:** los **9** archivos de test nuevos del backend van a `HARNESS_TEST_FILES` del `.sh` **y** al `.ps1`. **No** al allowlist: con 194 entradas y tope 197, meter 5 daría 199 y pondría rojo `test_allowlist_grandfathered_solo_baja` también. Registrar los 9 en los dos scripts deja la brecha `sh − ps1` en **64**, que es el máximo permitido.
+
+**Criterio de aceptación BINARIO:** la tabla B1..B7 está completa con números reales, y el baseline de los **11** archivos está anotado con su conteo `passed`/`failed`. Si algún número difiere de los medidos acá, se anota el nuevo y **se ajustan los criterios de la fase que lo usa** (F2a usa el baseline del 218, F3 usa B1, F4 usa B2, F10 usa B3, todas las fases con test nuevo usan B4 y B7).
+
+**Mitad de contraste de F0:** F0 no tiene código, así que su mitad de contraste es **positiva y obligatoria**:
+
+1. `test_plan218_capability_matrix.py` tiene que salir **`2 failed, 8 passed`** con los DOS nombres exactos de la tabla. **Si sale `10 passed`, alguien ya arregló esos dos rojos y F2a queda sin objeto: hay que releer el archivo antes de tocarlo.**
+2. **[v2, C18]** `test_harness_ratchet_meta.py` tiene que salir **`1 failed, 3 passed`**, y el mensaje del fallo tiene que listar **exactamente un** archivo: `tests/test_plan293_commit.py`. Se anota la lista completa, tal cual sale.
+
+#### [v2, C18] El gate del meta-ratchet es DELTA CON LISTA, y NO se arregla el rojo ajeno
+
+**Lo que decía el v1 y por qué estaba mal:** *"`test_harness_ratchet_meta.py` tiene que salir `4 passed` (si sale rojo, hay un test nuevo sin registrar de OTRA sesión y **hay que resolver eso antes de crear los propios**)"*. Dos defectos:
+
+1. **Le ordenaba al implementador tocar trabajo ajeno.** "Resolverlo" significa registrar `tests/test_plan293_commit.py` en `run_harness_tests.sh` / `.ps1` o meterlo en el allowlist. Ese archivo es de la **sesión paralela** (su plan 293) y esta corrida tiene **prohibido** tocar su trabajo. Un gate que sólo se satisface violando el alcance no es un gate: es una trampa.
+2. **Era un criterio ABSOLUTO sobre un archivo con rojo ajeno**, que es exactamente lo que este plan prohíbe en todas las demás fases.
+
+**El criterio correcto, binario y que sí puede fallar:**
+
+```bash
+cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+.venv\Scripts\python.exe -m pytest tests/test_harness_ratchet_meta.py -q
+```
+
+| Momento | Resultado exigido | Lista de no clasificados exigida |
+|---|---|---|
+| **F0** (antes de crear un solo test) | `1 failed, 3 passed` | **exactamente** `['tests/test_plan293_commit.py']` |
+| **F12** (con los 9 archivos nuevos registrados) | `1 failed, 3 passed` — **delta CERO** | **exactamente** `['tests/test_plan293_commit.py']` — **cero** `test_plan295_*` |
+
+**Lo que este criterio caza y el absoluto no:** que uno de los 9 archivos nuevos quede sin registrar. Si eso pasa, la lista crece a **dos** entradas y aparece un `test_plan295_*` en el mensaje. **Lo que NO exige: arreglar el rojo ajeno.**
+
+> **`tests/test_plan293_commit.py` NO se registra en este plan, y la razón es de alcance, no de pereza.** Es un archivo de test en vuelo de otra sesión: su autor sabe si pasa aislado (condición para el `.sh`) o si va al allowlist con motivo. Decidirlo desde acá es escribir en su plan. **Si el operador quiere que se arregle, es una línea suya en §10.6, no una decisión de este plan.**
+>
+> **Y el allowlist tampoco es opción para nada de este plan:** 194 entradas contra `_ALLOWLIST_MAX = 197`. Quedan 3 slots y este plan crea 9 archivos. **Los nueve van al `.sh` y al `.ps1`.**
+
+> **[v2, C1] El gate de arranque del v1 estaba invertido.** Decía: "si `test_plan218_capability_matrix.py` sale rojo en F0, este plan no puede empezar por F2". Está rojo, y **F2a existe precisamente para arreglarlo**, porque los dos rojos son la deuda que F2 y F4 tienen que pagar: uno es un símbolo que el guardián no admite (lo que este plan hace 8 veces más) y el otro es el doc de paridad desincronizado (que F2 regenera). **No es rojo ajeno: es el rojo que este plan cierra.**
 
 **Flag que la protege:** ninguna (no hay código).
 
@@ -358,8 +471,12 @@ Pasa a:
 **Casos borde y por qué `_f` y no `_p`:**
 
 - `_p(...)` **exige** una nota de pérdida no vacía — lo vigila `test_partial_exige_loss_no_vacio` (`backend/tests/test_plan218_capability_matrix.py:50`). Si se dejara `partial` habría que inventar una pérdida que ya no existe.
-- `_f(evidence)` **exige** evidencia no vacía — lo vigila `test_full_y_partial_exigen_evidencia` (`:60`). Las dos entradas nuevas la traen.
+- `_f(evidence)` **exige** evidencia no vacía — lo vigila `test_full_y_partial_exigen_evidencia` (`:60-67`). Las dos entradas nuevas la traen.
 - **`CAPABILITY_KEYS` NO se toca.** `test_claves_congeladas_no_se_renombran` (`:99`) compara un `sha256` de las claves unidas por `\n`. Este cambio toca **valores**, no claves: ese hash **no se mueve**. Si el implementador ve ese test rojo, tocó una clave por error.
+
+> 🛑 **[v2, C1] DEPENDENCIA DURA: F2 NO PUEDE CERRARSE SIN F2a.** `test_full_y_partial_exigen_evidencia` no exige "evidencia no vacía": exige que **matchee `_EVIDENCE_RE = re.compile(r"^[\w/\.]+\.py:\d+$")`** — o sea `archivo.py:DÍGITOS`. Verificado abriendo `test_plan218_capability_matrix.py:60-67`. Las dos entradas que F2 pasa a `archivo:símbolo` **rompen ese test**, igual que las 6 de F4. Y el test **ya está rojo** por `gitlab/tracker.sync.full`, que el plan 292 dejó con `services/gitlab_sync.py:sync_gitlab_tickets`.
+>
+> **Orden obligatorio: F2a se implementa ANTES de F2, o los dos en el mismo commit.** El v1 tenía este mismo grafo mal: ponía F2 primero y declaraba que el archivo del 218 no se modificaba.
 
 **Cambio 3 — regenerar el documento.** El doc es **generado** por `render_markdown_matrix()` y `test_doc_de_paridad_esta_sincronizado` (`:84-96`) lo compara **normalizado a `\n`**. Comando exacto de regeneración:
 
@@ -373,14 +490,19 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .venv\Scripts\python.exe -c 
 
 3. `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan295_matriz_no_miente.py`
 
-**Casos a cubrir (los 4 son de PRESENCIA del valor correcto, no de ausencia):**
+**Casos a cubrir (7 — los 4 del v1 más los 3 de F2a; todos de PRESENCIA del valor correcto, no de ausencia):**
 
-| # | Caso | Assert |
-|---|---|---|
-| 1 | GitLab declara **full** el sync incremental | `capability_status("gitlab", "tracker.sync.incremental") == "full"` |
-| 2 | GitLab declara **full** el clamp de `Retry-After` | `capability_status("gitlab", "tracker.rate_limit.clamp") == "full"` |
-| 3 | Las dos evidencias nuevas son `archivo:SÍMBOLO`, no `archivo:línea` | para las 2 claves: `re.search(r":\d+$", evidence) is None` **y** `":" in evidence` |
-| 4 | `supports()` — la vía consultiva que usa el código de producción — dice `True` para las dos | `supports("gitlab", k) is True` para las 2 claves |
+| # | Caso | Assert | Fase |
+|---|---|---|---|
+| 1 | GitLab declara **full** el sync incremental | `capability_status("gitlab", "tracker.sync.incremental") == "full"` | F2 |
+| 2 | GitLab declara **full** el clamp de `Retry-After` | `capability_status("gitlab", "tracker.rate_limit.clamp") == "full"` | F2 |
+| 3 | Las dos evidencias nuevas son `archivo:SÍMBOLO`, no `archivo:línea` | para las 2 claves: `re.search(r":\d+$", evidence) is None` **y** `":" in evidence` | F2 |
+| 4 | `supports()` — la vía consultiva que usa el código de producción — dice `True` para las dos | `supports("gitlab", k) is True` para las 2 claves | F2 |
+| 5 | **[v2, F2a]** el guardián del 218 **acepta** una evidencia por símbolo | `_EVIDENCE_RE.match("services/gitlab_sync.py:sync_gitlab_tickets")` no es `None` | F2a |
+| 6 | **[v2, F2a]** el guardián del 218 **sigue rechazando** evidencia vacía y `archivo.py` pelado | `_EVIDENCE_RE.match("")` es `None` **y** `_EVIDENCE_RE.match("services/x.py")` es `None` | F2a |
+| 7 | **[v2, F2a]** el guardián del 218 **sigue rechazando** un símbolo que no es un identificador Python | `_EVIDENCE_RE.match("services/x.py:no es un simbolo")` es `None` **y** `_EVIDENCE_RE.match("services/x.py:")` es `None` | F2a |
+
+> Los casos 5-7 importan `_EVIDENCE_RE` **desde `tests.test_plan218_capability_matrix`**, no lo redefinen. Redefinirlo sería probar una copia del regex en vez del que corre en el gate: el falso verde clásico.
 
 **Comando exacto:**
 
@@ -388,17 +510,148 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"; .venv\Scripts\python.exe -c 
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan295_matriz_no_miente.py" -q
 ```
 
-**Criterio de aceptación BINARIO:** `4 passed` en el archivo nuevo **y** `10 passed` en `test_plan218_capability_matrix.py` (el conteo de F0; el archivo del 218 no se modifica, así que su delta tiene que ser **cero**):
+**Criterio de aceptación BINARIO de F2 (delta contra el baseline MEDIDO de F0, nunca absoluto):** `7 passed` en el archivo nuevo **y** `test_plan218_capability_matrix.py` pasa de **`2 failed, 8 passed`** (medido) a **`10 passed`**:
 
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_capability_matrix.py" -q
 ```
+
+> **[v2, C1] Los DOS rojos del 218 se cierran acá y es correcto que se cierren:**
+> - `test_full_y_partial_exigen_evidencia` lo cierra **F2a** (amplía el regex del guardián).
+> - `test_doc_de_paridad_esta_sincronizado` lo cierra **F2** (regenera el doc: hoy el archivo en disco declara `gitlab | 34 | 14 | 21 | 2` y `render_markdown_matrix()` produce `gitlab | 33 | 14 | 22 | 2`).
+>
+> **Es un delta de +2 declarado, no "delta cero".** Si el implementador ve `2 failed` después de F2+F2a, la fase **no** está lista.
 
 **Mitad de contraste (esperado en ROJO antes del cambio):** con `services/provider_capabilities.py` sin tocar, el caso 1 falla con `assert 'absent' == 'full'` y el caso 2 con `assert 'partial' == 'full'`. El caso 3 falla para `tracker.rate_limit.clamp` (hoy la evidencia es `services/gitlab_client.py:146`, que **termina en dígitos**) y falla para `tracker.sync.incremental` por evidencia **vacía**. **Los 4 casos rojos antes, los 4 verdes después.** Si alguno pasa antes, el test no está mirando la matriz real.
 
 **Flag que la protege:** **ninguna, y es deliberado.** Corregir un dato declarativo que describe lo que el código ya hace no es una capacidad nueva: es la eliminación de una mentira. Poner una flag equivaldría a ofrecerle al operador la opción de seguir viendo el dato falso. El panel que consume la matriz ya está detrás de `STACKY_PROVIDER_PARITY_ENABLED`, que **no se toca**.
 
 **Impacto por runtime:** Codex CLI / Claude Code CLI / GitHub Copilot Pro — **idéntico**. `services/provider_capabilities.py` es un módulo **puro**: sin red, sin BD, sin importar adaptadores (lo dice su propio docstring, `:1-11`). Fallback: ninguno necesario, no hay dependencia externa.
+
+**Trabajo del operador: ninguno.**
+
+---
+
+### F2a — [v2, C1] El guardián del 218 admite evidencia por SÍMBOLO (fase NUEVA de la crítica)
+
+**Por qué existe esta fase.** El v1 no la tenía y sin ella **F2 y F4 son inimplementables**. `backend/tests/test_plan218_capability_matrix.py:56-67` dice, verificado:
+
+```python
+_EVIDENCE_RE = re.compile(r"^[\w/\.]+\.py:\d+$")
+
+
+def test_full_y_partial_exigen_evidencia():
+    for provider, caps in CAPABILITY_MATRIX.items():
+        for key, entry in caps.items():
+            if entry["status"] in ("full", "partial"):
+                assert _EVIDENCE_RE.match(entry.get("evidence", "")), (
+                    f"{provider}/{key}: evidencia inválida {entry.get('evidence')!r} "
+                    "(se espera 'ruta/archivo.py:linea')"
+                )
+```
+
+O sea: **el guardián de la matriz EXIGE hoy exactamente lo que este plan quiere eliminar** — el anclaje por número de línea. Y el conflicto no es teórico: **el test ya está ROJO**, con este output medido:
+
+```
+FAILED tests/test_plan218_capability_matrix.py::test_full_y_partial_exigen_evidencia
+E  AssertionError: gitlab/tracker.sync.full: evidencia inválida
+   'services/gitlab_sync.py:sync_gitlab_tickets' (se espera 'ruta/archivo.py:linea')
+```
+
+El plan 292 puso el primer anclaje por símbolo de la matriz y **dejó el guardián rojo**. Este plan pone 8 más. **Sin F2a, el implementador se encuentra un test que le pide lo contrario de lo que el plan le pide, y la salida barata es borrar el assert.** Eso es el falso verde que este plan existe para no cometer.
+
+**Objetivo:** que el guardián exija **evidencia con ancla**, no **evidencia con número**. Se **amplía** el regex; no se relaja ninguna de las tres cosas que hoy rechaza (vacío, `archivo.py` pelado, ancla no válida).
+
+**Valor:** convierte un guardián que contradice al plan en un guardián que lo respalda. Y desbloquea de un solo cambio el ratchet completo de F4.
+
+**Archivo EXACTO a editar (ruta completa):**
+
+1. `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\test_plan218_capability_matrix.py` — **una constante y un mensaje**. Nada más. **Ninguno de sus 10 tests se borra ni se debilita.**
+
+**El cambio, literal:**
+
+```python
+# Plan 295 F2a — el guardián exige evidencia CON ANCLA, no evidencia con NÚMERO.
+# ANTES: r"^[\w/\.]+\.py:\d+$" -- sólo archivo.py:LÍNEA. Eso contradecía al ratchet
+# del plan 295 F4 (los anclajes por línea caducan con el primer commit ajeno) y ya
+# estaba ROJO porque el plan 292 ancló tracker.sync.full por SÍMBOLO.
+# AHORA: archivo.py:LÍNEA  o  archivo.py:SIMBOLO_PYTHON_VALIDO.
+# LO QUE SIGUE RECHAZANDO, sin ceder nada:
+#   ""                              -> evidencia vacía
+#   "services/x.py"                 -> archivo sin ancla
+#   "services/x.py:"                -> ancla vacía
+#   "services/x.py:no es simbolo"   -> ancla que no es un identificador
+_EVIDENCE_RE = re.compile(r"^[\w/\.]+\.py:(?:\d+|[A-Za-z_][A-Za-z0-9_]*)$")
+```
+
+Y el mensaje del assert pasa a decir la verdad nueva (**el assert NO se toca, sólo su texto**):
+
+```python
+                assert _EVIDENCE_RE.match(entry.get("evidence", "")), (
+                    f"{provider}/{key}: evidencia inválida {entry.get('evidence')!r} "
+                    "(se espera 'ruta/archivo.py:linea' o 'ruta/archivo.py:nombre_de_simbolo'; "
+                    "el plan 295 F4 lleva un ratchet que empuja las de LÍNEA a SÍMBOLO)"
+                )
+```
+
+**Casos borde declarados, uno por uno:**
+
+| Evidencia | Antes | Después | Por qué |
+|---|---|---|---|
+| `services/gitlab_client.py:146` | acepta | **acepta** | el ratchet de F4 es descendente: las 95 que quedan por línea siguen siendo válidas |
+| `services/gitlab_sync.py:sync_gitlab_tickets` | **rechaza (rojo hoy)** | acepta | es el anclaje que no caduca |
+| `services/gitlab_client.py:_resolver_retry_after` | rechaza | acepta | símbolo privado: `[A-Za-z_]` cubre el `_` inicial |
+| `""` (vacío) | rechaza | **rechaza** | `full`/`partial` sin evidencia sigue prohibido |
+| `services/x.py` | rechaza | **rechaza** | archivo sin ancla no dice a dónde mirar |
+| `services/x.py:` | rechaza | **rechaza** | el `(?:\d+\|[A-Za-z_]…)` no matchea vacío |
+| `services/x.py:no es un simbolo` | rechaza | **rechaza** | el espacio no está en la clase de caracteres |
+| `services/x.py:Clase.metodo` | rechaza | **rechaza** | deliberado: el mapa de F3 y las evidencias usan el nombre **top-level** del módulo, que es lo que `getattr(modulo, nombre)` resuelve. Un `Clase.metodo` no se resuelve con un solo `getattr` y sería un anclaje que el gate no puede verificar |
+| `services/x.ts:12` | rechaza | **rechaza** | fuera de alcance: el guardián del 218 es de módulos Python. La matriz no tiene evidencias `.ts` hoy (medido: 0) |
+
+**Tests PRIMERO:** los casos **5, 6 y 7** de `test_plan295_matriz_no_miente.py` (ver F2). **No se crea un archivo de test nuevo**: importan `_EVIDENCE_RE` del archivo del 218 y prueban las tres direcciones. Así el ratchet del arnés no gana un archivo más y el gate prueba el regex **real**, no una copia.
+
+**Comando exacto:**
+
+```
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan295_matriz_no_miente.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_capability_matrix.py" -q
+```
+
+**Criterio de aceptación BINARIO:**
+
+1. El caso **5** de `test_plan295_matriz_no_miente.py` pasa (antes fallaba).
+2. Los casos **6 y 7** pasan **antes y después** — son los que impiden que "ampliar" se convierta en "aceptar cualquier cosa". Si alguno falla después, el regex se aflojó demasiado.
+3. `test_plan218_capability_matrix.py::test_full_y_partial_exigen_evidencia` pasa de **FAILED** a **PASSED**, sin tocar `CAPABILITY_MATRIX` en esta fase.
+4. Los otros **9** tests de ese archivo: **sin cambio** respecto del baseline de F0 (8 passed + el de doc que cierra F2).
+
+**Mitad de contraste (obligatoria, con el output esperado literal):**
+
+1. **El rojo de partida ya está en disco.** Antes de tocar el regex:
+
+```
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan218_capability_matrix.py::test_full_y_partial_exigen_evidencia" -q
+FAILED ... AssertionError: gitlab/tracker.sync.full: evidencia inválida
+   'services/gitlab_sync.py:sync_gitlab_tickets' (se espera 'ruta/archivo.py:linea')
+```
+
+**Ese output se pega en el doc.** Es la prueba de que la fase arregla algo real y no un supuesto.
+
+2. **La mitad que prueba que NO se aflojó** (obligatoria, se corre y se revierte): con el regex nuevo puesto, poner a mano `"tracker.items.list": _f("services/gitlab_provider.py")` (archivo **sin ancla**) y correr. Esperado:
+
+```
+FAILED tests/test_plan218_capability_matrix.py::test_full_y_partial_exigen_evidencia
+E  AssertionError: gitlab/tracker.items.list: evidencia inválida
+   'services/gitlab_provider.py' (se espera 'ruta/archivo.py:linea' o
+   'ruta/archivo.py:nombre_de_simbolo'; ...)
+```
+
+Después **se revierte** (`git diff` de `services/provider_capabilities.py` limpio respecto de F2). **Sin esta segunda mitad, "amplié el regex" es indistinguible de "borré el gate".**
+
+**Registro en los DOS ratchets:** ninguno nuevo — F2a no crea archivos de test.
+
+**Flag que la protege:** **ninguna.** Es el criterio de un guardián. Un guardián detrás de una flag no es un guardián.
+
+**Impacto por runtime:** Codex CLI / Claude Code CLI / GitHub Copilot Pro — **idéntico**. Es un `re.compile` en un archivo de test. Fallback: ninguno necesario.
 
 **Trabajo del operador: ninguno.**
 
@@ -541,6 +794,45 @@ def test_el_mapa_cubre_al_menos_una_capacidad_sin_metodo_de_puerto():
     assert len(nuevas) >= 5, f"solo {len(nuevas)} capacidades transversales nuevas: {nuevas}"
 
 
+def test_ningun_simbolo_se_repite_entre_capacidades():
+    """[ADICIÓN ARQUITECTO 1 — Plan 295 F3, hallazgo C5 de la crítica v2]
+
+    UN SÍMBOLO POR CAPACIDAD Y POR PROVEEDOR. Sin esto, el gate de abajo se
+    convierte en ADORNO de la forma más fácil de cometer: apuntar varias
+    capacidades al símbolo "grande" del módulo -- una clase de cliente, un
+    `__init__`, un router -- que EXISTE SIEMPRE, cualquiera sea el estado real de
+    la capacidad. El assert `obj is not None` pasa por construcción y el gate deja
+    de vigilar sin dejar rastro: sigue verde, sigue contando para el KPI.
+
+    Es exactamente lo que tenía el v1 de este plan: `tracker.sync.incremental` y
+    `tracker.rate_limit.clamp` apuntaban las DOS a `services.ado_client:AdoClient`.
+
+    La regla: dentro de un mismo proveedor, dos capacidades distintas NO pueden
+    declarar el mismo `modulo:simbolo`. Si dos capacidades de verdad las resuelve
+    el mismo símbolo, entonces son la MISMA capacidad y sobra una clave de la
+    matriz -- que también es un hallazgo, y este test lo hace visible.
+    """
+    from collections import defaultdict
+
+    por_proveedor: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    for capacidad, por_prov in _CAPABILITY_TO_SYMBOL.items():
+        for proveedor, ruta in por_prov.items():
+            por_proveedor[proveedor][ruta].append(capacidad)
+
+    repetidos = {
+        f"{proveedor} -> {ruta}": sorted(caps)
+        for proveedor, rutas in por_proveedor.items()
+        for ruta, caps in rutas.items()
+        if len(caps) > 1
+    }
+    assert not repetidos, (
+        "un mismo símbolo vigila DOS capacidades distintas del mismo proveedor, así "
+        "que el gate no puede fallar para ninguna de las dos (símbolo 'siempre existe'):\n"
+        + "\n".join(f"  {k}: {v}" for k, v in sorted(repetidos.items()))
+        + "\nAncla cada capacidad al símbolo que HACE ESE trabajo, no al del módulo."
+    )
+
+
 @pytest.mark.parametrize("capacidad", sorted(_CAPABILITY_TO_SYMBOL))
 def test_el_status_declarado_coincide_con_la_existencia_del_simbolo(capacidad):
     """LAS DOS DIRECCIONES.
@@ -579,7 +871,7 @@ def test_el_status_declarado_coincide_con_la_existencia_del_simbolo(capacidad):
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan295_gate_transversal.py" -q
 ```
 
-**Criterio de aceptación BINARIO:** el archivo pasa con **`2 + N` passed**, donde `N` = cantidad de entradas de `_CAPABILITY_TO_SYMBOL` (el `parametrize` genera un caso por capacidad). Con las 7 entradas del mapa propuesto: **9 passed**. Y el conteo se verifica con:
+**Criterio de aceptación BINARIO [v2, C5]:** el archivo pasa con **`3 + N` passed**, donde `N` = cantidad de entradas de `_CAPABILITY_TO_SYMBOL` (el `parametrize` genera un caso por capacidad) y el `3` son los tres tests no parametrizados, incluido el de **[ADICIÓN ARQUITECTO 1]**. Con las 7 entradas del mapa: **10 passed**. Y el conteo se verifica con:
 
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -c "import sys; sys.path.insert(0,'Stacky Agents/backend'); from services.provider_capabilities import _CAPABILITY_TO_SYMBOL as S, _CAPABILITY_TO_PORT_METHOD as P; print('cubiertas por gate:', len(P) + len(set(S) - set(P)), 'de 71')"
@@ -989,10 +1281,28 @@ Cambio en la llamada de `:102-110`:
 | 4 | **el `ca_bundle` llega hasta el `mount()`** | monkeypatch de `requests.Session.mount`; se captura `(prefijo, adaptador)` y se asertá `prefijo == base` y `type(adaptador).__name__ == "_AdaptadorOpenSSL"` |
 | 5 | `ca_bundle` con ruta inexistente ⇒ `chk-tls = fail` **sin tocar la red** | monkeypatch de `Session.get` que **lanza** `AssertionError("no debió llamarse")`; el test pasa solo si no se llama |
 | 6 | camino feliz ⇒ `chk-tls = ok` | `r["status"] == "ok"` y `"cerró" in r["message"]` |
-| 7 | **los 6 resultados en TODOS los caminos** | para 5 escenarios distintos: `len(checks) == 6` y `{c["id"] for c in checks} == {"chk-flag","chk-tls","chk-instancia","chk-token","chk-scope","chk-proyecto"}` |
+| 7 | **[v2, C11] los 6 resultados en los SEIS caminos de salida** | `@pytest.mark.parametrize` sobre los **6** escenarios de la tabla de abajo: `len(checks) == 6` y `{c["id"] for c in checks} == {"chk-flag","chk-tls","chk-instancia","chk-token","chk-scope","chk-proyecto"}` |
 | 8 | `allow_redirects=False` se conserva | capturar los kwargs de `Session.get` y asertá `kwargs["allow_redirects"] is False` |
+| 9 | **[v2, C10] el bundle declarado por ENTORNO también llega al `mount()`** | campo del proyecto vacío (`ca_bundle=None`) **y** `monkeypatch.setenv("STACKY_GITLAB_CA_BUNDLE", str(pem_real))` ⇒ el `mount()` ocurre igual. Sin esto la sonda habla un TLS distinto del sync cuando el operador configuró el bundle por env |
 
-> **El caso 4 es el que el insumo pide explícitamente** ("*test que el `ca_bundle` del body llega hasta el `mount()`*") y es **el único** que prueba que la fase hizo algo. Los otros 7 prueban que no rompió nada.
+**[v2, C11] Los SEIS caminos de salida de `run_gitlab_checks`, enumerados uno por uno (leídos del archivo, no contados de memoria):**
+
+| # | Línea del `return out` | Escenario que lo dispara | Hoy emite | Después de F5 tiene que emitir |
+|---|---|---|---|---|
+| 1 | **`:68`** | `base_url` sin `http://` ni `https://` | 4 (`chk-flag` + `chk-instancia` fail + 3 unknown) | **6** — hay que agregar `chk-tls` a la lista de `unknown` de ese camino |
+| 2 | **`:88`** | `/version` responde 301/302/307/308 | 5 | **6** |
+| 3 | **`:98`** | `requests.RequestException` en `/version` | 5 | **6** |
+| 4 | **`:105`** | no hay token | 5 | **6** |
+| 5 | **`:151`** | falta el `project_path` | 5 | **6** |
+| 6 | **`:173`** | **el `return out` FINAL — camino completo** | 5 | **6** |
+
+> 🛑 **[v2, C11] El v1 decía "Hay CUATRO `return` tempranos (`:68`, `:88`, `:98`, `:105`, `:151`)" — contaba cuatro y listaba cinco — y OMITÍA el `return out` final de `:173`.** Son **SEIS** puntos de salida. Y los dos caminos nuevos que agrega F5 (bundle inválido y `SSLError`) también hacen `return out`, así que al terminar la fase son **OCHO**: los 6 de arriba más 2 propios, y **los ocho** emiten 6 resultados.
+>
+> **Por qué importa y no es cosmético:** el docstring `:45-47` dice textual "*Devuelve SIEMPRE 5 resultados … en todos los caminos de salida: la UI lo necesita para pintar la lista*". Si el implementador parchea 5 de 6, hay un camino que devuelve **5** cuando el resto devuelve 6, y el `SetupGuideDialog` pinta una lista corta sin error visible. El caso 7 con **6** escenarios parametrizados es lo único que lo caza.
+>
+> **Y el docstring se actualiza:** "*Devuelve SIEMPRE **6** resultados*". Dejarlo en 5 deja una mentira nueva en el archivo cuyo objetivo es dejar de mentir.
+
+> **El caso 4 es el que el insumo pide explícitamente** ("*test que el `ca_bundle` del body llega hasta el `mount()`*") y es **el único** que prueba que la fase hizo algo. Los otros 8 prueban que no rompió nada.
 >
 > **Ningún caso toca la red.** Todos monkeypatchean `requests.Session.get` / `.mount`. Base SQLite: **no se usa BD** en este módulo, así que no hace falta fixture de DB — pero el archivo **igual** tiene que evitar `create_app()` (que fuera de pytest tiene efectos reales).
 
@@ -1051,9 +1361,9 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx vitest run "src/project
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan259_setup_guide_data.py" -q
 ```
 
-> **Estos dos archivos pueden ponerse rojos legítimamente** si asertán `len(checks) == 5`. Si pasa, **se actualizan a 6** y se anota en el doc: es el contrato que esta fase cambia a propósito, y el cambio es **aditivo** para la UI (`SetupGuideDialog` itera la lista que recibe, no un largo fijo — verificado). **Si asertán los 5 ids como conjunto exacto, también se actualizan.** Cualquier otro rojo en esos archivos es daño y hay que arreglarlo.
+> **Estos dos archivos pueden ponerse rojos legítimamente** si asertán `len(checks) == 5`. Si pasa, **se actualizan a 6** y se anota en el doc: es el contrato que esta fase cambia a propósito, y el cambio es **aditivo** para la UI (`SetupGuideDialog` itera la lista que recibe con `setChecks(res.data.checks)`, no un largo fijo — verificado en `:98-100`). **Si asertán los 5 ids como conjunto exacto, también se actualizan.** Cualquier otro rojo en esos archivos es daño y hay que arreglarlo. **Baseline medido en F0: `test_plan259_setup_guide_api.py` = `27 passed`, `test_plan259_setup_guide_data.py` = `14 passed`. Los dos VERDES: cualquier rojo que no sea un `== 5` es daño propio.**
 
-**Criterio de aceptación BINARIO:** `8 passed` en `test_plan295_sonda_tls.py`, `3 passed` en el test de frontend, y los dos archivos del 259 con **delta cero** respecto de F0 (o actualizados al largo 6 y verdes).
+**Criterio de aceptación BINARIO [v2, C10 + C11]:** **`9 passed`** en `test_plan295_sonda_tls.py` (8 del v1 + el caso 9 del bundle por entorno; y el caso 7 corre **parametrizado sobre 6 escenarios**, no 5), `3 passed` en el test de frontend, y los dos archivos del 259 con **delta cero** respecto de F0 (o actualizados al largo 6 y verdes).
 
 **Mitad de contraste (esperado en ROJO antes del código):** con `services/gitlab_setup_check.py` sin tocar:
 
@@ -1097,7 +1407,21 @@ class TrackerApiError(TrackerError):
 
 > **`.status`, NO `.status_code`.** `_ado_sync_error_response` lee `getattr(exc, "status_code", None)` (`:324`) porque `AdoApiError` usa ese nombre. **Confundirlos hace que el handler nuevo lea `None` siempre** y clasifique todo como genérico. Es el error más fácil de cometer en esta fase.
 
-**Los seis `kind` que el cliente produce de verdad** (verificado en `services/gitlab_client.py:103-120` y en los `except` de `_request`): `auth` (401/403), `not_found` (404), `rate_limited` (429), `server` (≥500), y los **dos que no nacen de un status HTTP** y se asignan en los `except`: `tls` (el handshake no cerró) y `network` (murió antes de tener respuesta). El docstring de `_kind_for_status:106-113` lo explica y hay que respetarlo: **`kind == "tls"` significa "el certificado/la cadena no cerró"; cualquier otro kind implica que el TLS anduvo porque hubo respuesta HTTP.**
+**[v2, C12] Los SIETE `kind` que el cliente produce de verdad** (verificado abriendo `services/gitlab_client.py:103-123` y los `except` de `_request`):
+
+| `kind` | Origen | Nace de un status HTTP? |
+|---|---|---|
+| `auth` | 401 / 403 | sí |
+| `not_found` | 404 | sí |
+| `rate_limited` | 429 | sí |
+| `server` | ≥ 500 | sí |
+| **`unknown`** | **`return "unknown"` final de `_kind_for_status` ⇒ 400, 409, 422 y todo 4xx no listado. Además es el `default` de `TrackerApiError.__init__`** | sí |
+| `tls` | asignado en el `except` de `_request`: el handshake no cerró | **no** |
+| `network` | asignado en el `except` de `_request`: murió antes de tener respuesta | **no** |
+
+> 🛑 **[v2, C12] El v1 decía "los SEIS kind que el cliente produce de verdad" y omitía `unknown`.** No es un caso teórico: `_kind_for_status` (`:117-123`) tiene `return "unknown"` como última línea, así que **400, 409 y 422 — los errores de validación más comunes de la API de GitLab — llegan con `kind="unknown"`**. Con el mapa de seis entradas, el segundo caso más frecuente después de `auth` recibía el copy genérico "*Stacky no pudo clasificar*", que es el menos accionable de todos. La séptima entrada lo arregla.
+>
+> El docstring de `_kind_for_status:106-113` sigue mandando en lo demás: **`kind == "tls"` significa "el certificado/la cadena no cerró"; cualquier otro kind implica que el TLS anduvo porque hubo respuesta HTTP.**
 
 **Archivos EXACTOS a editar (ruta completa):**
 
@@ -1137,7 +1461,21 @@ _COPY_GITLAB_POR_KIND: dict[str, str] = {
         "No se pudo llegar al servidor de GitLab. Revisá la dirección del servidor y "
         "la conexión de red o la VPN."
     ),
+    # Plan 295 F6 [v2, C12] — SÉPTIMA entrada, y NO es un caso hipotético.
+    # _kind_for_status (gitlab_client.py:103-123) devuelve "unknown" para TODO status
+    # que no sea 401/403/404/429/>=500 -- o sea 400, 409 y 422, que en GitLab son los
+    # errores de VALIDACIÓN más comunes. Y TrackerApiError.__init__ tiene
+    # `kind: str = "unknown"` por default. Sin esta entrada, el caso más frecuente
+    # después de auth caía en el fallback genérico, que es el copy MENOS accionable.
+    "unknown": (
+        "GitLab rechazó el pedido y no dijo por qué de forma estándar (suele ser un "
+        "400, 409 o 422: un dato del pedido que GitLab no acepta). El detalle técnico "
+        "está en 'detail'. Si se repite, revisá la configuración del proyecto en "
+        "Stacky contra el proyecto real de GitLab."
+    ),
 }
+# Sólo para un kind que NO esté en el mapa: un kind nuevo que agregue un plan futuro.
+# Los siete que el cliente produce HOY están todos arriba.
 _COPY_GITLAB_FALLBACK = (
     "GitLab devolvió un error que Stacky no pudo clasificar. El detalle técnico va "
     "en el campo 'detail'."
@@ -1233,11 +1571,14 @@ def _gitlab_sync_error_response(exc, *, route_label: str, project_name: str | No
 | 3 | ese cuerpo trae `kind == "auth"` | `data["kind"] == "auth"` |
 | 4 | **el mensaje NOMBRA GitLab** | `"gitlab" in data["message"].lower()` |
 | 5 | el mensaje **no** dice "unexpected" | `"unexpected" not in data["message"].lower()` |
-| 6 | los 6 `kind` producen 6 mensajes **distintos** | `len({m for m in mensajes}) == 6` |
-| 7 | un `kind` desconocido cae en el fallback y sigue dando 502 | `TrackerApiError(418, "...", kind="marciano")` ⇒ 502 y `data["kind"] == "marciano"` |
+| 6 | **[v2, C12]** los **7** `kind` producen **7** mensajes **distintos** | `len({_COPY_GITLAB_POR_KIND[k] for k in ("auth","not_found","rate_limited","server","tls","network","unknown")}) == 7` |
+| 7 | un `kind` **fuera del mapa** cae en el fallback y sigue dando 502 | `TrackerApiError(418, "...", kind="marciano")` ⇒ 502, `data["kind"] == "marciano"` y `data["message"] == _COPY_GITLAB_FALLBACK` |
 | 8 | `POST /sync` (el otro endpoint) ⇒ **502**, no 500 | `resp.status_code == 502` |
-| 9 | `AdoApiError` sigue yendo por el camino ADO (**no-regresión**) | `data["error"] in ("ado_api", "ado_auth_invalid")` |
+| 9 | `AdoApiError` sigue yendo por el camino ADO (**no-regresión**) | `data["error"] in ("ado_api", "ado_auth_invalid")` — verificado: `_ado_sync_error_response` devuelve `"ado_api"` con 502 para status ≠ 401/403 y `"ado_auth_invalid"` con 502 para 401/403 |
 | 10 | `.status` y no `.status_code`: el status upstream llega al cuerpo | `data["gitlab_status_code"] == 401` |
+| 11 | **[v2, C12] un HTTP 422 real produce `kind="unknown"` y copy ACCIONABLE, no el fallback** | `TrackerApiError(422, "...", kind=_kind_for_status(422))` ⇒ `data["kind"] == "unknown"` **y** `data["message"] != _COPY_GITLAB_FALLBACK` **y** `"gitlab" in data["message"].lower()` |
+
+> **[v2, C12] El caso 11 es el que impide que la séptima entrada se agregue "de adorno".** Sin él, alguien podría dejar `unknown` fuera del mapa y el caso 7 (que usa `"marciano"`) pasaría igual. El 11 llama a `_kind_for_status(422)` de verdad — no hardcodea el string — así que si mañana el cliente cambia la clasificación de 422, el test lo dice.
 
 **Cómo se inyecta la excepción (sin red, sin credenciales):** monkeypatch de `_sync_via_provider_or_ado` en el módulo `api.tickets` para que **lance** la excepción pedida. Es el único punto que los dos endpoints comparten (`:1228` y `:6677`).
 
@@ -1876,7 +2217,7 @@ Se trazó `STACKY_GITLAB_SYNC_FULL_CADA_N` (la numérica más reciente, del plan
 |---|---|---|---|---|
 | 1 | El valor efectivo | `...\backend\config.py` | `:2743-2745` (la del 292) | **SÍ** |
 | 2 | La `FlagSpec` | `...\backend\services\harness_flags.py` | `:7386-7395` (la del 292) | **SÍ** |
-| 3 | `_CATEGORY_KEYS` | `...\backend\services\harness_flags.py` | `:617` (la del 292) | **SÍ** — si falta, `test_every_registry_flag_is_categorized` rompe CI a propósito (`:622-623` lo dice) |
+| 3 | `_CATEGORY_KEYS` | `...\backend\services\harness_flags.py` | `:617` (la del 292) — **la tupla se llama `paridad_proveedores`, NO `global`** ([v2, C2]) | **SÍ** — si falta, `test_every_registry_flag_is_categorized` rompe CI a propósito (`:622-623` lo dice) |
 | 4 | `PLAIN_HELP` | `...\backend\services\harness_flags_help.py` | `:2511-2517` (la del 292) | **SÍ** — **NO se deriva de `description`**: es un objeto `PlainHelp(what=, on_effect=, off_effect=, example=)` escrito a mano |
 | 5 | `_FROZEN_BOUNDS` | `...\backend\tests\test_harness_flags_bounds.py` | `:227` (la del 292: `(1, 1000)`) | **SÍ para numéricas** — `test_bounds_map_is_frozen` (`:232`) compara **igualdad exacta** del dict |
 | 6 | `_CURATED_DEFAULTS_ON` | `...\backend\tests\test_harness_flags.py` | `:1129` dice **textual** que la numérica del 292 **NO figura ahí a propósito** | **NO — PROHIBIDO** |
@@ -1933,12 +2274,25 @@ Se trazó `STACKY_GITLAB_SYNC_FULL_CADA_N` (la numérica más reciente, del plan
 >
 > **`env_only=False` es obligatorio.** Con `env_only=True` la flag queda **inerte** si no tiene entrada en `config.py` — y aunque acá sí la tiene, `env_only=False` es lo que la hace escribible desde el panel, que es el objetivo de la fase.
 
-**Guardián 3 — `_CATEGORY_KEYS`**, en la misma tupla `"global"` donde están las del 292 (`:617`):
+**Guardián 3 — `_CATEGORY_KEYS`**, en la misma tupla donde están las del 292 (`:617`). **[v2, C2] Esa tupla se llama `paridad_proveedores`, NO `"global"`.**
 
 ```python
         # Plan 295 — el intervalo de sync pasa a ser del operador
         "STACKY_TICKET_SYNC_INTERVAL_MS",
 ```
+
+> 🛑 **[v2, C2] El v1 decía "en la misma tupla `"global"`" y eso es FALSO: `_CATEGORY_KEYS` NO TIENE una clave `"global"`.** Medido abriendo `backend/services/harness_flags.py`: el dict tiene **20** categorías — `runtimes_cli`, `contexto_memoria`, `calidad_verificacion`, `integridad_grounding`, `epicas_ado`, `migrador_ado_gitlab`, `gitlab_deep_links`, `devops`, `flujo_funcional`, `routing_costo`, `fiabilidad_ciclo_vida`, `observabilidad_notif`, `aprendizaje`, `preflight_intencion`, `base_datos`, `avanzado`, `capacidades_optin`, `comparador_bd`, `interfaz_ui`, **`paridad_proveedores`** — más `"otros"` intencionalmente vacío (es el fallback de `categorize()`). `STACKY_GITLAB_SYNC_FULL_CADA_N` (línea 617) vive en **`paridad_proveedores`**, que es además la categoría correcta para esta flag: gobierna el tráfico contra el tracker.
+>
+> **La causa de la confusión, para que no se repita:** `group="global"` de la `FlagSpec` (guardián 2) **es otro campo distinto** y ahí `"global"` **sí** es un valor válido — lo usan **433** de las 495 specs. `group` es la agrupación del panel; `_CATEGORY_KEYS` es la categorización del arnés. **Son dos cosas y hay que llenar las dos, cada una con su vocabulario.**
+>
+> El comando que lo resuelve sin adivinar, si el implementador quiere confirmarlo:
+>
+> ```bash
+> cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend"
+> .venv\Scripts\python.exe -c "import sys; sys.path.insert(0,'.'); from services.harness_flags import _CATEGORY_KEYS as C; print('hay global?', 'global' in C); print([c for c,ks in C.items() if 'STACKY_GITLAB_SYNC_FULL_CADA_N' in ks])"
+> ```
+>
+> Salida esperada: `hay global? False` y `['paridad_proveedores']`.
 
 **Guardián 4 — `PLAIN_HELP` en `backend/services/harness_flags_help.py`**, junto a las del 292 (`:2511`):
 
@@ -2034,12 +2388,94 @@ Y las **dos** líneas de consumo:
 | 1 | la flag está **en** `FLAG_REGISTRY` | `"STACKY_TICKET_SYNC_INTERVAL_MS" in {s.key for s in FLAG_REGISTRY}` |
 | 2 | es `type="int"` con los bounds declarados | `spec.type == "int"` y `(spec.min_value, spec.max_value) == (5000, 3600000)` |
 | 3 | **NO** declara `default=` (la regla dura de las numéricas) | `spec.default is None` |
-| 4 | está categorizada | `"STACKY_TICKET_SYNC_INTERVAL_MS" in _CATEGORY_KEYS["global"]` |
+| 4 | **[v2, C2]** está categorizada, y **en la categoría real** | `"STACKY_TICKET_SYNC_INTERVAL_MS" in _CATEGORY_KEYS["paridad_proveedores"]` **y** `categorize("STACKY_TICKET_SYNC_INTERVAL_MS") != "otros"` |
 | 5 | tiene `PLAIN_HELP` con los 4 campos no vacíos | `plain_help_for(key)` devuelve dict y `all(v for v in d.values())` |
 | 6 | **flag en 180000 ⇒ el endpoint devuelve `180000`** | `monkeypatch.setattr(config.config, key, 180000)`; `data["ticket_sync_interval_ms"] == 180000` |
 | 7 | el endpoint **ya no** lee `os.environ` | poner `os.environ[key] = "999"` **y** `config.config` en `180000` ⇒ el endpoint devuelve **`180000`**, no `999` |
+| 8 | **[ADICIÓN ARQUITECTO 2 — v2, C6]** los **SEIS guardianes** de la flag numérica, en un solo assert que corre en un archivo VERDE | ver el bloque de abajo |
 
 > **El caso 7 es el que prueba la fase.** Los casos 1-5 prueban el registro; el 6 prueba la lectura; **el 7 prueba que la vieja fuente dejó de mandar**. Sin él, un endpoint que leyera las dos fuentes pasaría el 6 igual.
+>
+> **[v2, C2] El caso 4 del v1 daba `KeyError`**, no un assert rojo: `_CATEGORY_KEYS["global"]` no existe. Un `KeyError` en un test es indistinguible de un bug del test, y la salida barata del modelo menor es borrar el caso. Ahora apunta a la categoría real **y** agrega el assert de `categorize()`, que es el que caza el caso en que alguien mete la key en la tupla equivocada: la key estaría "categorizada" pero en el cajón que no le toca.
+
+#### F10.5.bis — [ADICIÓN ARQUITECTO 2] Los SEIS guardianes de la flag numérica, en un solo caso binario
+
+**El problema que resuelve (medido, C6).** El v1 apoyaba dos de los seis guardianes en archivos que están **rojos de fábrica**:
+
+- `test_harness_flags_bounds.py` → **`1 failed, 17 passed`** medido. El que falla es **`test_bounds_map_is_frozen`**, porque `FLAG_REGISTRY` trae **6** numéricas del plan 284 (`STACKY_DOCS_CITATION_GATE_MIN_RATIO`, `STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS`, `STACKY_DOCS_PIPELINE_MAX_LLM_CALLS`, `STACKY_DOCS_RIGOR_MIN_CITATIONS`, y dos más) ausentes de `_FROZEN_BOUNDS`.
+- `test_harness_flags_help.py` → **`4 failed, 4 passed`** medido.
+
+El v1 decía de `_FROZEN_BOUNDS`: "*Olvidar esta línea da un fallo con el diff completo: es un guardián que **avisa fuerte**, no en silencio*". **Es falso hoy.** Con el criterio "delta cero en los 5 guardianes", el archivo sale `1 failed, 17 passed` **con o sin** la entrada nueva: **el guardián no discrimina**, y F10 podía cerrarse sin `_FROZEN_BOUNDS` ni `PLAIN_HELP` y nada lo cazaba. Es el gotcha de "criterio de conteo sobre archivo rojo".
+
+**La solución: el criterio se muda a un archivo VERDE y asertá el CONTENIDO, no el conteo.** Se agrega a `test_plan295_flag_intervalo.py` (que nace verde) un caso que verifica los seis puntos de cableado de una vez:
+
+```python
+def test_los_seis_guardianes_de_la_flag_numerica():
+    """[ADICIÓN ARQUITECTO 2 — Plan 295 F10] Los SEIS guardianes de una flag
+    numérica, asertados por CONTENIDO en un archivo VERDE.
+
+    POR QUÉ NO ALCANZA CON "correr los guardianes y pedir delta cero":
+    test_harness_flags_bounds.py está ROJO DE FÁBRICA (1 failed, 17 passed: le
+    faltan 6 numéricas del plan 284 a _FROZEN_BOUNDS) y test_harness_flags_help.py
+    también (4 failed, 4 passed). Un criterio de CONTEO sobre un archivo rojo no
+    discrimina: sale igual con la entrada y sin ella. Este caso sí.
+
+    Es reutilizable tal cual por la próxima flag numérica: cambiá KEY y BOUNDS.
+    """
+    from services.harness_flags import FLAG_REGISTRY, _CATEGORY_KEYS, categorize
+    from services.harness_flags_help import PLAIN_HELP
+    from tests.test_harness_flags_bounds import _FROZEN_BOUNDS
+    from tests.test_harness_flags import _CURATED_DEFAULTS_ON
+    import config as _config
+
+    KEY = "STACKY_TICKET_SYNC_INTERVAL_MS"
+    BOUNDS = (5000, 3600000)
+    spec = next((s for s in FLAG_REGISTRY if s.key == KEY), None)
+
+    # G1 — el valor efectivo vive en config.py y conserva el 45000 histórico.
+    assert getattr(_config.config, KEY, None) == 45000, "G1 config.py"
+
+    # G2 — la FlagSpec existe, es int, con bounds, escribible y SIN default=.
+    assert spec is not None, "G2 FlagSpec ausente"
+    assert spec.type == "int" and (spec.min_value, spec.max_value) == BOUNDS, "G2 tipo/bounds"
+    assert spec.env_only is False, "G2 env_only=True la dejaría fuera del panel"
+    assert spec.default is None, "G2 una numérica NO declara default= (ver G6)"
+    assert spec.requires is None, "G2 sin requires => no toca _REQUIRES_MAP_FROZEN"
+
+    # G3 — categorizada, y en la categoría REAL (NO existe _CATEGORY_KEYS["global"]).
+    assert KEY in _CATEGORY_KEYS["paridad_proveedores"], "G3 categoría"
+    assert categorize(KEY) != "otros", "G3 cayó en el fallback"
+
+    # G4 — PLAIN_HELP escrito A MANO (no se deriva de description), 4 campos llenos.
+    assert KEY in PLAIN_HELP, "G4 PLAIN_HELP ausente"
+    ayuda = PLAIN_HELP[KEY]
+    for campo in ("what", "on_effect", "off_effect", "example"):
+        assert getattr(ayuda, campo, "").strip(), f"G4 PlainHelp.{campo} vacío"
+
+    # G5 — _FROZEN_BOUNDS. ESTE es el que el archivo rojo NO puede vigilar.
+    assert _FROZEN_BOUNDS.get(KEY) == BOUNDS, (
+        f"G5 _FROZEN_BOUNDS[{KEY}] = {_FROZEN_BOUNDS.get(KEY)!r}, se esperaba {BOUNDS}. "
+        "test_bounds_map_is_frozen NO puede avisarte: ya está rojo por el plan 284."
+    )
+
+    # G6 — _CURATED_DEFAULTS_ON es SOLO para booleanas ON: la numérica NO va.
+    assert KEY not in _CURATED_DEFAULTS_ON, (
+        "G6 una numérica en _CURATED_DEFAULTS_ON pone rojo "
+        "test_default_known_only_for_curated"
+    )
+```
+
+**Mitad de contraste de este caso (obligatoria, se corre y se revierte):** con los seis guardianes ya cableados, **borrar a mano** la línea de `_FROZEN_BOUNDS` y correr sólo este archivo. Esperado:
+
+```
+FAILED tests/test_plan295_flag_intervalo.py::test_los_seis_guardianes_de_la_flag_numerica
+E  AssertionError: G5 _FROZEN_BOUNDS[STACKY_TICKET_SYNC_INTERVAL_MS] = None, se esperaba
+   (5000, 3600000). test_bounds_map_is_frozen NO puede avisarte: ya está rojo por el plan 284.
+```
+
+Y **la comprobación que prueba el punto**: correr `test_harness_flags_bounds.py` **con la línea borrada** y verificar que sigue diciendo **`1 failed, 17 passed`** — o sea, **exactamente lo mismo** que con la línea puesta. Ese par de outputs, pegados juntos en el doc, es la evidencia de que el guardián viejo no discriminaba y el nuevo sí. Después se restaura la línea.
+
+> **Por qué esta adición vale más allá de este plan:** el bloque es una plantilla. Toda flag numérica futura de este repo tiene los mismos seis guardianes y dos de ellos viven en archivos que probablemente sigan rojos. Copiar este caso cambiando `KEY` y `BOUNDS` convierte "acordate de los seis lugares" en un assert.
 
 **Casos del test de frontend (3, `.ts` PURO — RTL/jsdom no están instalados):**
 
@@ -2097,7 +2533,18 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx vitest run "src/pages/_
 >
 > **`test_p7_sync_endpoints.py:16` hace `monkeypatch.setenv("STACKY_TICKET_SYNC_INTERVAL_MS", "45000")` y `:47` asertá `data["ticket_sync_interval_ms"] == 45000`.** Después de F10 el endpoint **ya no lee el entorno**, así que ese `setenv` no hace nada — pero el assert **sigue pasando** porque el default de `config.py` es 45000. **Verificarlo explícitamente**: si sale rojo, es porque `config.py` no quedó en 45000.
 
-**Criterio de aceptación BINARIO:** **7 passed** en el test de backend, **4 passed** en el de frontend, delta cero en los 5 guardianes, y `len(FLAG_REGISTRY)` = **B3 + 1** (con B3 = 495 ⇒ **496**; **más 2 de F6 y F9** si esas fases ya están ⇒ **498**).
+**Criterio de aceptación BINARIO [v2, C2 + C6]:** **8 passed** en el test de backend (7 del v1 + el caso 8 de los seis guardianes), **4 passed** en el de frontend, y `len(FLAG_REGISTRY)` = **B3 + 1** (con B3 = 495 ⇒ **496**; **más 2 de F6 y F9** si esas fases ya están ⇒ **498**).
+
+**Los guardianes ajenos se corren igual, con criterio DELTA contra el baseline MEDIDO de F0 — y NINGUNO de ellos es el criterio de la fase:**
+
+| Archivo | Baseline medido (F0) | Después de F10 | Discrimina? |
+|---|---|---|---|
+| `test_harness_flags.py` | **59 passed** | **61 passed** (+2 de las booleanas ON de F6 y F9; si F10 va sola, **59 passed**) | **SÍ** — está verde: cualquier rojo es daño propio |
+| `test_harness_flags_bounds.py` | **1 failed, 17 passed** | **1 failed, 17 passed** | **NO** — rojo de fábrica. Lo cubre el caso 8 |
+| `test_harness_flags_help.py` | **4 failed, 4 passed** | **4 failed, 4 passed** | **NO** — rojo de fábrica. Lo cubre el caso 8 (G4) |
+| `test_plan259_ratchet_script_parity.py` | **12 passed** | **12 passed** | SÍ |
+| `test_harness_ratchet_meta.py` | **4 passed** | **4 passed** | SÍ — **[v2, C3]** y sólo si el test nuevo se registró en el `.sh` |
+| `test_p7_sync_endpoints.py` | **3 passed** | **3 passed** | SÍ |
 
 **Mitad de contraste (esperado en ROJO antes del código):**
 
@@ -2201,14 +2648,27 @@ Y los tres usos:
 
 ```tsx
 // :125
-{preview.features.length} {nombreDeNivel(trackerActivo, "intermedio")}(s) derivada(s) de los bloques RF de la épica:
+{preview.features.length} {nombreDeNivel(trackerType, "intermedio")}(s) derivada(s) de los bloques RF de la épica:
 // :130
-<strong>[{nombreDeNivel(trackerActivo, "intermedio")}]</strong> {feat.title}
+<strong>[{nombreDeNivel(trackerType, "intermedio")}]</strong> {feat.title}
 // :134
-<li key={ti}><strong>[{nombreDeNivel(trackerActivo, "hoja")}]</strong> {task.title}</li>
+<li key={ti}><strong>[{nombreDeNivel(trackerType, "hoja")}]</strong> {task.title}</li>
 ```
 
-> **`trackerActivo` tiene que llegar al componente.** `EpicChildrenPanel` **no** recibe hoy el tracker. **Verificación obligatoria antes de implementar:** leer las props del componente y decidir entre (a) recibirlo por prop del padre, o (b) leerlo de `useWorkbench` (que es de donde sale el tracker en el resto del frontend, patrón del plan 282). **Si (a) exige tocar un archivo de la lista prohibida, se usa (b).** Esto **no es opcional**: es la capacidad que la fase asume y hay que confirmar que existe antes de escribir el JSX.
+> ✅ **[v2, C15] `trackerType` YA EXISTE en el componente. No hay nada que cablear y no hay decisión que tomar.** El v1 decía "*`EpicChildrenPanel` **no** recibe hoy el tracker*" y abría una elección entre (a) prop del padre y (b) `useWorkbench`. **Es falso**, verificado abriendo el archivo:
+>
+> ```tsx
+> // frontend/src/components/EpicChildrenPanel.tsx
+> :15  import { useWorkbench } from "../store/workbench";
+> :16  import { nombreDeTracker } from "../lib/trackerLabels";
+> ...
+> :44  // Plan 282 F4 — los rotulos siguen al tracker del proyecto activo.
+> :45  const trackerType = useWorkbench((s) => s.activeProject?.tracker_type ?? null);
+> ```
+>
+> El plan 282 F4 ya hizo ese trabajo y el componente **ya usa** `nombreDeTracker(trackerType)` en `:89`, `:90` y `:178`. **La variable se llama `trackerType`** — el `trackerActivo` del v1 no existe en ninguna parte del archivo y habría dado `TS2304: Cannot find name 'trackerActivo'` en el `npx tsc --noEmit` de F12, o sea al final, cuando el implementador cree que terminó.
+>
+> **Consecuencia de alcance:** los tres rótulos de `:125`, `:130` y `:134` son **tres sustituciones de una línea cada una**, sin tocar props, sin tocar el padre (`OutputPanel.tsx:300`) y sin agregar un `import` (el de `trackerLabels` ya está en `:16`; sólo hay que sumar `nombreDeNivel` a la lista de nombres importados). **Cero riesgo de tocar un archivo de la lista prohibida.**
 
 **Tests PRIMERO — archivo a crear:**
 
@@ -2223,8 +2683,11 @@ Y los tres usos:
 | 3 | `nombreDeNivel(null, "hoja") === "Task"` (fallback ADO, comportamiento de hoy) | igualdad exacta |
 | 4 | censo: `EpicChildrenPanel.tsx` **no** contiene `Feature(s)` ni `[Feature]` ni `[Task]` como literales | `expect(fuente).not.toContain("[Feature]")` etc. |
 | 5 | censo: `FinishWorkButton.tsx` **no** contiene `"Ej: Done, Closed, Resolved"` | `not.toContain` |
+| 6 | **[v2, C15]** `EpicChildrenPanel.tsx` usa la variable **REAL** del componente, no una inventada | `expect(fuente).toContain("nombreDeNivel(trackerType")` **y** `expect(fuente).not.toContain("trackerActivo")` |
 
-> Los casos 4 y 5 son de **ausencia**, que es lo que G7 desaconseja — así que van **acompañados** de un assert de presencia en el mismo test: que los dos archivos **sí** contengan `nombreDeNivel(` y `sugerenciasDeEstadoFinal(` respectivamente. Sin eso, un error en la ruta del archivo haría pasar los censos en falso.
+> Los casos 4 y 5 son de **ausencia**, que es lo que G7 desaconseja — así que van **acompañados** del **caso 6**, que es de **presencia** sobre el mismo archivo. Sin él, un error en la ruta haría pasar los censos en falso.
+>
+> **[v2, C15] El caso 6 caza además el error concreto del v1**: `nombreDeNivel(trackerActivo, …)`. `trackerActivo` no existe en `EpicChildrenPanel.tsx` (la variable es `trackerType`, `:45`), y un `tsc --noEmit` lo diría recién en F12. Este caso lo dice en la fase.
 
 **Comando exacto:**
 
@@ -2240,7 +2703,7 @@ cd "N:\GIT\RS\STACKY\Stacky\Stacky Agents\frontend"; npx vitest run "src/service
 
 > **`plan282Censo.test.ts` tiene una lista `NUNCA_ALLOWLISTEABLES` que incluye `components/FinishWorkButton.tsx`** (verificado). Eso significa que ese archivo **no puede** entrar en la allowlist de deuda declarada: si F11 lo deja con rótulos ADO, el censo lo caza. **Es un gate que ya existe y que esta fase satisface.**
 
-**Criterio de aceptación BINARIO:** **5 passed** en el test nuevo, delta cero en `plan282Censo.test.ts`, y K9:
+**Criterio de aceptación BINARIO [v2, C15]:** **6 passed** en el test nuevo (5 del v1 + el caso 6 de la variable real), delta cero en `plan282Censo.test.ts`, y K9:
 
 ```
 grep -c "\[Feature\]\|\[Task\]\|Feature(s)" "Stacky Agents/frontend/src/components/EpicChildrenPanel.tsx"
@@ -2281,6 +2744,40 @@ grep -c "Ej: Done, Closed, Resolved" "Stacky Agents/frontend/src/components/Fini
 | 6 | ninguna de las 3 flags nuevas declara `requires=` sin estar en `_REQUIRES_MAP_FROZEN` | para cada una: `spec.requires is None` |
 
 > **El caso 1 es una excepción documentada.** `backend/api/phase6.py:192` **sí** menciona `runtime="github_copilot"` — pero eso **es preexistente** y F9 **no lo tocó**. El test excluye ese archivo de la regla del caso 1 y lo anota como deuda en §D-4. **Excluirlo sin decirlo sería un gate vacío**; excluirlo con el motivo escrito es un ratchet honesto.
+
+#### F12.bis — [v2, C3] LOS NUEVE archivos de test del backend van a los DOS ratchets. Tabla literal.
+
+**El defecto del v1:** creaba **9** archivos de test de backend y nombraba el registro sólo en 4 fases (F3, F4, F9, F10). El DoD decía "los 5". **Los que faltaran ponen ROJO `test_harness_ratchet_meta.py::test_ratchet_clasifica_todos_los_tests`**, que exige que **todo** `tests/test_*.py` esté en `HARNESS_TEST_FILES` del `.sh` **o** en `harness_ratchet_allowlist.txt`. Es trampa de **commit**: revienta al final, con `--no-verify` prohibido.
+
+**Y la vía del allowlist está cerrada:** medido, `harness_ratchet_allowlist.txt` tiene **194** entradas y `test_harness_ratchet_meta.py:66` fija `_ALLOWLIST_MAX = 197`. Meter 5 daría **199** y pondría rojo `test_allowlist_grandfathered_solo_baja` **además** del otro. **La única salida correcta es registrar los nueve en el `.sh`.**
+
+| # | Archivo de test (backend) | Fase | En `run_harness_tests.sh` (ruta **pelada**) | En `run_harness_tests.ps1` (**entrecomillada + coma**) |
+|---|---|---|---|---|
+| 1 | `tests/test_plan295_matriz_no_miente.py` | F2 / F2a | **SÍ** | **SÍ** |
+| 2 | `tests/test_plan295_gate_transversal.py` | F3 | **SÍ** | **SÍ** |
+| 3 | `tests/test_plan295_ratchet_evidencias.py` | F4 | **SÍ** | **SÍ** |
+| 4 | `tests/test_plan295_sonda_tls.py` | F5 | **SÍ** | **SÍ** |
+| 5 | `tests/test_plan295_errores_gitlab.py` | F6 | **SÍ** | **SÍ** |
+| 6 | `tests/test_plan295_breaker_gitlab.py` | F7 / F8 | **SÍ** | **SÍ** |
+| 7 | `tests/test_plan295_webhooks_por_proyecto.py` | F9 | **SÍ** | **SÍ** |
+| 8 | `tests/test_plan295_flag_intervalo.py` | F10 | **SÍ** | **SÍ** |
+| 9 | `tests/test_plan295_paridad_runtimes.py` | F12 | **SÍ** | **SÍ** |
+
+> **Formato, que difiere entre los dos archivos y es donde se cometen los errores:**
+> - `.sh` → `  tests/test_plan295_matriz_no_miente.py` — ruta **pelada**, sin comillas, sin coma.
+> - `.ps1` → `  "tests/test_plan295_matriz_no_miente.py",` — **entrecomillada y con coma**. El **último** elemento del array va **sin** coma final (`run_harness_tests.ps1:1008`).
+> - `test_plan259_ratchet_script_parity.py::test_el_ps1_no_tiene_rutas_sin_comillas` caza exactamente el error de pegar la ruta pelada en el `.ps1`: PowerShell la lee como nombre de comando y **el array la pierde en silencio**.
+>
+> **Los 4 archivos de test del frontend (`.test.ts`) NO van a estos ratchets**: los scripts del arnés sólo listan `tests/*.py` del backend. Sus gates son el `npx vitest run` de su fase y el `npx tsc --noEmit` de F12.
+>
+> **Brecha después de registrar:** +9 en el `.sh` y +9 en el `.ps1` ⇒ `solo_en_sh` se mantiene en **64**, que es exactamente `_PS1_LAG_MAX`. **Registrar en uno solo la lleva a 65 y pone rojo `test_el_ps1_no_pierde_terreno`.**
+
+**Comando de verificación (se corre ANTES de commitear código, no después):**
+
+```
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_ratchet_meta.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan259_ratchet_script_parity.py" -q
+```
 
 **Las TRES flags nuevas del plan, en una tabla (para que el implementador no se pierda):**
 
@@ -2333,7 +2830,11 @@ grep -c "Ej: Done, Closed, Resolved" "Stacky Agents/frontend/src/components/Fini
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_bounds.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_flags_help.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_harness_ratchet_meta.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_error_fingerprints_catalog.py" -q
 ```
+
+> **[v2, C3 + C18] Los dos últimos son nuevos en la v2.** `test_harness_ratchet_meta.py` **no estaba en la batería del v1** y es el que caza los archivos de test sin registrar (C3); su criterio es **delta CON LISTA** contra `1 failed, 3 passed` + `['tests/test_plan293_commit.py']`, nunca `4 passed`. `test_error_fingerprints_catalog.py` (`3 failed, 5 passed`) entra para que su rojo ajeno esté medido y no se confunda con daño de este plan.
 
 Frontend:
 
@@ -2355,10 +2856,11 @@ npx tsc --noEmit
 
 1. Los **9** archivos de test nuevos del backend: **todos verdes**, con el conteo de `passed` que su fase declara.
 2. Los **4** archivos de test nuevos del frontend: **todos verdes**.
-3. Los **9** archivos ajenos de no-regresión: **delta cero** respecto de los baselines de F0. Un rojo nuevo es daño y **bloquea el cierre**.
+3. **[v2, C3+C18]** Los **11** archivos ajenos de no-regresión: **delta cero** respecto de los baselines **MEDIDOS** de F0 (no "verde": delta contra el número de la tabla). Un rojo nuevo es daño y **bloquea el cierre**. Para `test_harness_ratchet_meta.py` el criterio es **delta con lista**.
 4. `npx tsc --noEmit`: **0 errores nuevos** respecto del baseline de F0 (medirlo en F0 también).
 5. Los **9** KPI de §1 medidos con sus comandos y anotados.
-6. `test_plan259_ratchet_script_parity.py` **verde**: la brecha `.sh − .ps1` sigue **≤ 64**. **Con 5 archivos de test nuevos registrados en los dos, la brecha se mantiene en 64.**
+6. **[v2, C3]** `test_plan259_ratchet_script_parity.py` **verde** (`12 passed`, baseline de F0): la brecha `solo_en_sh` sigue **≤ 64**. **Con los 9 archivos de test nuevos del backend registrados en los DOS scripts, la brecha se mantiene en 64.**
+7. **[v2, C18]** `test_harness_ratchet_meta.py` con **delta cero** contra su baseline medido (`1 failed, 3 passed`), y la lista de no clasificados del mensaje de error conteniendo **exactamente** `['tests/test_plan293_commit.py']` — **ningún** `test_plan295_*`. Ver el gate delta de F0.
 
 **Mitad de contraste de F12:** el caso 1 del test de paridad se prueba **inyectando** la palabra `"codex"` en un comentario de `services/gitlab_setup_check.py`, corriendo (tiene que **fallar** nombrando el archivo), y revirtiendo. Sin eso, un test de paridad que solo grepea puede estar buscando en la ruta equivocada.
 
@@ -2389,10 +2891,12 @@ npx tsc --noEmit
 | R5 | **F9 devuelve 409/404 donde antes creaba** y el operador cree que el webhook se rompió | media | medio | Los dos mensajes son **accionables** y nombran el proyecto. El auto-creado queda **ON** por default: el `404` solo aparece si el operador **apaga** la flag. El `409` solo aparece sin proyecto activo, que es un estado que ya rompe todo lo demás. |
 | R6 | **F10 rompe el tablero** si el endpoint de config falla | baja | medio | `intervaloDeSync` devuelve **45 000** ante `undefined`, `0`, negativo o `NaN`. Los casos 2 y 3 del test cubren los cuatro. El import de `DEFAULT_INTERVAL_MS` **se conserva** a propósito. |
 | R7 | **F10 desincroniza la barra de estado** del intervalo real | media | bajo | Los **dos** consumidores (`:1110` y `:1353`) salen de la **misma** variable `intervaloSync`. El caso 4 del test de frontend lo verifica por texto fuente. **Este riesgo lo encontró la re-verificación de anclajes: el insumo no lo veía.** |
-| R8 | **El ratchet `_PS1_LAG_MAX = 64` revienta al commitear** | **alta si no se lee F0** | alto | B4 lo mide y F0 lo advierte con ⚠️. **Los 5 archivos de test nuevos se registran en los DOS scripts, con el formato de cada uno.** Es trampa de **commit**: aparece al final, cuando parece que terminó. |
+| R8 | **El ratchet `_PS1_LAG_MAX = 64` revienta al commitear** | **alta si no se lee F0** | alto | B4 lo mide y F0 lo advierte con ⚠️. **[v2, C3] Los NUEVE archivos de test nuevos del backend se registran en los DOS scripts**, con el formato de cada uno (tabla literal en F12.bis). Es trampa de **commit**: aparece al final, cuando parece que terminó. |
+| R13 | **[v2, C18] `test_harness_ratchet_meta.py` ya viene rojo por un test AJENO en vuelo** (`tests/test_plan293_commit.py`, de la sesión paralela, sin registrar) | **confirmada, ya ocurrió** | medio | Baseline medido en F0: **`1 failed, 3 passed`**. El criterio es **delta con lista**: los no clasificados tienen que seguir siendo **exactamente** `['tests/test_plan293_commit.py']`. **Este plan NO registra ese archivo** — es trabajo ajeno en vuelo y esta corrida tiene prohibido tocarlo. |
+| R14 | **[v2, C18] El hook de pre-commit podría correr el ratchet meta en el commit de CÓDIGO y frenarlo por el rojo ajeno** | media | **alto** | **Dato medido, no supuesto:** el commit del doc de este plan (`e3d6bbca`, solo-docs) **pasó** con el ratchet ya rojo, así que el hook **no** corre este test para cambios de sólo documentación. **Para el commit de código eso NO está verificado y no se puede asumir en ninguna dirección.** Mitigación: el implementador corre `test_harness_ratchet_meta.py` **antes** del primer commit de código; si el hook lo frena por `tests/test_plan293_commit.py`, **se para y se le pregunta al operador** (§10.6). **PROHIBIDO `--no-verify` y PROHIBIDO registrar el archivo ajeno para desbloquearse.** |
 | R9 | **La sesión paralela pisa un archivo** que este plan edita | media | medio | Los archivos prohibidos están enumerados y **ninguna fase los toca**. `test_plan276_gitlab_sync.py` y `test_plan288_catalogo_vivo.py` figuran como modificados en `git status`: su criterio es **delta contra F0**, no absoluto. **Prohibido `git stash`, `reset`, `checkout --`, `clean`, `amend`, `rebase`.** El commit va con **pathspec explícito**, nunca `git add -A`. |
 | R10 | **F3 declara un símbolo que no existe** y el gate queda de adorno | media | alto | La fase incluye los **comandos de verificación por `hasattr`** de cada símbolo antes de escribir el mapa, y **dos** mitades de contraste (una por dirección del assert). Si un símbolo no se puede verificar, **se borra del mapa** en vez de adivinarlo. |
-| R11 | **Los 8 rojos de fábrica del backend** se confunden con daño propio | alta | medio | F0 los mide antes de tocar nada. **Todos los criterios son delta.** `test_harness_flags_help.py` (4 rojos ajenos) y `test_error_fingerprints_catalog.py` (3 rojos ajenos) están nombrados. |
+| R11 | **Los rojos de fábrica del backend** se confunden con daño propio | alta | medio | **[v2, C8+C18] Son 13 tests en 6 archivos, MEDIDOS** (no los "8" del v1): `test_harness_flags_help.py` 4 · `test_error_fingerprints_catalog.py` 3 · `test_harness_flags_bounds.py` 1 · `test_plan218_capability_matrix.py` 2 · `test_harness_ratchet_meta.py` 1 · `test_plan276_gitlab_sync.py` 2. F0 los mide **archivo por archivo** antes de tocar nada. **Todos los criterios son delta**, y los dos que no discriminan se reemplazan por asserts de contenido en archivos verdes (F10.5.bis, gate delta-con-lista de F0). |
 | R12 | **F4 baja el ratchet a 96 y no llega** | media | bajo | El tope se ajusta al número **medido** al implementar; el requisito real es que **baje respecto del baseline de F0**, no que sea exactamente 96. La tabla de 8 conversiones es el mínimo, y 2 de las 8 (los webhooks) son borrar evidencia falsa, que es trivial. |
 
 ---
@@ -2458,8 +2962,10 @@ Cada ítem con su **iniciativa de origen** y la **justificación** del diferimie
 5. **Migrar filas con `tracker_type` mal poblado — DESCARTADO, fuera de TODA la serie 281.** Toca la base viva. `tracker_efectivo_de_ticket` (`services/project_context.py:206`) ya neutraliza el síntoma. **F9 escribe `tracker_type` en las filas NUEVAS que crea; no migra ninguna existente.**
 6. **Llevar PM / Sprint Board / User Stats a GitLab — DESCARTADO.** `backend/api/pm.py` es ADO-only con **diez** guards, y GitLab **no tiene el modelo de datos** (iteraciones, area paths, capacidad). El gate `TABS_SOLO_ADO` (`frontend/src/lib/tabsPorTracker.ts:14`) **ya es la respuesta correcta**.
 7. **Cerrar el fail-open de `tabDisponible`** (`frontend/src/lib/tabsPorTracker.ts:43`) — **DESCARTADO.** Mataría el deep link. Es decisión documentada en `:32-36`.
-8. **Un segundo compositor de deep links en el frontend — DESCARTADO.** `frontend/src/lib/trackerUrls.ts:43-52` compone **solo** ADO y devuelve `null` **a propósito**: solo el backend conoce el `base_url` real del GitLab del proyecto.
-9. **Remontar `JerarquiaLocalControl` / `PublicarEtiquetasGitLab` — DESCARTADO.** `frontend/src/services/__tests__/plan288SuperficieClasificacion.test.ts:24-27,37-38,71-74` **EXIGE que NO estén montados**. Montarlos pone ese test rojo.
+8. **Un segundo compositor de deep links en el frontend — DESCARTADO.** **[v2, C7]** `frontend/src/utils/trackerUrls.ts:43-52` compone **solo** ADO y devuelve `null` **a propósito**: solo el backend conoce el `base_url` real del GitLab del proyecto. **La ruta del v1 (`frontend/src/lib/trackerUrls.ts`) NO EXISTE**: el archivo vive en `utils/`, no en `lib/`, confirmado dos veces — por el árbol del repo y por `frontend/src/services/__tests__/plan282Censo.test.ts:78`, que lo lista como `"utils/trackerUrls.ts"` dentro de `NUNCA_ALLOWLISTEABLES`.
+9. **Remontar `JerarquiaLocalControl` / `PublicarEtiquetasGitLab` — DESCARTADO.** **[v2, C7]** `frontend/src/__tests__/plan288SuperficieClasificacion.test.ts:24-27,37-38,71-74` **EXIGE que NO estén montados**. Montarlos pone ese test rojo. **La ruta del v1 (`frontend/src/services/__tests__/…`) NO EXISTE**: el archivo está en `frontend/src/__tests__/`, un nivel arriba.
+
+> **[v2, C7] Por qué estas dos rutas eran BLOQUEANTES y no erratas.** Las dos sostienen una decisión de "no construyas esto". Un modelo menor que va a verificar la restricción abre la ruta, no encuentra el archivo, y tiene dos salidas malas: concluir que la restricción ya no aplica (y construir lo prohibido), o inventar el contenido del archivo. Es el mismo mecanismo que hundió a los cinco planes de la serie 286-292: **el supuesto de capacidad**, acá en su forma negativa — dar por existente un gate ajeno sin abrirlo.
 10. **Encender por código `STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED`, `STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED` o `STACKY_AUTOCOMMIT_REDACT_ENABLED` — DESCARTADO.** Las tres **escriben en el GitLab REAL del operador** ⇒ **excepción (B)** ⇒ **se le PREGUNTA**. Van en §10 como pendientes suyos. **Mencionarlas sí; encenderlas nunca.**
 11. **Reescribir `gitlab_setup_check` para que use `GitLabClient` — DESCARTADO.** Las tres razones del docstring `:7-12` siguen siendo correctas y están citadas íntegras en F5. **El arreglo pasa el bundle SIN reintroducir el cliente.**
 
@@ -2472,7 +2978,9 @@ Cada ítem con su **iniciativa de origen** y la **justificación** del diferimie
 | Término | Significado en este plan |
 |---|---|
 | **Mitad de contraste** | El output **ROJO** que un gate tiene que producir **antes** del código. Un gate que no se vio fallar es un adorno. |
-| **Delta** | Criterio relativo al baseline de F0, no absoluto. Obligatorio porque el backend tiene **8 rojos de fábrica**. |
+| **Delta** | Criterio relativo al baseline de F0, no absoluto. Obligatorio porque el backend tiene **13 rojos de fábrica medidos en 6 archivos** ([v2, C8]). |
+| **Delta con lista** | **[v2, C18]** Variante para un archivo cuyo rojo es AJENO y en vuelo: no alcanza con "mismo conteo", hay que exigir que **el conjunto de items que fallan sea el mismo**. Es lo que impide que un rojo propio entre tapado por uno ajeno. Se usa en el gate de `test_harness_ratchet_meta.py`. |
+| **Guardián que no discrimina** | **[v2, C6]** Un test que ya está rojo por deuda ajena y por lo tanto sale **igual** con el cableado puesto y sin él. `test_harness_flags_bounds.py` y `test_harness_flags_help.py` lo son hoy. **Un criterio de conteo sobre ellos no es un criterio**: el assert se muda a un archivo verde y se hace **por contenido**. |
 | **Ratchet** | Un tope numérico que **solo puede bajar** (F4) o una brecha que **solo puede cerrarse** (los dos scripts del arnés). |
 | **Perilla fantasma** | Config publicada por un endpoint que **ningún** consumidor lee (`ticket_sync_interval_ms` antes de F10). Se detecta censando **por referencia**, no por quién llama al endpoint. |
 | **Excepción (A)** | Quema tokens en **reposo**: loop, daemon, barrido, polling, prefetch o inyección de contexto que llama a un modelo sin que el operador pida nada. **Ninguna fase de este plan cae acá.** |
@@ -2513,9 +3021,10 @@ F12 →  test(plan-295): F12 - paridad de los tres runtimes, docs y no-regresion
 - [ ] Las **12** fases con su commit propio, en orden.
 - [ ] Los **9** archivos de test nuevos del backend, verdes con el conteo declarado.
 - [ ] Los **4** archivos de test nuevos del frontend, verdes.
-- [ ] Los **5** archivos de test nuevos registrados en **`run_harness_tests.sh` Y `run_harness_tests.ps1`**, y `test_plan259_ratchet_script_parity.py` **verde** (brecha ≤ 64).
+- [ ] **[v2, C3]** Los **9** archivos de test nuevos **del backend** registrados en **`run_harness_tests.sh` Y `run_harness_tests.ps1`** (la tabla literal de F12.bis), y `test_plan259_ratchet_script_parity.py` **verde** (brecha `solo_en_sh` = **64**, el máximo).
+- [ ] **[v2, C18]** `test_harness_ratchet_meta.py` con **delta cero** contra el baseline medido (`1 failed, 3 passed`) y la lista de no clasificados conteniendo **sólo** `tests/test_plan293_commit.py` — **cero** `test_plan295_*`.
 - [ ] Las **12** mitades de contraste **ejecutadas, con el output pegado** en este documento, y los parches **revertidos** (`git diff` limpio).
-- [ ] Los **9** archivos ajenos de no-regresión con **delta cero**.
+- [ ] **[v2, C3+C18]** Los **11** archivos ajenos de no-regresión con **delta cero contra el baseline MEDIDO de F0** (no "verdes"): `test_plan218_capability_matrix.py` **de `2 failed, 8 passed` a `10 passed`** (mejora declarada, F2+F2a) · `test_plan259_setup_guide_api.py` 27 · `test_plan259_setup_guide_data.py` 14 · `test_plan259_ratchet_script_parity.py` 12 · `test_plan276_gitlab_sync.py` `2 failed, 19 passed` · `test_p7_sync_endpoints.py` 3 · `test_harness_flags.py` 59 (+2 con las booleanas ON) · `test_harness_flags_bounds.py` `1 failed, 17 passed` · `test_harness_flags_help.py` `4 failed, 4 passed` · `test_error_fingerprints_catalog.py` `3 failed, 5 passed` · `test_harness_ratchet_meta.py` `1 failed, 3 passed` **con delta CON LISTA**.
 - [ ] `npx tsc --noEmit` sin errores nuevos.
 - [ ] Los **9** KPI de §1 medidos con su comando y anotados.
 - [ ] Las **3** flags nuevas con sus guardianes completos: `config.py`, `FlagSpec`, `_CATEGORY_KEYS`, `PLAIN_HELP`, y —**solo las booleanas ON**— `_CURATED_DEFAULTS_ON`; la numérica **con `_FROZEN_BOUNDS` y SIN `default=`**.
@@ -2564,6 +3073,18 @@ Las tres nacen **ON** y **ninguna** escribe en su GitLab ni consume tokens en re
 | `STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED` | los errores de GitLab salen como `500 unexpected` (conducta de hoy) y GitLab no consulta breaker |
 | `STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED` | el webhook de CI devuelve `404` en vez de crear un ticket placeholder |
 | `STACKY_TICKET_SYNC_INTERVAL_MS` | es un número, no un interruptor: `45000` es el valor histórico |
+
+### 10.6 — [v2, C18] Un test de la sesión paralela tiene el ratchet del arnés en rojo
+
+**Qué pasa.** `backend/tests/test_harness_ratchet_meta.py` está **rojo** (`1 failed, 3 passed`) porque existe `backend/tests/test_plan293_commit.py` y no está registrado ni en `run_harness_tests.sh` / `.ps1` ni en `harness_ratchet_allowlist.txt`. Ese archivo es de la **sesión paralela** (su plan 293, el tablero de Git guiado).
+
+**Qué NO hace este plan.** No lo registra ni lo mueve. Es trabajo ajeno en vuelo, y sólo su autor sabe si el test pasa aislado (condición para entrar al `.sh`) o si va al allowlist con motivo escrito. Este plan sólo garantiza **no empeorarlo**: después de sus 14 fases, la lista de no clasificados tiene que seguir teniendo **exactamente** ese archivo.
+
+**Lo que puede necesitar su decisión.** El commit del **documento** de este plan (`e3d6bbca`, sólo docs) **pasó** con el ratchet ya rojo, así que el hook no corre este test para cambios de sólo documentación. **Para los commits de CÓDIGO eso no está verificado.** Si al commitear F1 el hook frena por `tests/test_plan293_commit.py`:
+
+- **PROHIBIDO `--no-verify`.**
+- **PROHIBIDO registrar el archivo ajeno** para desbloquearse.
+- El implementador **se detiene y le pregunta**. Las opciones son suyas: (a) pedirle a la sesión paralela que lo registre, (b) autorizar explícitamente que este plan lo registre, o (c) esperar a que esa rama cierre.
 
 ### 10.5 — Aprobación del corte de alcance
 

@@ -24,9 +24,8 @@ import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import RecoverExecutionButton from "./RecoverExecutionButton";
 import FinishWorkButton from "./FinishWorkButton";
 import CreateChildTaskButton from "./CreateChildTaskButton";
-// Plan 277 F4 — clasificación local de jerarquía. El componente decide solo si se
-// muestra (proyecto GitLab + flag encendida + la clave presente en el payload).
-import JerarquiaLocalControl from "./JerarquiaLocalControl";
+// Plan 288 F2 — la superficie de clasificación local se retiró de esta vista.
+// El motor de datos sigue vivo (ver Plan 288 §2.2).
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import { formatWorkItemTypeLabel, isIncidentWorkItemType } from "../utils/workItemTypeColor";
@@ -490,20 +489,6 @@ function TicketNodeCard({ ticket, inferMap, onInfer, isEpic = false, vsCodeAgent
                 {accionAbrirEn(ttTicket)}
               </a>
             )}
-
-            {/* Plan 277 F4 — Tipo y Padre locales. Se renderiza solo en proyectos
-                GitLab, con la flag encendida y si el payload trae la clave; en
-                cualquier otro caso el componente devuelve null y la tarjeta queda
-                exactamente como estaba. */}
-            <div onClick={(e) => e.stopPropagation()}>
-              <JerarquiaLocalControl
-                ticket={ticket}
-                onGuardado={() => {
-                  qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
-                  qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
-                }}
-              />
-            </div>
 
             {/* Botón de recuperación de inconsistencia */}
             {!isEpic && inconsistency.isInconsistent && ticket.ado_id && (

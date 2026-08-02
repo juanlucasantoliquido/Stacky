@@ -19,9 +19,9 @@ import FinishWorkButton from "../components/FinishWorkButton";
 import CreateChildTaskButton from "../components/CreateChildTaskButton";
 import EpicFromBriefModal from "../components/EpicFromBriefModal";
 import TicketLocalInsightButton from "../components/TicketLocalInsightButton";
-// Plan 277 F4 — clasificación local de jerarquía (se auto-oculta fuera de GitLab).
-import JerarquiaLocalControl from "../components/JerarquiaLocalControl";
-import PublicarEtiquetasGitLab from "../components/PublicarEtiquetasGitLab";  // Plan 277 F5
+// Plan 288 F2 — la superficie de clasificación local (JerarquiaLocalControl y
+// PublicarEtiquetasGitLab) se retiró de esta vista. El motor de datos sigue vivo:
+// columnas, ruta PATCH y contadores de la sincronización. Ver Plan 288 §2.2.
 import LoadErrorState from "../components/LoadErrorState";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
@@ -729,20 +729,6 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                 (épica, hijas, comentarios y outputs). Gratis, corre local. */}
             <TicketLocalInsightButton ticketId={ticket.id} />
 
-            {/* Plan 277 F4 — Tipo y Padre locales, precargados del payload. El
-                componente devuelve null salvo en proyectos GitLab con la flag
-                encendida y la clave presente, así que el tablero de ADO queda
-                exactamente igual. */}
-            <div onClick={(e) => e.stopPropagation()}>
-              <JerarquiaLocalControl
-                ticket={ticket}
-                onGuardado={() => {
-                  qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] });
-                  qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] });
-                }}
-              />
-            </div>
-
             {ticket.description && (
               <details className={styles.descDetails}>
                 <summary>Descripción</summary>
@@ -1350,16 +1336,6 @@ export default function TicketBoard({ ticket = null }: { ticket?: number | null 
             what="los tickets"
             error={ticketsError}
             onRetry={() => { void refetchTickets(); }}
-          />
-        )}
-        {/* Plan 277 F5 — publicar en GitLab las etiquetas de la clasificación local.
-            Vive al lado de las vistas de jerarquía porque es lo que publica JUSTO lo
-            que esas vistas muestran. Se auto-oculta si el proyecto no es GitLab. */}
-        {(viewMode === "tree" || viewMode === "graph") && (
-          <PublicarEtiquetasGitLab
-            projectName={activeProjectName}
-            trackerType={trackerType}
-            onPublicado={() => { void refetchHierarchy(); }}
           />
         )}
         {/* Vista jerárquica */}

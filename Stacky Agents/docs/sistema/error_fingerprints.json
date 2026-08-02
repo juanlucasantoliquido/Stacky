@@ -1231,6 +1231,28 @@
           "POST /api/pipeline-profiler/profile -> 200 {\"ok\": true, \"profile\": {\"purpose\": \"Compila y testea para .NET Core.\"}}"
         ]
       }
+    },
+    {
+      "id": "git_partial_commit_during_merge",
+      "title": "El guardado por archivos muere si quedo una fusion a medias",
+      "class": "git-local-write",
+      "status": "resolved",
+      "log_pattern": "cannot do a partial commit during a merge",
+      "log_guarded": false,
+      "killed_by": "plan 293 F3/F4/F6 (operacion_en_curso, detectado por sistema de archivos)",
+      "killed_commit": "c27b948b",
+      "date_resolved": "2026-08-02",
+      "guard_test": "tests/test_plan293_commit.py::test_13_conflictos_presentes_bloquean",
+      "evidence": "backend/services/git_workbench.py (operacion_en_curso, _MARCAS_EN_CURSO); backend/services/git_local_writer.py (confirmar_cambios, guarda de operacion_en_curso antes de ejecutar git)",
+      "note": "El tablero de trabajo guarda con pathspec explicita (commit -F <msg> -- <rutas>) porque esa es la barrera que impide llevarse trabajo ajeno del indice. PERO con una fusion a medias git rechaza el commit parcial con exit 128, y el sensor obvio no alcanza: apenas el usuario resuelve el conflicto con add, las lineas 'u' DESAPARECEN de git status --porcelain=v2, que no tiene ningun campo de estado de fusion. O sea que el semaforo daba verde y el mecanismo central fallaba igual. Se detecta por SISTEMA DE ARCHIVOS (MERGE_HEAD, CHERRY_PICK_HEAD, REVERT_HEAD, rebase-merge, rebase-apply, BISECT_LOG) preguntandole el gitdir real a rev-parse --absolute-git-dir, porque en un worktree enlazado .git es un ARCHIVO y no una carpeta. El camino de error igual traduce el string nativo de git por si aparece por otra via.",
+      "self_test": {
+        "matches": [
+          "ERROR git_local_writer commit fallo: fatal: cannot do a partial commit during a merge."
+        ],
+        "clean": [
+          "INFO git_local_writer guardado ok sha=9ef70c0e archivos=2"
+        ]
+      }
     }
   ]
 }

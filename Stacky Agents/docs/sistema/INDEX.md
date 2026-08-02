@@ -31,6 +31,7 @@ Cada archivo cubre un área. Abrí solo lo que necesites; no hace falta leer tod
 | [15-degradacion-declarada.md](15-degradacion-declarada.md) | `metadata["capability_degraded"]`: qué capacidades saltea Stacky en un tracker no-ADO, quién las escribe, los 6 sitios que no declaran y el KPI K1 (plan 290). |
 | [auto_pr_dev_resolutor.md](auto_pr_dev_resolutor.md) | Auto-PR del Dev Resolutor: pasos exactos para activar la creación de rama en GitLab, el humo del operador y qué NO se puede prometer (plan 291). |
 | [16-sync-incremental-gitlab.md](16-sync-incremental-gitlab.md) | El sync de GitLab pide sólo lo que cambió: los dos modos, las DOS barreras de correctitud (la regla de ausencia y la de admisión), la marca monótona con la hora del servidor y por qué el daemon quedó fuera (plan 292). |
+| [17-tablero-de-trabajo.md](17-tablero-de-trabajo.md) | **Escrita para quien la usa, no para quien la programó.** El tablero "Publicar mi trabajo": cómo se abre, qué se ve, los TRES anillos de opciones (dos apagados de fábrica), las capturas como evidencia y qué pasa con ellas en Azure DevOps, lo que el tablero NO puede hacer y por qué, y las decisiones D2/D8-D12 con su valor actual (plan 293). |
 
 ## Invariantes globales del sistema
 1. **Selector de runtime sin fallback silencioso**: si elegís `codex_cli` o `claude_code_cli`, un error del runner es error real; NUNCA cae a `github_copilot`. [V: agent_runner.py:273-282,347-355]
@@ -53,3 +54,4 @@ Cada archivo cubre un área. Abrí solo lo que necesites; no hace falta leer tod
 - Se agregó un doc `docs/NN_*` o cambió el estado de un plan → revisar **11-estado-planes.md**.
 - Se agregó/quitó un NODO o subsistema del sistema → revisar **10-grafo.md** (mantener R7: Mermaid == tabla == YAML).
 - Cambió `services/gitlab_sync.py`, `services/gitlab_sync_watermark.py` o alguno de los tres llamadores de `sync_gitlab_tickets` (`app.py`, `api/tickets.py`, `services/completion_sync.py`) → revisar **16-sync-incremental-gitlab.md**.
+- Cambió `services/{git_workbench,git_local_writer,change_proposal,work_evidence}.py`, `api/workbench.py`, `pages/WorkbenchPage.tsx` o alguna de las tres opciones `STACKY_WORKBENCH_*` → revisar **17-tablero-de-trabajo.md** (+ **08** si cambió un default de opción, y **07** si cambió el tab `publicar`).

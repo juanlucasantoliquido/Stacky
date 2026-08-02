@@ -238,3 +238,78 @@ class TestPlan284StageApprove:
                         json={"run": "no_existe_284", "approve": True})
         assert r.status_code == 404
         assert r.get_json()["error"] == "run_not_found"
+
+
+class TestPlan285CorpusHuerfano:
+    """F1.3 — listar es ON, purgar es OFF. En Stacky un 403 significa FLAG
+    APAGADA, nunca permiso: es mono-operador y no hay auth real."""
+
+    def test_f1_orphans_403_con_la_flag_apagada(self, client, monkeypatch):
+        from config import config
+        monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_ORPHANS_ENABLED", False,
+                            raising=False)
+        r = client.get("/api/docs-rag/corpus/orphans")
+        assert r.status_code == 403
+        assert r.get_json()["error"] == "flag_disabled"
+
+    def test_f1_orphans_200_con_la_flag_encendida(self, client, monkeypatch):
+        """GEMELO del anterior: prueba que el 403 es por la flag y no porque la
+        ruta no exista (un 404 disfrazado daria el mismo 'no anduvo')."""
+        from config import config
+        from services import docs_rag
+        monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_ORPHANS_ENABLED", True,
+                            raising=False)
+        monkeypatch.setattr(docs_rag, "list_orphan_corpus_projects",
+                            lambda: [{"project_name": "C1", "chunks": 41,
+                                      "files": 20, "indexed_at": None}])
+        r = client.get("/api/docs-rag/corpus/orphans")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["orphans"][0]["project_name"] == "C1"
+        assert body["total_rows"] == 41
+
+    def test_f1_purge_403_con_la_flag_apagada(self, client, monkeypatch):
+        """Es el default: la purga nace OFF por excepcion (B), destruye datos."""
+        from config import config
+        monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_PURGE_ENABLED", False,
+                            raising=False)
+        r = client.post("/api/docs-rag/corpus/purge",
+                        json={"project_names": ["C1"], "expected_rows": 41})
+        assert r.status_code == 403
+        assert r.get_json()["error"] == "flag_disabled"
+
+    def test_f1_purge_400_sin_expected_rows(self, client, monkeypatch):
+        from config import config
+        monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_PURGE_ENABLED", True,
+                            raising=False)
+        r = client.post("/api/docs-rag/corpus/purge",
+                        json={"project_names": ["C1"]})
+        assert r.status_code == 400
+        assert r.get_json()["error"] == "expected_rows_requerido"
+
+        # GEMELO: falta la otra clave obligatoria.
+        r2 = client.post("/api/docs-rag/corpus/purge", json={"expected_rows": 41})
+        assert r2.status_code == 400
+        assert r2.get_json()["error"] == "project_names_requerido"
+
+    def test_f1_purge_no_toca_la_base_si_el_conteo_no_coincide(self, client,
+                                                               monkeypatch):
+        from config import config
+        from services import docs_rag
+        monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_PURGE_ENABLED", True,
+                            raising=False)
+        llamadas = []
+
+        def _spy(nombres, *, expected_rows, **k):
+            llamadas.append((list(nombres), expected_rows))
+            return {"ok": False, "deleted": 0, "reason": "row_count_mismatch",
+                    "backup_path": "", "skipped_configured": []}
+
+        monkeypatch.setattr(docs_rag, "purge_orphan_corpus_projects", _spy)
+        r = client.post("/api/docs-rag/corpus/purge",
+                        json={"project_names": ["C1"], "expected_rows": 40})
+        assert r.status_code == 409
+        assert r.get_json()["reason"] == "row_count_mismatch"
+        # PRESENCIA: el expected_rows del operador llego INTACTO al servicio.
+        assert llamadas == [(["C1"], 40)]

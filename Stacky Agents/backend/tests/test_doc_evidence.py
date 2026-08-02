@@ -501,3 +501,143 @@ def test_f0_gate_conserva_el_caso_legitimo_todo_NV():
     assert out["passed"] is True and out["reason"] == ""
     # PRESENCIA: el documento trivial se reconoce como tal, no pasa por casualidad.
     assert out["claims"] == 5
+
+
+# ---------------------------------------------------------------------------
+# Plan 285 F2 — rigor por afirmacion: la tabla de decision completa
+# ---------------------------------------------------------------------------
+
+def _doc(n_marcadas: int, n_sueltas: int) -> str:
+    return "\n".join([f"[V] Afirmacion verificada {i}." for i in range(n_marcadas)] +
+                     [f"Afirmacion sin marca {i}." for i in range(n_sueltas)])
+
+
+def test_f2_rigor_documento_trivial_pasa():
+    from services.doc_documenter import evaluate_rigor_gate
+    out = evaluate_rigor_gate(_doc(0, 5), None)
+    assert out["passed"] is True and out["claims"] == 5
+
+
+def test_f2_rigor_densidad_justo_en_el_umbral():
+    """La comparacion es `<`: justo en el umbral PASA."""
+    from services.doc_documenter import evaluate_rigor_gate
+    out = evaluate_rigor_gate(_doc(5, 5), {"total": 1, "ok": 1, "bad": []},
+                              min_density=0.5)
+    assert out["passed"] is True, f"0.5 no es < 0.5: {out}"
+    assert out["density"] == 0.5 and out["claims"] == 10
+
+
+def test_f2_rigor_densidad_un_pelo_abajo():
+    from services.doc_documenter import evaluate_rigor_gate
+    out = evaluate_rigor_gate(_doc(4, 6), {"total": 1, "ok": 1, "bad": []},
+                              min_density=0.5)
+    assert out["passed"] is False
+    assert out["reason"].startswith("rigor_density_below:")
+    assert out["reason"] == "rigor_density_below:4/10"
+
+
+def test_f2_rigor_lineas_de_codigo_no_cuentan_como_afirmacion():
+    """Sin esto, un doc bien escrito con un ejemplo de codigo pegado se rechaza."""
+    from services.doc_documenter import evaluate_rigor_gate
+
+    cuerpo = "\n".join(
+        [f"[V] Afirmacion verificada {i}." for i in range(3)] +
+        ["```python"] + [f"linea_de_codigo_{i} = {i}" for i in range(40)] + ["```"])
+    out = evaluate_rigor_gate(cuerpo, {"total": 1, "ok": 1, "bad": []})
+    assert out["passed"] is True, f"el codigo conto como afirmacion: {out}"
+    # PRESENCIA: las 3 afirmaciones reales SI se contaron (no dio 0 por error).
+    assert out["claims"] == 3 and out["marked"] == 3
+
+
+def test_f2_rigor_encabezados_no_cuentan():
+    from services.doc_documenter import evaluate_rigor_gate
+
+    cuerpo = "\n".join([f"## Seccion {i}" for i in range(20)] +
+                       [f"[V] Afirmacion verificada {i}." for i in range(3)])
+    out = evaluate_rigor_gate(cuerpo, {"total": 1, "ok": 1, "bad": []})
+    assert out["passed"] is True
+    assert out["claims"] == 3, f"los encabezados contaron: {out}"
+
+
+def test_f2_rigor_degrada_ante_basura():
+    from services.doc_documenter import evaluate_rigor_gate
+    assert evaluate_rigor_gate(None, None)["passed"] is True
+    assert evaluate_rigor_gate("", {})["passed"] is True
+    assert evaluate_rigor_gate(_doc(0, 60), "no soy un dict")["passed"] is not None
+
+
+def test_f2_rigor_lee_los_umbrales_de_config(monkeypatch):
+    """Sin este test las 2 flags numericas son DECORATIVAS: quedarian
+    registradas en el arnes y muertas en el codigo."""
+    from config import config
+    from services.doc_documenter import evaluate_rigor_gate
+
+    cuerpo = _doc(5, 5)                       # densidad exacta 0.5
+    citas = {"total": 1, "ok": 1, "bad": []}
+
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_MIN_DENSITY", 0.5, raising=False)
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_MIN_CITATIONS", 1, raising=False)
+    assert evaluate_rigor_gate(cuerpo, citas)["passed"] is True
+
+    # El MISMO documento, con el umbral mas exigente, ahora falla.
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_MIN_DENSITY", 0.9, raising=False)
+    apretado = evaluate_rigor_gate(cuerpo, citas)
+    assert apretado["passed"] is False, "la flag de densidad no llega al calculo"
+    assert apretado["reason"].startswith("rigor_density_below:")
+
+    # Idem con las citas: mismo doc denso, cero citas validas.
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_MIN_DENSITY", 0.5, raising=False)
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_MIN_CITATIONS", 2, raising=False)
+    sin_citas = evaluate_rigor_gate(cuerpo, {"total": 1, "ok": 1, "bad": []})
+    assert sin_citas["passed"] is False, "la flag de citas minimas no llega al calculo"
+    assert sin_citas["reason"] == "rigor_no_citations"
+
+
+def test_f2_rigor_alcanzable_en_las_4_combinaciones(monkeypatch, tmp_path):
+    """C4 — el gate tiene que correr en las CUATRO combinaciones de flags.
+    Un ratchet de ORDEN de lineas se cumple igual con el gate inalcanzable."""
+    from config import config
+    from services.doc_documenter import apply_proposals
+
+    ws = tmp_path / "ws"
+    (ws / "services").mkdir(parents=True)
+    (ws / "services" / "real.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED", True, raising=False)
+
+    for v2 in (True, False):
+        for citas in (True, False):
+            monkeypatch.setattr(config, "STACKY_DOCS_DOCUMENTER_V2_ENABLED", v2)
+            monkeypatch.setattr(config, "STACKY_DOCS_CITATION_GATE_ENABLED", citas)
+            destino = tmp_path / f"out_{v2}_{citas}"
+            destino.mkdir()
+            # El workspace_root se resuelve como en run_documenter, incluida la
+            # extension del 285: con las tres flags OFF llegaria None.
+            ws_efectivo = str(ws) if (v2 or citas or True) else None
+            mala, buena = _props_alucinada_y_sana("services/real.py")
+            apply_proposals([mala, buena], str(destino), None,
+                            workspace_root=ws_efectivo)
+            assert not (destino / "alucinado.md").exists(), \
+                f"gate inerte con V2={v2} CITAS={citas}"
+            assert (destino / "sano.md").exists(), \
+                f"el doc sano se rechazo con V2={v2} CITAS={citas}"
+
+
+def test_f2_gate_apagado_no_rechaza_nada(monkeypatch, tmp_path):
+    """Prueba que la flag es PORTANTE, no decorativa: con OFF vuelve el
+    comportamiento de hoy bit a bit (el alucinado se escribe)."""
+    from config import config
+    from services.doc_documenter import apply_proposals
+
+    ws = tmp_path / "ws"
+    (ws / "services").mkdir(parents=True)
+    (ws / "services" / "real.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+    destino = tmp_path / "out"
+    destino.mkdir()
+
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED", False, raising=False)
+    mala, buena = _props_alucinada_y_sana("services/real.py")
+    apply_proposals([mala, buena], str(destino), None, workspace_root=str(ws))
+
+    assert (destino / "alucinado.md").exists(), \
+        "con la flag OFF el gate igual rechazo: no es portante, es un cambio duro"
+    assert (destino / "sano.md").exists()

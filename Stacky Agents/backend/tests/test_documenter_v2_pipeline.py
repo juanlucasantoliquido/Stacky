@@ -5,6 +5,7 @@ Tests corridos por archivo con el venv real del repo (backend/.venv, py3.13).
 from __future__ import annotations
 
 import os
+import pathlib
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 
@@ -1341,3 +1342,234 @@ def test_f0_fallo_del_barrido_no_es_mudo(monkeypatch):
         f"el fallo del barrido quedo mudo para el modelo: {titulos}"
     # PRESENCIA de control: el resto del contexto sigue armandose.
     assert any(b.get("id") == "sistema-readonly" for b in blocks)
+
+
+# ===========================================================================
+# Plan 285 F3 — el descarte de tickets se vuelve trazable
+# ===========================================================================
+
+def _verdicts_285(n_noise: int = 10, n_signal: int = 2):
+    from services.doc_ticket_mining import TicketVerdict
+    ruido = [TicketVerdict(ticket_id=i, external_id=-i, tracker_type="demo",
+                           title=f"test {i}", verdict="noise",
+                           reasons=["sin_descripcion", "ticket_interno_de_stacky"],
+                           score=-5 - i)
+             for i in range(1, n_noise + 1)]
+    senal = [TicketVerdict(ticket_id=900 + i, external_id=900 + i,
+                           tracker_type="gitlab",
+                           title=f"Historia documentable del modulo {i}",
+                           verdict="signal",
+                           reasons=[f"descripcion_extensa:{900 + i}"], score=3)
+             for i in range(n_signal)]
+    return ruido + senal
+
+
+def test_f3_reason_counts_suma_todo_el_barrido():
+    """El histograma cuenta sobre TODO el barrido, no sobre la muestra: si
+    contara sobre la muestra el operador leeria un histograma sesgado."""
+    from services.doc_ticket_mining import build_triage_report
+
+    verdicts = _verdicts_285(n_noise=10, n_signal=2)
+    out = build_triage_report(
+        {"total": 12, "total_rows": 12, "truncated": False, "signal": 2,
+         "noise": 10, "by_tracker": {"demo": 10, "gitlab": 2},
+         "verdicts": verdicts},
+        max_noise=3)
+
+    assert len(out["noise_sample"]) == 3, "la muestra no respeto max_noise"
+    assert sum(out["reason_counts"].values()) >= 10, \
+        f"el histograma se calculo sobre la muestra: {out['reason_counts']}"
+    # PRESENCIA de una key concreta, nunca `!= {}`.
+    assert out["reason_counts"]["sin_descripcion"] == 10
+    # Los PEORES primero: score ascendente.
+    scores = [f["score"] for f in out["noise_sample"]]
+    assert scores == sorted(scores), f"la muestra no prioriza los peores: {scores}"
+    # Nunca lanza.
+    assert build_triage_report(None)["reason_counts"] == {}
+
+
+def test_f3_build_context_for_mode_conserva_su_firma(monkeypatch):
+    """R4 — prohibido cambiar su firma: la hermana es la que devuelve el triage."""
+    from services import doc_documenter
+    from services.doc_documenter import (DocumenterMode, DocumenterPlan,
+                                         build_context_for_mode)
+
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "doc-subgraph", "kind": "sg",
+                                   "title": "SG", "content": "x"})
+    plan = DocumenterPlan(status="SANA", modes=[], notes_to_normalize=[],
+                          notes_to_update=[])
+
+    tres = build_context_for_mode(DocumenterMode.ENRIQUECER, plan, "P")
+    cuatro = build_context_for_mode(DocumenterMode.ENRIQUECER, plan, "P", "nota")
+    assert isinstance(tres, list) and isinstance(cuatro, list)
+    assert all(isinstance(b, dict) for b in tres)
+    # PRESENCIA: sigue devolviendo el contexto real, no una lista vacia.
+    assert any(b.get("id") == "sistema-readonly" for b in tres)
+
+
+def test_f3_truncamiento_por_caracteres_tambien_se_declara():
+    """C9 — hay DOS ejes de truncamiento. Declarar COMPLETO con el segundo
+    activo cambia una afirmacion falsa por otra mas enfatica."""
+    from services.doc_ticket_mining import build_tickets_context_block
+
+    verdicts = _verdicts_285(n_noise=0, n_signal=40)
+    mining = {"total": 40, "total_rows": 40, "truncated": False,
+              "signal": 40, "noise": 0, "verdicts": verdicts}
+
+    corto = build_tickets_context_block(mining, max_chars=120)
+    assert "TRUNCADO" in corto["content"], \
+        f"el corte por caracteres no se declara: {corto['content'][:250]}"
+
+    # GEMELO: con espacio de sobra, el bloque afirma COMPLETO.
+    largo = build_tickets_context_block(mining, max_chars=100000)
+    assert "COMPLETO" in largo["content"]
+    assert "TRUNCADO" not in largo["content"]
+
+
+# ===========================================================================
+# Plan 285 F1.1 / F1.3 — skipped_plans, huerfanos, backup y purga
+#
+# NINGUNO de estos tests puede tocar backend/data/stacky_agents.db: los 51
+# chunks basura que motivaron este plan nacieron de un pytest suelto. Todos
+# usan una base SQLite propia en tmp_path.
+# ===========================================================================
+
+@pytest.fixture
+def corpus_db(tmp_path, monkeypatch):
+    """Base SQLite REAL pero temporal, sólo con la tabla docs_index."""
+    import contextlib
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from services import docs_rag
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'corpus.db'}")
+    docs_rag.DocChunk.__table__.create(bind=engine, checkfirst=True)
+    Session = sessionmaker(bind=engine)
+
+    @contextlib.contextmanager
+    def _scope():
+        s = Session()
+        try:
+            yield s
+            s.commit()
+        except Exception:
+            s.rollback()
+            raise
+        finally:
+            s.close()
+
+    monkeypatch.setattr(docs_rag, "session_scope", _scope)
+    return _scope
+
+
+def _sembrar(scope, filas):
+    from services.docs_rag import DocChunk
+    with scope() as s:
+        for proyecto, ruta in filas:
+            s.add(DocChunk(project_name=proyecto, file_path=ruta,
+                           section_heading="## X", chunk_text="cuerpo",
+                           term_freqs_json="{}", doc_norm=1.0))
+
+
+def test_f1_index_project_reporta_skipped_plans(monkeypatch, tmp_path, corpus_db):
+    from config import config
+    from services import docs_rag
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", True)
+    docs = tmp_path / "ws" / "docs"
+    docs.mkdir(parents=True)
+    for n in ("guia.md", "arquitectura.md", "flujo.md"):
+        (docs / n).write_text(f"# {n}\n\nContenido real.\n", encoding="utf-8")
+    for n in ("101_PLAN_X.md", "102_PLAN_Y.md"):
+        (docs / n).write_text(f"# {n}\n\nUn plan.\n", encoding="utf-8")
+
+    res = docs_rag.index_project("PTMP", str(tmp_path / "ws"), "docs")
+
+    assert res["skipped_plans"] == 2, f"el filtro no reporto: {res}"
+    assert res["files_scanned"] == 3, f"debia escanear 3: {res}"
+    assert res["chunks_indexed"] >= 3
+
+
+def test_f1_purga_nunca_borra_un_proyecto_configurado(monkeypatch, corpus_db):
+    """Guarda (a): el operador puede equivocarse; el codigo no lo obedece."""
+    from services import docs_rag
+
+    _sembrar(corpus_db, [("REAL", "a.md"), ("REAL", "b.md"), ("C1", "n0.md")])
+    monkeypatch.setattr(docs_rag, "_proyectos_configurados", lambda: {"REAL"})
+
+    out = docs_rag.purge_orphan_corpus_projects(["REAL", "C1"], expected_rows=1)
+
+    assert out["ok"] is True, out
+    assert out["skipped_configured"] == ["REAL"]
+    with corpus_db() as s:
+        # AUSENCIA: el huerfano se fue.
+        assert s.query(docs_rag.DocChunk).filter_by(project_name="C1").count() == 0
+        # GEMELO DE PRESENCIA en la MISMA llamada: el configurado sigue entero.
+        assert s.query(docs_rag.DocChunk).filter_by(project_name="REAL").count() == 2
+
+
+def test_f1_purga_aborta_si_el_conteo_no_coincide(monkeypatch, corpus_db):
+    """Guarda (b): entre que el operador miro la lista y confirmo, algo cambio."""
+    from services import docs_rag
+
+    _sembrar(corpus_db, [("C1", "n0.md"), ("C1", "n1.md"), ("C1", "n2.md")])
+    monkeypatch.setattr(docs_rag, "_proyectos_configurados", lambda: {"REAL"})
+
+    out = docs_rag.purge_orphan_corpus_projects(["C1"], expected_rows=2)
+
+    assert out["ok"] is False and out["reason"] == "row_count_mismatch"
+    assert out["deleted"] == 0
+    with corpus_db() as s:
+        assert s.query(docs_rag.DocChunk).count() == 3, "borro pese al mismatch"
+    # GEMELO: con el conteo correcto SI borra (prueba que el guard discrimina,
+    # no que la funcion este rota).
+    ok = docs_rag.purge_orphan_corpus_projects(["C1"], expected_rows=3)
+    assert ok["ok"] is True and ok["deleted"] == 3
+
+
+def test_f1_purga_deja_backup_leible(monkeypatch, tmp_path, corpus_db):
+    """Guarda (c): docs_index es derivada, pero de proyectos que ya NO existen.
+    Nadie la puede regenerar: el backup es lo unico que hace reversible esto."""
+    import json as _json
+
+    from services import docs_rag
+
+    _sembrar(corpus_db, [("C1", "n0.md"), ("C1", "n1.md")])
+    monkeypatch.setattr(docs_rag, "_proyectos_configurados", lambda: {"REAL"})
+    destino = tmp_path / "backups"
+
+    out = docs_rag.purge_orphan_corpus_projects(
+        ["C1"], expected_rows=2, backup_dir=str(destino))
+
+    assert out["ok"] is True and out["backup_path"]
+    ruta = pathlib.Path(out["backup_path"])
+    assert ruta.exists(), "no quedo backup"
+    lineas = [l for l in ruta.read_text(encoding="utf-8").splitlines() if l.strip()]
+    assert len(lineas) == 2, f"el backup no tiene tantas lineas como filas: {len(lineas)}"
+    fila = _json.loads(lineas[0])
+    for clave in ("project_name", "file_path", "chunk_text"):
+        assert clave in fila, f"el backup perdio {clave}"
+
+
+def test_f1_orphans_solo_lista_los_no_configurados(monkeypatch, corpus_db):
+    from services import docs_rag
+
+    _sembrar(corpus_db, [("REAL", "a.md"), ("C1", "n0.md"), ("C1", "n1.md"),
+                         ("D1", "b.md")])
+    monkeypatch.setattr(docs_rag, "_proyectos_configurados", lambda: {"REAL"})
+
+    out = docs_rag.list_orphan_corpus_projects()
+    nombres = [o["project_name"] for o in out]
+
+    # PRESENCIA de los dos huerfanos, con su conteo.
+    assert nombres == ["C1", "D1"], f"orden por chunks descendente: {out}"
+    assert out[0]["chunks"] == 2 and out[0]["files"] == 2
+    # AUSENCIA GEMELA: el configurado NO aparece.
+    assert "REAL" not in nombres
+    # Sin lista de proyectos no se declara huerfano a NADIE (si no, el fallo de
+    # una lectura de configuracion convierte todo el corpus en basura borrable).
+    monkeypatch.setattr(docs_rag, "_proyectos_configurados", lambda: set())
+    assert docs_rag.list_orphan_corpus_projects() == []

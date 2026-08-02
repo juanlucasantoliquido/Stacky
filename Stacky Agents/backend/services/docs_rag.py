@@ -573,6 +573,155 @@ def search_hybrid(project_name: str, query: str, top_k: int = 5,
 # Estadísticas
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Plan 285 F1.3 — corpus huérfano: listar, respaldar y (sólo si el operador lo
+# aprueba) purgar.
+#
+# Por qué existe: index_project purga SOLO por project_name (:199), así que los
+# proyectos que ya no están configurados nunca se limpian solos. Medido el
+# 2026-08-01 en la base viva: 51 chunks de 8 proyectos que no existen, todos
+# fixtures de test que se filtraron desde un pytest suelto.
+# ---------------------------------------------------------------------------
+
+def _proyectos_configurados() -> set[str]:
+    """Nombres de proyecto que SÍ existen en la configuración de Stacky."""
+    try:
+        from project_manager import get_all_projects
+        nombres = set()
+        for p in get_all_projects() or []:
+            n = str((p or {}).get("name") or "").strip()
+            if n:
+                nombres.add(n)
+        return nombres
+    except Exception as exc:
+        logger.warning("docs_rag: no se pudo leer la lista de proyectos: %s", exc)
+        return set()
+
+
+def list_orphan_corpus_projects() -> list[dict]:
+    """SOLO LECTURA. Proyectos del corpus que ya no existen en la configuración.
+
+    Devuelve [{"project_name", "chunks", "files", "indexed_at"}] ordenado por
+    cantidad de chunks descendente. Nunca lanza.
+    """
+    try:
+        configurados = _proyectos_configurados()
+        # Sin lista de proyectos NO se declara nada huérfano: sería declarar
+        # huérfano a todo el corpus por un fallo de lectura de configuración.
+        if not configurados:
+            logger.warning("docs_rag: sin proyectos configurados, no se listan huérfanos")
+            return []
+        out: list[dict] = []
+        with session_scope() as session:
+            filas = session.query(DocChunk).all()
+            por_proyecto: dict[str, list] = {}
+            for c in filas:
+                por_proyecto.setdefault(c.project_name, []).append(c)
+            for nombre, chunks in por_proyecto.items():
+                if nombre in configurados:
+                    continue
+                ultimo = max((c.indexed_at for c in chunks if c.indexed_at), default=None)
+                out.append({
+                    "project_name": nombre,
+                    "chunks": len(chunks),
+                    "files": len({c.file_path for c in chunks}),
+                    "indexed_at": ultimo.isoformat() if ultimo else None,
+                })
+        out.sort(key=lambda d: d["chunks"], reverse=True)
+        return out
+    except Exception as exc:
+        logger.warning("docs_rag: list_orphan_corpus_projects fallo: %s", exc)
+        return []
+
+
+def backup_corpus_projects(project_names: list[str], dest_dir: str) -> str:
+    """Vuelca a un .jsonl TODAS las filas de esos proyectos. Devuelve la ruta.
+
+    docs_index es una tabla DERIVADA, pero derivada de proyectos que ya no
+    existen: nadie la puede regenerar. El backup es lo único que hace
+    reversible la purga.
+    """
+    destino = Path(dest_dir)
+    destino.mkdir(parents=True, exist_ok=True)
+    sello = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    ruta = destino / f"docs_index_backup_{sello}.jsonl"
+    nombres = list(project_names or [])
+    with session_scope() as session:
+        filas = (session.query(DocChunk)
+                 .filter(DocChunk.project_name.in_(nombres)).all()
+                 if nombres else [])
+        with ruta.open("w", encoding="utf-8") as fh:
+            for c in filas:
+                fh.write(json.dumps({
+                    "project_name": c.project_name,
+                    "file_path": c.file_path,
+                    "section_heading": c.section_heading,
+                    "chunk_text": c.chunk_text,
+                    "term_freqs_json": c.term_freqs_json,
+                    "doc_norm": c.doc_norm,
+                    "indexed_at": c.indexed_at.isoformat() if c.indexed_at else None,
+                }, ensure_ascii=False) + "\n")
+    return str(ruta)
+
+
+def purge_orphan_corpus_projects(project_names: list[str], *,
+                                 expected_rows: int,
+                                 backup_dir: str | None = None) -> dict:
+    """DESTRUCTIVA. Borra de docs_index sólo los project_name pasados.
+
+    Guardas duras, cada una con test:
+      (a) NUNCA borra un proyecto que exista en la configuración, aunque venga
+          en la lista. El operador puede equivocarse; el código no lo obedece.
+      (b) Si el conteo real de filas a borrar no coincide con `expected_rows`,
+          NO borra nada. Cierra la ventana de carrera entre "el operador miró
+          la lista" y "el operador confirmó".
+      (c) Hace el backup ANTES de cualquier DELETE.
+
+    Devuelve {"ok", "deleted", "reason", "backup_path", "skipped_configured"}.
+    """
+    out = {"ok": False, "deleted": 0, "reason": "", "backup_path": "",
+           "skipped_configured": []}
+    try:
+        pedidos = [str(n) for n in (project_names or []) if str(n).strip()]
+        if not pedidos:
+            out["reason"] = "sin_proyectos"
+            return out
+        configurados = _proyectos_configurados()
+        # (a) guarda dura
+        protegidos = [n for n in pedidos if n in configurados]
+        objetivo = [n for n in pedidos if n not in configurados]
+        out["skipped_configured"] = protegidos
+        if not objetivo:
+            out["reason"] = "todos_configurados"
+            return out
+        with session_scope() as session:
+            reales = (session.query(DocChunk)
+                      .filter(DocChunk.project_name.in_(objetivo)).count())
+        # (b) anti-race
+        if int(reales) != int(expected_rows):
+            out["reason"] = "row_count_mismatch"
+            out["deleted"] = 0
+            out["actual_rows"] = int(reales)
+            out["expected_rows"] = int(expected_rows)
+            return out
+        # (c) backup ANTES del DELETE
+        destino = backup_dir or str(Path(__file__).resolve().parents[1] / "data" / "backups")
+        out["backup_path"] = backup_corpus_projects(objetivo, destino)
+        with session_scope() as session:
+            borradas = (session.query(DocChunk)
+                        .filter(DocChunk.project_name.in_(objetivo))
+                        .delete(synchronize_session=False))
+        for n in objetivo:
+            _invalidate_idf(n)
+        out["ok"] = True
+        out["deleted"] = int(borradas or 0)
+        return out
+    except Exception as exc:
+        logger.warning("docs_rag: purge_orphan_corpus_projects fallo: %s", exc)
+        out["reason"] = f"error:{str(exc)[:150]}"
+        return out
+
+
 def get_stats(project_name: str) -> dict:
     """Retorna estadísticas del índice del proyecto."""
     with session_scope() as session:

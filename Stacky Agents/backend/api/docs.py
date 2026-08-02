@@ -362,6 +362,9 @@ def documenter_status():
         "radiography_delta": rec.get("radiography_delta", {}),
         "ticket_mining": rec.get("ticket_mining", {}),
         "operator_note": rec.get("operator_note", ""),
+        # Plan 285 F1.1 — estado del corpus documental. Viaja también en el
+        # reporte PENDIENTE: el operador tiene que verlo ANTES de aprobar.
+        "corpus": rec.get("corpus", {}),
     })
 
 

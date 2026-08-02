@@ -334,3 +334,43 @@ def route_chat():
     except Exception as exc:
         logger.error("docs_rag chat llm error: %s", exc, exc_info=True)
         return jsonify({"ok": False, "error": str(exc), "logs": logs}), 500
+
+
+# ---------------------------------------------------------------------------
+# Plan 285 F1.3 — corpus huerfano: listar (ON) y purgar (OFF, destructiva)
+#
+# En Stacky un 403 significa FLAG APAGADA, nunca permiso: es mono-operador y
+# no hay auth real.
+# ---------------------------------------------------------------------------
+
+@bp.get("/corpus/orphans")
+def route_corpus_orphans():
+    """Lista los proyectos que quedaron en el corpus sin existir en Stacky."""
+    if not bool(getattr(config, "STACKY_DOCS_CORPUS_ORPHANS_ENABLED", False)):
+        return jsonify({"ok": False, "error": "flag_disabled"}), 403
+    from services import docs_rag as _svc
+    huerfanos = _svc.list_orphan_corpus_projects()
+    return jsonify({
+        "ok": True,
+        "orphans": huerfanos,
+        "total_rows": sum(int(o.get("chunks", 0) or 0) for o in huerfanos),
+        # El operador necesita saber si puede accionar ANTES de mirar la lista.
+        "purge_enabled": bool(getattr(config, "STACKY_DOCS_CORPUS_PURGE_ENABLED", False)),
+    })
+
+
+@bp.post("/corpus/purge")
+def route_corpus_purge():
+    """DESTRUCTIVA. Body OBLIGATORIO: {"project_names": [...], "expected_rows": N}."""
+    if not bool(getattr(config, "STACKY_DOCS_CORPUS_PURGE_ENABLED", False)):
+        return jsonify({"ok": False, "error": "flag_disabled"}), 403
+    body = request.get_json(silent=True) or {}
+    nombres = body.get("project_names")
+    esperadas = body.get("expected_rows")
+    if not isinstance(nombres, list) or not nombres:
+        return jsonify({"ok": False, "error": "project_names_requerido"}), 400
+    if not isinstance(esperadas, int):
+        return jsonify({"ok": False, "error": "expected_rows_requerido"}), 400
+    from services import docs_rag as _svc
+    out = _svc.purge_orphan_corpus_projects(nombres, expected_rows=esperadas)
+    return jsonify(out), (200 if out.get("ok") else 409)

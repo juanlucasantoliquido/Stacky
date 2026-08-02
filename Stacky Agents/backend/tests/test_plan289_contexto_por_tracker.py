@@ -215,3 +215,67 @@ def test_los_3_runtimes_persisten_el_contador(ruta, funcion):
         f"{ruta}::{funcion} persiste `{recibido}` pero enrich_blocks devolvio `{esperado}`: "
         f"la llamada existe pero NO esta cableada al stat real"
     )
+
+
+# -- F3 - normalizador puro ---------------------------------------------------
+
+def test_normaliza_una_nota_completa():
+    from services.tracker_context import normalizar_notas_gitlab
+
+    out = normalizar_notas_gitlab([NOTAS_GITLAB[0]])
+    assert out == [{
+        "author": "Ana Perez",
+        "date": "2026-07-30",          # created_at recortado a 10, igual que ADO
+        "text": "Primera nota del cliente",
+        "is_html": False,
+    }]
+
+
+def test_autor_cae_a_username_y_despues_a_interrogacion():
+    from services.tracker_context import normalizar_notas_gitlab
+
+    solo_username = {"body": "x", "author": {"username": "cdiaz"}, "created_at": "2026-01-02T00:00:00Z"}
+    sin_autor = {"body": "y", "created_at": "2026-01-02T00:00:00Z"}
+    autor_no_dict = {"body": "z", "author": "texto suelto", "created_at": ""}
+    out = normalizar_notas_gitlab([solo_username, sin_autor, autor_no_dict])
+    assert [c["author"] for c in out] == ["cdiaz", "?", "?"]
+
+
+def test_nota_sin_body_se_descarta():
+    from services.tracker_context import normalizar_notas_gitlab
+
+    assert normalizar_notas_gitlab([{"body": "", "author": {"name": "A"}},
+                                    {"body": "   ", "author": {"name": "A"}},
+                                    {"author": {"name": "A"}}]) == []
+
+
+def test_nota_system_se_descarta_aunque_el_provider_falle_en_filtrarla():
+    """Cinturon y tirantes: el provider ya filtra system, pero el normalizador NO confia."""
+    from services.tracker_context import normalizar_notas_gitlab
+
+    assert normalizar_notas_gitlab([{"body": "changed title", "system": True,
+                                     "author": {"name": "A"}, "created_at": "2026-01-01T00:00:00Z"}]) == []
+
+
+def test_created_at_vacio_o_ausente_da_cadena_vacia():
+    from services.tracker_context import normalizar_notas_gitlab
+
+    out = normalizar_notas_gitlab([{"body": "x", "author": {"name": "A"}},
+                                   {"body": "y", "author": {"name": "A"}, "created_at": None}])
+    assert [c["date"] for c in out] == ["", ""]
+
+
+def test_entrada_que_no_es_lista_de_dicts_no_explota():
+    from services.tracker_context import normalizar_notas_gitlab
+
+    assert normalizar_notas_gitlab(None) == []
+    assert normalizar_notas_gitlab([]) == []
+    assert normalizar_notas_gitlab(["texto", 3, None]) == []
+
+
+def test_el_orden_de_entrada_se_conserva():
+    from services.tracker_context import normalizar_notas_gitlab
+
+    out = normalizar_notas_gitlab(NOTAS_GITLAB)
+    assert [c["text"] for c in out] == [
+        "Primera nota del cliente", "Segunda nota con detalle", "Tercera nota"]

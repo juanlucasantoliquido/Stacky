@@ -249,6 +249,33 @@ def put_global_config():
         )
         logger.error("global-config: no se pudo escribir el archivo de configuracion: %s", exc)
 
+    # ── Plan 290 F5 — STACKY_GITLAB_ENABLED aplica EN CALIENTE ────────────────
+    # `_write_env` actualiza el archivo de configuracion y os.environ, pero NUNCA
+    # hace setattr sobre el singleton `config.config`, que es de donde leen
+    # tracker_provider.py:133, ci_provider.py:121, ci_variables.py:87,
+    # ci_preflight.py:39 y ci_logs_provider.py:38. Sin este setattr la interfaz
+    # diria "guardado" y el motor seguiria con el valor viejo hasta reiniciar: un
+    # falso verde. Mismo idioma que api/projects.py:141-142.
+    #
+    # La UBICACION es parte del arreglo, no un detalle:
+    #   * DESPUES del `return 400` de LOG_LEVEL invalido (:219-225) — antes,
+    #     encenderia GitLab en un pedido que no persiste nada.
+    #   * DESPUES del try/except OSError y GUARDADO por `persisted` — antes, con
+    #     el disco lleno o el archivo de solo lectura, dejaria el motor ON y el
+    #     archivo sin escribir: al reiniciar vuelve a OFF. Ese es el falso verde
+    #     espejo del que esta fase viene a arreglar.
+    #
+    # El parseo replica el de config.py:1297-1299. No agregar valores verdaderos
+    # nuevos ("on" NO esta): divergiria del arranque.
+    if persisted and "STACKY_GITLAB_ENABLED" in updates:
+        import config as _config
+
+        setattr(
+            _config.config,
+            "STACKY_GITLAB_ENABLED",
+            updates["STACKY_GITLAB_ENABLED"].strip().lower() in ("1", "true", "yes"),
+        )
+
     logger.info("global-config actualizado: %s", list(updates.keys()))
     respuesta: dict = {"ok": True, "persisted": persisted}
     if mensaje:

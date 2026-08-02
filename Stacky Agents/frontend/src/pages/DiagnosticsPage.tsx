@@ -21,6 +21,7 @@ import IntakeQuarantineCard from "../components/IntakeQuarantineCard";
 import LogNoiseCard from "../components/LogNoiseCard";
 import LedgerHealthCard from "../components/LedgerHealthCard";
 import LogLevelPanel from "../components/LogLevelPanel";
+import GitlabEngineSwitch from "../components/GitlabEngineSwitch";
 import ParityMatrixPanel from "../components/ParityMatrixPanel";
 import HarnessPatternsCard from "../components/HarnessPatternsCard";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
@@ -325,6 +326,12 @@ export default function DiagnosticsPage() {
           archivo a mano; va acá (y no en el panel de flags) porque ese panel solo
           guarda el valor y no ejecutaría el cambio: diría "aplicado" en falso. */}
       <LogLevelPanel />
+
+      {/* Plan 290 F5 — el master switch de GitLab. Mismo motivo que el panel de
+          arriba: va acá y no en el panel de flags porque esa clave ya vive en
+          _MANAGED_KEYS de api/global_config.py y registrarla además como flag
+          crearía DOS escritores del mismo valor. */}
+      <GitlabEngineSwitch />
 
       {/* Plan 218 F8 — Paridad del tracker (ADO ↔ GitLab). No se monta si la flag
           maestra STACKY_PROVIDER_PARITY_ENABLED está apagada (el endpoint da 404). */}

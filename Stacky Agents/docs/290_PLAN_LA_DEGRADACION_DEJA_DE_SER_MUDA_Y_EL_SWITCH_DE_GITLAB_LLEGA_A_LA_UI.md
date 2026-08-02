@@ -1,9 +1,36 @@
 # Plan 290 — La degradación deja de ser muda (y el switch de GitLab llega a la UI)
 
-- **Estado:** PROPUESTO (v1)
+- **Estado:** MEJORADO (**v1 -> v2**) — veredicto de la crítica: **RECHAZADO** en v1 (5 bloqueantes), corregido acá
 - **Rama de trabajo:** `docs/plan-279`
-- **Depende de:** Plan 281 F7 (los ocho guards), Plan 286 (`tracker_efectivo_de_ticket`), Plan 289 (`persistir_stats_de_contexto` y la paridad de los 3 runtimes), Plan 218 (`CAPABILITY_MATRIX` y `ParityMatrixPanel`), Plan 257 F4 (`LogLevelPanel`, precedente de configuración que SÍ aplica)
+- **Depende de:** Plan 281 F7 (los ocho guards), Plan 286 (`tracker_efectivo_de_ticket` / `tracker_declarado_del_proyecto`), Plan 289 (`persistir_stats_de_contexto` y la paridad de los 3 runtimes), Plan 218 (`CAPABILITY_MATRIX` y `ParityMatrixPanel`), Plan 257 F4 (`LogLevelPanel`, precedente de configuración que SÍ aplica)
 - **Fecha:** 2026-08-02
+- **Juez v2: subagente independiente, misma corrida, contexto limpio**
+
+---
+
+## 0. CHANGELOG v1 -> v2
+
+Todas las afirmaciones del v1 fueron **reproducidas ejecutando**, y todos los anclajes **abiertos**. El v1 tenía una precisión de medición altísima (490 `FlagSpec` y las 23 contradicciones salieron **exactas**, línea por línea; los 13 baselines de §5.1 salieron **exactos**; 820/756 entradas de los ratchets, **exactas**) — y aun así fue **RECHAZADO**, porque el defecto no estaba en lo que midió sino en **una plomería que dio por existente**.
+
+| # | Severidad | Qué estaba mal en v1 | Cómo quedó en v2 |
+|---|---|---|---|
+| **C1** | BLOQUEANTE | F2.1 re-firmaba `evaluate`, pero **el guard del sitio 5 NO vive en `evaluate`**: vive en `_evaluate_functional` (`business_preflight.py:37-44`), que recibe 5 escalares y ningún `execution_id`. El código de F2.2 referenciaba `execution_id` en un scope donde el nombre no existe ⇒ `NameError`. | §F2.1 re-firma **las dos** funciones y ajusta el despacho de `_PREDICATES` (`:191-197`). `site=` pasa a `business_preflight._evaluate_functional`. |
+| **C2** | BLOQUEANTE | F2.2 usaba `tracker_efectivo_de_ticket(_ticket)`: **`_ticket` no existe en ningún scope** y en `_evaluate_functional` no hay objeto `Ticket` (evaluate lo descarta al cerrar la sesión, `:180-189`). | Se usa el resolvedor por NOMBRE que ya existe: `tracker_declarado_del_proyecto(project_name)` (`project_context.py:124`, devuelve `str \| None`). |
+| **C3** | BLOQUEANTE | `execution_id` **no está** en el scope de `context_enrichment.py:1288` (la función es `_inject_run_directive(*, ticket_id, agent_type, blocks, log)`, `:1261`), y el v1 dejaba la salida "pasá `None` y documentalo". Con esa salida **F2 no escribe NUNCA en producción** y el caso 1 de F0 sólo podía ponerse verde llamando a `evaluate(execution_id=...)` desde el test: **el bloqueante central del Plan 289, reintroducido**. | La salida se **elimina**. §F2.4 traza el `execution_id` por `enrich_blocks` -> `_inject_run_directive` -> `evaluate`, y los **3 runtimes** lo pasan: ya lo tienen en la mano una línea después (`agent_runner.py:819`, `claude_code_cli_runner.py:685`, `codex_cli_runner.py:342`). Verificado abriendo los tres. |
+| **C4** | BLOQUEANTE | Par mutuamente insatisfacible **entre F4.1 y F4.3**: F4.1 mete `"tracker.acceptance_criteria"` **dentro** de `ETIQUETAS`, y F4.3 + R4 justifican todo el diseño diciendo que esa key **no** está en `ETIQUETAS` y que por eso "el camino desconocido es el normal desde el día uno". Un modelo menor lo resuelve **borrando la entrada del diccionario** y degrada la interfaz a keys crudas. | §F4.1/§F4.3/§R4 reescritas: la entrada **se queda**, el camino desconocido es un **borde defensivo** (no el normal), y el test lo prueba con una key sintética declarada como tal. |
+| **C5** | BLOQUEANTE | §3.1 apoyaba **toda** la decisión de "cero flags nuevas" en apagar `STACKY_TRACKER_STRICT_ROUTING`. Esa key **no existe**: `grep -rn` sobre todo el backend da **0 hits**. | Nombre real: **`STACKY_TRACKER_ROUTING_STRICT_ENABLED`** (`config.py:1455-1456` -> `"true"` = ON; `FlagSpec` en `harness_flags.py:6035`; se lee en `project_context.py:97` con fail-open `True`). La justificación se sostiene; el nombre estaba mal. |
+| **C6** | IMPORTANTE | F7 corregía **sólo** `description=`. El `label` de `STACKY_TRACE_PROMPT_TEXT_ENABLED` (`harness_flags.py:2211`) **también** miente ("privacidad OFF" con `default=True`) y es el título que el operador lee. Censado: **exactamente 1** label miente. | §F7.2 corrige `label` **y** `description`; §F7.3 extiende el gate a `label`. Cierra la decisión (b) del encargo sin cambiar conducta. |
+| **C7** | IMPORTANTE | F1 declaraba `log=None` en la firma y el pseudocódigo llamaba `log("warn", ...)` en el `except`: con el default, **`TypeError` dentro del manejador** ⇒ el riel "nunca levanta" se rompe justo cuando importa, y R2 queda sin cubrir. | Se agrega `log = log or _noop_log` como **primera línea**, igual que `context_enrichment.py:305`. |
+| **C8** | IMPORTANTE | F5.2 decía "dentro de `put_global_config` (`:190`)" sin fijar el punto. Hay un `return 400` previo (`:219-225`) y `_write_env` va en un `try/except OSError` (`:242-245`): un `setattr` mal ubicado deja el singleton ON con el `.env` sin persistir — el **falso verde espejo**, que el test de F5.4 no atrapa. | §F5.2 fija el punto **después** de `_write_env(updates)` y **dentro** del camino en que `persisted is True`, con un test nuevo que simula el `OSError`. |
+| **C9** | IMPORTANTE | El v1 "corrigió" `newProjectGitlabModel.ts:37` -> `:39`. **La corrección está mal**: `:37` es `export function normalizeGitlabUrl(...)` (el encargo tenía razón); `:39` es el `.match(...)` de adentro. La corrección de **ruta** (`src/projects/`) sí era correcta. | §9 y §2.5 corrigen la corrección. |
+| **C10** | IMPORTANTE | §2.2 presentaba `test_business_preflight.py:233` como el test que congela la degradación en el productor. El `assert result.warnings` **está** en `:233`, pero ese test parchea el cliente con `RuntimeError("timeout")` (`:228`): ejerce el **`except` de red** (`:198-200`), **no** el guard no-ADO de `:94-99`. | §2.2 dice qué prueba realmente y por qué el gap sigue en pie. |
+| **C11** | IMPORTANTE | F4 afirmaba "el único gate del frontend es `npx tsc --noEmit`" y acto seguido daba un segundo gate binario con `vitest`. | Se separa: **RTL/jsdom no están** ⇒ prohibido `.test.tsx` de componentes; **vitest sobre `.ts` puro SÍ corre** (medido: `parityMatrixModel.test.ts` -> 6 passed, exit 0). Son **dos** gates y los dos son obligatorios. |
+| **C12** | IMPORTANTE | §F8.2 mandaba copiar la base y medir sobre la copia — sin decir que el motor corre en **WAL** (`db.py:42-49`). Medido en esta crítica: una copia del `.db` **sin sus sidecars `-wal`/`-shm`** hace que el arranque falle con `IntegrityError: UNIQUE constraint failed: tickets.stacky_project_name, tickets.tracker_type, tickets.external_id`. La métrica saldría rota o inventada. | §F8.2 exige `VACUUM INTO` (o copiar los tres archivos) y prohíbe el `cp` pelado. |
+| **C13** | MENOR | Anclajes desfasados: `<LogLevelPanel />` está en `DiagnosticsPage.tsx:327` (no `:328`); `statusMark` en `parityMatrixModel.ts:83` (no `:81`); el comentario "UN solo escritor" en `global_config.py:89-92` (no `:88-93`); §3.2 decía que `criteria_repair` invoca `review_artifact` "sin fila" cuando en realidad `criteria_repair.py:82` pasa un `execution_id` real. | Corregidos en §9. |
+| **C14** | MENOR | §F0.1 encabezaba "Los **6** archivos" y listaba **7**; el criterio de los ratchets decía "delta cero" para los scripts, cuando registrar 7 archivos hace que los scripts corran 7 archivos MÁS. | Encabezado a 7; el criterio del script pasa a "cada archivo nuevo pasa aislado" + delta cero sobre los 820/756 previos. |
+| **A1** | ADICIÓN | — | **§F9 — el centinela de los ocho sitios**: convierte la "deuda conocida" de §6 (prosa en un `.md` que nadie vuelve a leer) en un ratchet ejecutable. Detalle abajo. |
+
+**Lo que se verificó y quedó IGUAL porque estaba bien** (no se toca nada de esto): las 8 filas de §2.1; `warnings` en `:27` y poblado en `:94-99`; `context_enrichment.py:1319` leyendo `warnings[0]`; los 490 `FlagSpec` y las **23** contradicciones con sus 23 líneas exactas; `CAPABILITY_KEYS`=71 con ADO 38/8/25 y GitLab **34/14/21/2**; `tracker.comments.list` **sí** es key real y `tracker.acceptance_criteria` **no**; `_MANAGED_KEYS` con `STACKY_GITLAB_ENABLED` en `global_config.py:82`; `_write_env` sin `setattr`; `api/projects.py:141-142` textual; `config.py:1297-1299` en `"false"` y `.env:7` en `true`; `test_self_review.py` inexistente con **exit 4**; los 13 baselines de §5.1 **uno por uno**; `tsc --noEmit` en **0 errores**; 820/756 entradas y la trampa de la coma final del `.ps1`; el allowlist con 207 líneas / 194 efectivas y `tests/test_harness_capabilities.py` en la **97**.
 
 ---
 
@@ -24,11 +51,17 @@ Cuando Stacky corre sobre un tracker que no es Azure DevOps y **decide a propós
 | # | KPI | Hoy (medido 2026-08-02) | Meta |
 |---|---|---|---|
 | **K1** | % de ejecuciones que atraviesan un sitio de degradación instrumentado y lo declaran en `metadata["capability_degraded"]` | **0 %** (la clave no existe en el modelo de datos) | **100 %** |
-| **K2** | Cantidad de `FlagSpec` cuya descripción afirma un default y el código tiene el contrario | **23** (medido por AST, §2.4) | **0** |
+| **K2** | Cantidad de `FlagSpec` cuya **descripción o label** afirma un default y el código tiene el contrario | **24** = 23 descripciones + 1 label (`STACKY_TRACE_PROMPT_TEXT_ENABLED`), medido por AST, §2.4 | **0** |
 | **K3** | `STACKY_GITLAB_ENABLED` modificable desde la interfaz, con efecto en caliente verificable | **No** (0 referencias en `frontend/src/`) | **Sí** |
 | **K4** | `base_url` de GitLab normalizada server-side igual que en el cliente | **No** (`rstrip("/")` vs. `normalizeGitlabUrl`) | **Sí** |
 
-K1 se mide con el script de §F8.2. K2 se mide con el test de §F7.3, que es además el guardián permanente.
+K1 se mide con el script de §F8.2. K2 se mide con los tests de §F7.3, que son además el guardián permanente.
+
+> ⚠️ **v2 — K1 necesita un denominador cerrado o no es un KPI, es una aspiración.** "% de ejecuciones que atraviesan un sitio instrumentado" no se puede medir mirando la base: no hay forma de saber, a posteriori, si una ejecución *atravesó* el guard. **Denominador congelado, y es el único que el script de §F8.2 puede calcular sin adivinar:**
+>
+> > **K1 = (ejecuciones con `metadata["capability_degraded"]` no vacío) / (ejecuciones de proyectos NO-ADO, con `metadata["ado_context"]` presente, iniciadas después del commit de F2)**
+>
+> El `ado_context` del Plan 289 es la prueba de que esa corrida **pasó por `enrich_blocks`**, que es exactamente el camino que F2 instrumenta. Sin ese filtro, el denominador incluye corridas que nunca podían declarar y el KPI baja por construcción. **Meta: ≥ 95 %** (no 100 %: una corrida que muere entre el enriquecimiento y el commit de la fila es un hueco real y honesto, no un defecto a perseguir).
 
 ---
 
@@ -50,6 +83,28 @@ Censo exacto, por símbolo (`grep -rn "Plan 281 F7 sitio" --include=*.py`, ejecu
 | 8 | `backend/services/ticket_assigner.py:390` | `:401` | `None` |
 
 El más dañino es el **5**: `BusinessPreflightResult(ok=True, mode=None, ...)`. El operador que mira ese resultado lee **"preflight OK"**. No se validó nada.
+
+> ⚠️ **v2 / C1 — dónde vive DE VERDAD el sitio 5, y por qué esto decidió el rediseño de F2.**
+> El guard de `:94` **no está en `evaluate`**. Está en `_evaluate_functional` (`business_preflight.py:37-44`), cuya firma completa es:
+>
+> ```python
+> def _evaluate_functional(*, ado_id: int, work_item_type: str, ado_state: str,
+>                          stacky_project_name: str | None, tracker_project: str | None
+> ) -> BusinessPreflightResult:
+> ```
+>
+> `evaluate` (`:161`) carga el `Ticket` dentro de un `session_scope` (`:179-189`), **se queda sólo con escalares** y despacha por tabla:
+>
+> ```python
+> return _PREDICATES[agent_type](
+>     ado_id=..., work_item_type=..., ado_state=...,
+>     stacky_project_name=..., tracker_project=...,
+> )   # :191-197
+> ```
+>
+> Consecuencias duras, y las dos las erró el v1: **(1)** re-firmar sólo `evaluate` no le da `execution_id` al guard; hay que re-firmar **las dos** y agregar el kwarg al despacho. **(2)** en ese scope **no hay objeto `Ticket`**, así que `tracker_efectivo_de_ticket(...)` (que hace `getattr(ticket, "tracker_type")`) es inaplicable: el resolvedor correcto es el hermano por nombre, `tracker_declarado_del_proyecto(project_name)`.
+>
+> Y el guard **no se puede mover** a la cabecera de `evaluate` para simplificar: el propio comentario del 281 lo prohíbe por escrito en `business_preflight.py:89-93` ("DESVÍO DECLARADO... gatear arriba se lo llevaría puesto para GitLab"), y `tests/test_plan281_sitios_ado_only.py` (18 passed) lo vigila.
 
 ### 2.2 El dato YA EXISTE en el productor y muere antes del consumidor operativo
 
@@ -82,13 +137,17 @@ Quién lo consume hoy, verificado uno por uno:
 
 **Conclusión precisa del gap:** el dato **llega al agente** (por el prompt) y **no llega nunca al operador** (no hay metadata, no hay interfaz, no hay forma de contar cuántas corridas degradaron). Además `warnings[0]` **descarta del segundo en adelante**.
 
-Y hay una confirmación literal de que esto es el defecto del 289 repitiéndose: `backend/tests/test_business_preflight.py:233` afirma
+Y hay una confirmación de que esto es el defecto del 289 repitiéndose: `backend/tests/test_business_preflight.py:233` afirma
 
 ```python
 assert result.warnings
 ```
 
-o sea, **hay un test que verifica el campo en el PRODUCTOR y ningún test ni consumidor de producción que lo verifique en el destino**. Es exactamente el bloqueante central del Plan 289: *poné el assert en el consumidor, no donde se produce*.
+o sea, **hay un test que verifica el campo en el PRODUCTOR y ningún test ni consumidor de producción que lo verifique en el destino**.
+
+> ⚠️ **v2 / C10 — precisión sobre ese test, porque el v1 lo presentó de más.** El `assert` está en `:233`, pero ese caso parchea el cliente con `_patch_client(monkeypatch, raises=RuntimeError("timeout"))` (`:228`): lo que ejerce es el **`except` de red** de `evaluate` (`:198-200`, `warnings=[f"preflight error: {exc}"]`), **no** el guard no-ADO de `:94-99`. O sea: el campo `warnings` tiene un test de productor **para otro camino**, y la degradación por tracker **no tiene ni siquiera eso**. El gap es *peor* de lo que decía el v1, no mejor — pero hay que escribirlo bien, porque un implementador que abra `:233` esperando ver el caso GitLab no lo va a encontrar y va a pensar que el plan miente.
+
+El riel sigue siendo el del Plan 289: *poné el assert en el consumidor, no donde se produce*.
 
 ### 2.3 El master switch de GitLab no está en la interfaz — pero el seam del backend YA existe
 
@@ -152,7 +211,7 @@ Cuatro verificadas a mano contra el texto real:
 
 ### 2.5 `base_url` se normaliza solo del lado del cliente
 
-- Cliente: `frontend/src/projects/newProjectGitlabModel.ts:39` → `normalizeGitlabUrl` saca barra final, `/api/vN` **y cualquier path** (arreglo del Plan 276 F8.3 al namespace pegado).
+- Cliente: `frontend/src/projects/newProjectGitlabModel.ts:37` → `export function normalizeGitlabUrl(raw: string): string`, cuerpo en `:38-40`: saca barra final, `/api/vN` **y cualquier path** (arreglo del Plan 276 F8.3 al namespace pegado). *(v2 / C9: el v1 "corrigió" `:37` a `:39` y la corrección estaba mal — `:37` era correcto; `:39` es el `.match(...)` interno. Lo que sí estaba mal en el encargo era la **ruta**: es `src/projects/`, no `src/services/`.)*
 - Servidor: `backend/project_manager.py:670` → `"base_url": url.rstrip("/")`. **Solo la barra final.**
 
 Cualquier alta que no pase por ese formulario (importación, edición manual del JSON, un cliente futuro) deja `https://host/grupo/proyecto` como base y todas las llamadas salen a `.../grupo/proyecto/api/v4/...` → 404.
@@ -165,10 +224,10 @@ Cualquier alta que no pase por ese formulario (importación, edición manual del
 | `capability_status` / `supports` / `capability_loss` | `provider_capabilities.py:344` / `:349` / `:354` | `capability_status` ya es fail-closed: lo desconocido devuelve `"absent"`. |
 | Endpoint de paridad | `backend/api/parity.py:15` → `GET /api/parity/matrix` | Gateado por `STACKY_PROVIDER_PARITY_ENABLED`; 404 si está apagada. |
 | `ParityMatrixPanel` | `frontend/src/components/ParityMatrixPanel.tsx` | Montado en `DiagnosticsPage.tsx:331`, **sin prop `project`**. |
-| `parityMatrixModel.ts` | `frontend/src/services/parityMatrixModel.ts` | Lógica pura testeable; `statusLabel`/`statusMark` ya caen a "Ausente"/"✕" en lo desconocido. |
+| `parityMatrixModel.ts` | `frontend/src/services/parityMatrixModel.ts` (`statusLabel` `:75-77`, `statusMark` **`:83`**) | Lógica pura testeable; ya caen a "Ausente"/"✕" en lo desconocido. **`vitest` corre este archivo hoy: 6 passed, exit 0** — es la prueba de que los tests `.ts` de F4/F5 son ejecutables. |
 | `persistir_stats_de_contexto` | `backend/services/context_enrichment.py:284` | Idioma de escritura en `metadata_dict`: nunca levanta, idempotente, escribe temprano. Llamada por los 3 runtimes: `agent_runner.py:819`, `claude_code_cli_runner.py:685`, `codex_cli_runner.py:342`. |
 | `ruteo_estricto_por_tracker` | `backend/services/project_context.py:78` | Kill-switch de los 8 guards. Se lee del **objeto** `config`, nunca con `os.getenv` (lo vigila `test_flags_env_read_meta.py`). |
-| `LogLevelPanel` | `frontend/src/components/LogLevelPanel.tsx` | Precedente exacto de "configuración del operador que SÍ aplica en caliente", montado en `DiagnosticsPage.tsx:328`. |
+| `LogLevelPanel` | `frontend/src/components/LogLevelPanel.tsx` (motivo en `:9-11`) | Precedente exacto de "configuración del operador que SÍ aplica en caliente", montado en **`DiagnosticsPage.tsx:327`** *(v2: el v1 decía `:328`)*. |
 | Patrón de aviso en el drawer | `ExecutionDetailDrawer.tsx:74-102` | `metadata.egress_sentinel`, `metadata.local_insight`, `metadata.blocked_downgrade`: cada uno un sub-componente + modelo puro. |
 
 ---
@@ -193,7 +252,17 @@ El riel dice que toda flag nueva nace ON salvo que queme tokens en reposo o escr
 
 **Y ya existe el kill-switch correcto.** Los 8 sitios están, sin excepción, dentro de `... and ruteo_estricto_por_tracker()` (verificado en las 8 líneas de §2.1). La declaración de degradación va **dentro de ese mismo `if`**. Por lo tanto:
 
-> Apagar `STACKY_TRACKER_STRICT_ROUTING` (la flag que lee `ruteo_estricto_por_tracker`) apaga el guard **y** su declaración, en un solo movimiento, y el rollback es byte-idéntico al estado previo al Plan 281 F7. Una flag nueva sería un segundo interruptor para la misma luz.
+> Apagar **`STACKY_TRACKER_ROUTING_STRICT_ENABLED`** (la flag que lee `ruteo_estricto_por_tracker`) apaga el guard **y** su declaración, en un solo movimiento, y el rollback es byte-idéntico al estado previo al Plan 281 F7. Una flag nueva sería un segundo interruptor para la misma luz.
+
+> ⚠️ **v2 / C5 — el v1 la llamaba `STACKY_TRACKER_STRICT_ROUTING` y esa key NO EXISTE** (`grep -rn "STACKY_TRACKER_STRICT_ROUTING" --include=*.py` sobre todo el backend = **0 hits**). Como esta flag es el ÚNICO argumento por el que este plan no registra ninguna flag nueva, un nombre inventado acá derribaba una decisión de alcance entera. Los datos reales, verificados:
+>
+> | Qué | Dónde | Valor |
+> |---|---|---|
+> | Lectura | `services/project_context.py:97` | `bool(getattr(_cfg, "STACKY_TRACKER_ROUTING_STRICT_ENABLED", True))`, fail-open `True` (`:98-99`) |
+> | Default efectivo | `backend/config.py:1455-1456` | `os.getenv("STACKY_TRACKER_ROUTING_STRICT_ENABLED", "true")` ⇒ **ON** |
+> | Registro | `services/harness_flags.py:6035` (`key=`) y `:605` (categorización) | registrada, con superficie de UI |
+>
+> **El default se leyó del `os.getenv`, no del comentario** (en este repo los comentarios de default mienten 23 veces, §2.4). Nace ON y es sólo-lectura hacia afuera: cumple el riel. La justificación de "cero flags nuevas" **se sostiene**; lo único que estaba mal era el nombre.
 
 Para F4 (interfaz) el gate ya es `STACKY_PROVIDER_PARITY_ENABLED`: apagada, el endpoint da 404 y `ParityMatrixPanel` no se monta. El aviso nuevo del drawer se alimenta de `metadata`, que simplemente no existe si no hubo degradación: no necesita gate propio.
 
@@ -203,12 +272,47 @@ Para F4 (interfaz) el gate ya es `STACKY_PROVIDER_PARITY_ENABLED`: apagada, el e
 
 El Plan 289 encontró que 2 de 3 runtimes tiraban el stat. Acá se verificó antes de diseñar, y los dos sitios elegidos tienen paridad **por construcción**, cada uno por una vía distinta:
 
-**Sitio `business_preflight`** — se alcanza por dos caminos, ambos comunes a los 3 runtimes:
+**Sitio `business_preflight`** — se alcanza por dos caminos, ambos comunes a los 3 runtimes, **pero sólo UNO sirve como destino**:
 
-| Camino | Archivo:línea | Cubre |
-|---|---|---|
-| Lanzamiento (API) | `backend/api/agents.py:542` | Los 3: es el endpoint de arranque, anterior a cualquier bifurcación de runtime. |
-| Enriquecimiento | `backend/services/context_enrichment.py:1288` | Los 3: es el armador de bloques que el Plan 289 F6 unificó. |
+| Camino | Archivo:línea | Cubre | ¿Tiene destino donde anotar? |
+|---|---|---|---|
+| Lanzamiento (API) | `backend/api/agents.py:542` | Los 3: endpoint de arranque, anterior a la bifurcación de runtime. | **NO.** En ese punto todavía no existe la fila de `AgentExecution`. **Se deja como está.** |
+| Enriquecimiento | `backend/services/context_enrichment.py:1288` | Los 3: el armador de bloques que el Plan 289 F6 unificó. | **SÍ, pero hay que traerlo** — ver el recuadro. |
+
+> ⚠️ **v2 / C3 — la plomería que el v1 dio por existente, resuelta y CERRADA (ya no hay "salida documentada").**
+>
+> Medido: la función que contiene `:1288` es **`_inject_run_directive(*, ticket_id, agent_type, blocks, log)`** (`context_enrichment.py:1261-1334`). **`execution_id` NO está en su scope.** Su único llamador de producción es `context_enrichment.py:133`, dentro de **`enrich_blocks(*, ticket_id, agent_type, raw_blocks, project_ctx, log)`** (`:60-67`) — que **tampoco** lo tiene.
+>
+> Con la "salida" del v1 (pasar `None`), y sumado a que `api/agents.py:542` queda excluido a propósito, **`declarar()` jamás recibiría un `execution_id` no nulo desde ningún camino de producción**: F2 quedaría construida, verde y muerta, y el caso 1 de F0 sólo podría ponerse verde llamando a `evaluate(execution_id=...)` desde el propio test. Eso es **exactamente** el bloqueante central del Plan 289 reintroducido — assert en el productor, cero consumidores. **Por eso la salida se elimina.**
+>
+> **Y la plomería es barata, porque el dato ya está a una línea de distancia en los tres runtimes** (verificado abriendo los tres):
+>
+> | Runtime | Llama a `enrich_blocks` en | Y en la línea siguiente ya usa `execution_id` en |
+> |---|---|---|
+> | GitHub Copilot Pro | `agent_runner.py:809-815` | `persistir_stats_de_contexto(execution_id=execution_id, ...)` — `:819-821` |
+> | Claude Code CLI | `services/claude_code_cli_runner.py:677-683` | `:685-687` |
+> | Codex CLI | `services/codex_cli_runner.py:334-340` | `:342-344` |
+>
+> **La cadena a construir (toda con `execution_id: int | None = None` keyword-only, o sea backward-compatible en cada eslabón):**
+>
+> ```
+> agent_runner.py:809 ─┐
+> claude_..._runner:677 ├─► enrich_blocks(..., execution_id=execution_id)
+> codex_..._runner:334 ─┘        │
+>                                ▼
+>                     _inject_run_directive(..., execution_id=execution_id)   # :133
+>                                │
+>                                ▼
+>                     business_preflight.evaluate(..., execution_id=execution_id)  # :1288
+>                                │
+>                                ▼
+>                     _PREDICATES[agent_type](..., execution_id=execution_id)  # :191-197
+>                                │
+>                                ▼
+>                     _evaluate_functional(..., execution_id) ──► declarar(...)   # el guard de :94
+> ```
+>
+> **Los 11 call sites de `enrich_blocks` en `tests/` NO se tocan** (el default `None` los deja idénticos). El único que se re-firma además es `_PREDICATES`, que hoy tiene **un solo** predicado (`"functional"`, `business_preflight.py:156-158`).
 
 **Sitio `self_review`** — se alcanza por `apply_to_execution(execution_id=...)` desde tres call sites distintos, uno por runtime:
 
@@ -220,7 +324,11 @@ El Plan 289 encontró que 2 de 3 runtimes tiraban el stat. Acá se verificó ant
 
 ⚠️ **Los tres llaman a `apply_to_execution`, no a `review_artifact`.** `apply_to_execution` llega a `review_artifact` por `self_review.py:168`. La instrumentación va en `review_artifact` (§F3), que es el punto único por el que pasan los tres. **No** hay que instrumentar los tres call sites: sería triplicar el mismo registro.
 
-**Fallback explícito:** si por cualquier motivo `execution_id` no se puede resolver (por ejemplo `review_artifact` invocado desde `harness/criteria_repair.py` en un contexto sin fila), `declarar()` devuelve `False` y no escribe. No levanta, no loguea a nivel warning, no cambia el retorno de la función que la llamó.
+**Fallback explícito:** si por cualquier motivo `execution_id` es `None` o apunta a una fila inexistente, `declarar()` devuelve `False` y no escribe. No levanta, no cambia el retorno de la función que la llamó.
+
+> *v2 / C13:* el v1 daba como ejemplo de fallback a `harness/criteria_repair.py`. **Ese ejemplo es falso**: `criteria_repair.py:82` llama `review_artifact(execution_id=execution_id, artifact_text=artifact_text)` con un `execution_id` **real**, así que ese camino **sí** declara (y está bien que declare). El fallback real es el de una fila borrada.
+>
+> **Un tercer camino que hay que conocer y no hay que "arreglar":** `apply_to_execution` puede cortocircuitar por caché (`self_review.py:162-170`, `get_cached_review`) y **no** llamar a `review_artifact`. En esa corrida no se declara — y está bien: la degradación ya se declaró en la corrida que llenó la caché, y el dedup de F1 la haría no-op igual.
 
 ---
 
@@ -246,8 +354,10 @@ Comando de test, **siempre por archivo, nunca la suite entera**:
 
 **Casos (los 2 son de EJECUCIÓN, no estáticos):**
 
-1. `test_preflight_no_ado_declara_la_degradacion_en_la_metadata` — crea un `Ticket` de un proyecto no-ADO y un `AgentExecution`, corre el camino que llega a `business_preflight.evaluate`, y afirma que `AgentExecution.metadata_dict["capability_degraded"]` contiene una entrada con `capability == "tracker.comments.list"`.
+1. `test_preflight_no_ado_declara_la_degradacion_en_la_metadata` — crea un `Ticket` de un proyecto no-ADO y un `AgentExecution`, y **entra por `context_enrichment.enrich_blocks(ticket_id=..., agent_type="functional", raw_blocks=[], execution_id=<id>)`**, o sea por el MISMO seam que usan los 3 runtimes. Afirma que `AgentExecution.metadata_dict["capability_degraded"]` contiene una entrada con `capability == "tracker.comments.list"`.
 2. `test_self_review_sin_criterios_declara_la_degradacion` — ídem con `self_review.review_artifact(execution_id=..., artifact_text="x")`, afirmando una entrada con `capability == "tracker.acceptance_criteria"`.
+
+> ⚠️ **v2 / C3 — el caso 1 entra por `enrich_blocks`, NO por `business_preflight.evaluate`.** Este es el punto entero del plan y no es negociable. Llamar a `evaluate(execution_id=...)` directo desde el test verifica **el productor**: es el bloqueante central del Plan 289, y un test así se pone verde sin que ningún runtime escriba nunca nada. El test tiene que atravesar la cadena completa de §3.2, que es la que los 3 runtimes ejercen. Si `enrich_blocks` todavía no acepta `execution_id`, el test falla con `TypeError: unexpected keyword argument` — **y ese también es un rojo válido de F0**, porque describe exactamente la plomería que falta (a diferencia de un `ImportError`, que sería una tautología sobre F1).
 
 **Cómo se comprueba el ROJO (obligatorio, y así se reporta):**
 
@@ -255,7 +365,7 @@ Comando de test, **siempre por archivo, nunca la suite entera**:
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_degradacion_declarada.py" -q
 ```
 
-Debe salir **2 failed**. El modo de falla esperado es **`KeyError: 'capability_degraded'`** o un `assert` sobre un `dict` sin esa clave — **no** `ImportError` ni `ModuleNotFoundError`. Si falla por import, el test está mal escrito: está probando que el módulo de F1 no existe (una tautología), no que el comportamiento falta. **Pegá la salida real en el commit de F0.**
+Debe salir **2 failed**. Modos de falla **aceptables**: `KeyError: 'capability_degraded'`, un `assert` sobre un `dict` sin esa clave, o `TypeError: enrich_blocks() got an unexpected keyword argument 'execution_id'` (la plomería de §3.2 todavía no existe). Modo **inaceptable**: `ImportError` / `ModuleNotFoundError` — eso prueba que el módulo de F1 no existe, que es una tautología, no que el comportamiento falta. **Pegá la salida real en el commit de F0.**
 
 > **Trampa de gate (molde b).** Estos dos tests **deben ejecutar** el camino real. Un test que se limite a `grep` el fuente buscando la llamada a `declarar(` pasa igual si la llamada está dentro de una rama muerta. Se verifica el efecto en la fila de la base, no la presencia del símbolo en el archivo.
 
@@ -307,7 +417,7 @@ Debe salir **2 failed**. El modo de falla esperado es **`KeyError: 'capability_d
 - **Rutas relativas al backend y sin espacios** (`tests/test_plan290_*.py`). Los ratchets no admiten rutas con espacios.
 - **Allowlist:** `Stacky Agents/backend/tests/harness_ratchet_allowlist.txt` **existe** (207 líneas, 194 efectivas). Verificado: **no menciona** `self_review` ni `business_preflight`; la única línea con `capability` es `tests/test_harness_capabilities.py  # pendiente-de-triage`, que **no** es ninguno de los archivos de este plan. Por lo tanto **ningún archivo nuevo de este plan necesita salir del allowlist** — pero si al implementar agregás un archivo que sí figure ahí, **hay que sacarlo**: estar en el ratchet y en el allowlist son dos declaraciones contradictorias.
 
-**Los 6 archivos de tests que este plan debe registrar en AMBOS:**
+**Los OCHO archivos de tests que este plan debe registrar en AMBOS** *(v2 / C14: el v1 encabezaba "6" y listaba 7; con §F9 son 8)*:
 
 ```
 tests/test_plan290_degradacion_declarada.py      (F0)
@@ -317,11 +427,16 @@ tests/test_plan290_self_review_no_regresion.py   (F3)
 tests/test_plan290_gitlab_switch_ui.py           (F5)
 tests/test_plan290_base_url_normalizada.py       (F6)
 tests/test_plan290_defaults_no_mienten.py        (F7)
+tests/test_plan290_sitios_clasificados.py        (F9 — ADICIÓN ARQUITECTO)
 ```
 
-(Son **7** contando F7; los 6 del cuerpo más el guardián de descripciones.)
+Los archivos de `frontend/src/**/__tests__/*.ts` **no** van a estos ratchets: son de `vitest`, no del arnés de pytest.
 
-**Criterio binario:** después de cada registro, el conteo de entradas del `.sh` y del `.ps1` sube en **exactamente 1**, y correr los dos scripts da el mismo veredicto que en el commit base (**delta cero**, §5.1). Ninguno pasa de verde a rojo.
+**Criterio binario (v2 / C14 — corregido).** "Delta cero sobre los scripts" era un criterio mal planteado: registrar archivos hace que los scripts corran **más** archivos, así que el veredicto puede cambiar legítimamente. Los tres criterios correctos son:
+
+1. `grep -c "^  tests/" scripts/run_harness_tests.sh` pasa de **820** a **828**, y `grep -cE '^\s+"tests/' scripts/run_harness_tests.ps1` de **756** a **764**. Después de cada fase, +1 en cada uno.
+2. **Cada archivo nuevo pasa AISLADO** con el comando de su fase (es la condición que el arnés verifica).
+3. Los **820/756** que ya estaban **no cambian de veredicto**: el diff de los dos scripts sólo agrega líneas (más la coma del `.ps1`), nunca modifica ni borra una existente. Se comprueba con `git diff -- scripts/run_harness_tests.sh scripts/run_harness_tests.ps1` y contando los `-` (deben ser **1** en el `.ps1`, el de la línea que gana la coma, y **0** en el `.sh`).
 
 ---
 
@@ -360,6 +475,7 @@ def declarar(*, execution_id: int | None, capability: str, reason: str,
 **Pseudocódigo de `declarar` — copiar la disciplina de `context_enrichment.py:284-321`:**
 
 ```
+log = log or _noop_log     # ⚠️ v2/C7 — PRIMERA línea, antes de todo. Ver recuadro.
 si execution_id es None  -> return False           # sin destino, no-op silencioso
 si capability vacío       -> return False
 try:
@@ -394,16 +510,23 @@ except Exception as exc:
 | Misma `(capability, site)` dos veces | La segunda devuelve `False` y **no** duplica. |
 | Distinta `capability`, mismo `site` | Se agregan **las dos**. |
 | La sesión revienta (base bloqueada) | `False` + log `warn`. **Nunca propaga.** |
+| La sesión revienta **y** el llamador no pasó `log` | `False` + log `warn` al logger no-op. **Nunca propaga.** *(v2 / C7)* |
+
+> ⚠️ **v2 / C7 — el bug que el pseudocódigo del v1 tenía escrito y que rompía su propio riel.** La firma declara `log=None`, y el `except` llamaba `log("warn", ...)`. Con el default, eso es `None("warn", ...)` ⇒ **`TypeError` lanzado DESDE el manejador de excepciones**, o sea: `declarar()` levanta **exactamente** en el escenario que R2 dice cubrir (base bloqueada, sesión rota). Y como los dos call sites de F2/F3 no pasan `log`, el default es el camino normal.
+>
+> El remedio es el idioma que ya usa el módulo hermano: `context_enrichment.py:305` hace `log = log or _noop_log` como primera línea de `persistir_stats_de_contexto`. **Copialo literal**, definiendo un `_noop_log` propio en `capability_degradation.py` (no lo importes de `context_enrichment`: sería un acoplamiento nuevo entre dos servicios por una función de tres caracteres).
+>
+> **Y hay un test dedicado, porque este defecto es invisible en el camino feliz:** `test_declarar_sin_log_y_con_sesion_rota_no_levanta` — `session_factory` parcheado para levantar, **sin** pasar `log=`. Debe devolver `False`. Sin este caso, los 7 de la tabla pasan con el bug puesto.
 
 > ⚠️ **`fila.metadata_dict = md` con reasignación completa es obligatorio.** Mutar el dict devuelto por el getter no marca la fila como sucia en SQLAlchemy y el cambio se pierde en silencio. Es el mismo idioma de `persistir_stats_de_contexto` (`context_enrichment.py:315-317`) y hay que respetarlo tal cual.
 
-**Tests (archivo nuevo):** `Stacky Agents/backend/tests/test_plan290_registro_degradacion.py` — un caso por fila de la tabla de bordes (7 casos), más uno que verifica que `construir_entrada` es pura (dos llamadas con los mismos argumentos, salvo `at`, dan el mismo dict).
+**Tests (archivo nuevo):** `Stacky Agents/backend/tests/test_plan290_registro_degradacion.py` — un caso por fila de la tabla de bordes (**8** casos, contando el de `log` sin pasar), más uno que verifica que `construir_entrada` es pura (dos llamadas con los mismos argumentos, salvo `at`, dan el mismo dict).
 
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_registro_degradacion.py" -q
 ```
 
-**Criterio binario:** **8 passed, 0 failed**. Y el test de "preserva otras claves" debe afirmar **la PRESENCIA** de `ado_context` después de escribir, no solo la ausencia de errores (un `assert` de ausencia suelto pasa por accidente).
+**Criterio binario:** **9 passed, 0 failed** *(v2: 8 en el v1 + el caso de C7)*. Y el test de "preserva otras claves" debe afirmar **la PRESENCIA** de `ado_context` después de escribir, no solo la ausencia de errores (un `assert` de ausencia suelto pasa por accidente).
 
 **Flag:** ninguna (§3.1). **Impacto por runtime:** ninguno todavía — nadie lo llama aún. **Trabajo del operador: ninguno.**
 
@@ -417,7 +540,7 @@ except Exception as exc:
 
 **Archivo:** `Stacky Agents/backend/services/business_preflight.py`
 
-**F2.1 — Firma: `evaluate` acepta `execution_id` OPCIONAL.**
+**F2.1 — Firma: `execution_id` OPCIONAL en las DOS funciones, y en el despacho.** *(v2 / C1: el v1 sólo tocaba `evaluate`, y el guard no vive ahí.)*
 
 ```python
 # ANTES (línea 161)
@@ -429,28 +552,61 @@ def evaluate(
 ) -> BusinessPreflightResult:
 ```
 
-> **Backward-compatible por construcción:** es keyword-only con default `None`. Los dos call sites existentes siguen funcionando sin tocarlos. `tests/test_business_preflight.py` la llama sin el argumento en todos sus casos y **no debe modificarse**.
+```python
+# ANTES (líneas 191-197) — el despacho por tabla
+return _PREDICATES[agent_type](
+    ado_id=ado_id, work_item_type=work_item_type, ado_state=ado_state,
+    stacky_project_name=stacky_project_name, tracker_project=tracker_project,
+)
 
-**F2.2 — La declaración, dentro del guard existente** (`business_preflight.py:94-99`). Se agrega **antes** del `return`, el `return` no cambia:
+# DESPUÉS — se suma el kwarg. Hoy `_PREDICATES` tiene UN solo predicado (:156-158).
+return _PREDICATES[agent_type](
+    ado_id=ado_id, work_item_type=work_item_type, ado_state=ado_state,
+    stacky_project_name=stacky_project_name, tracker_project=tracker_project,
+    execution_id=execution_id,
+)
+```
+
+```python
+# ANTES (líneas 37-44)
+def _evaluate_functional(*, ado_id: int, work_item_type: str, ado_state: str,
+                         stacky_project_name: str | None, tracker_project: str | None
+) -> BusinessPreflightResult:
+
+# DESPUÉS
+def _evaluate_functional(*, ado_id: int, work_item_type: str, ado_state: str,
+                         stacky_project_name: str | None, tracker_project: str | None,
+                         execution_id: int | None = None
+) -> BusinessPreflightResult:
+```
+
+> **Backward-compatible por construcción:** los tres son keyword-only con default `None`. `api/agents.py:542` sigue funcionando sin tocarlo. `tests/test_business_preflight.py` llama a `evaluate` sin el argumento en todos sus casos y **no debe modificarse** (DoD #14).
+>
+> ⚠️ **El `default=None` en `_evaluate_functional` no es cosmético:** `_PREDICATES` está tipado `dict[str, Callable[..., BusinessPreflightResult]]`. Si mañana entra un segundo predicado sin el kwarg, el despacho revienta con `TypeError` para **todos** los agent_types. Con el default, un predicado que lo ignore sigue andando.
+
+**F2.2 — La declaración, dentro del guard existente** (`business_preflight.py:94-99`, en `_evaluate_functional`). Se agrega **antes** del `return`, el `return` no cambia:
 
 ```python
 if not tracker_is_azure_devops(project_name) and ruteo_estricto_por_tracker():
     _motivo = "tracker no-ADO: sin cross-check de comentarios"
     # Plan 290 F2 — la degradación deja rastro. NO cambia el retorno.
     from services import capability_degradation
+    from services.project_context import tracker_declarado_del_proyecto
     capability_degradation.declarar(
         execution_id=execution_id,
         capability="tracker.comments.list",
         reason=_motivo,
-        provider=tracker_efectivo_de_ticket(_ticket) if _ticket else "desconocido",
-        site="business_preflight.evaluate",
+        provider=tracker_declarado_del_proyecto(project_name) or "desconocido",
+        site="business_preflight._evaluate_functional",
     )
     return BusinessPreflightResult(ok=True, mode=None, warnings=[_motivo])
 ```
 
-- `capability="tracker.comments.list"` es una key **real** de `CAPABILITY_MATRIX` (`provider_capabilities.py`, dominio `tracker`). Es la capacidad que el Modo B necesita y no tiene.
-- El `provider` sale de **`tracker_efectivo_de_ticket`** (Plan 286, `services/project_context.py:206`). **No inventes otro resolvedor** y no leas `ticket.tracker_type` crudo: la precedencia columna-explícita > config > default ya está resuelta ahí.
-- Import **local** dentro de la función, no a nivel de módulo: `business_preflight` ya usa ese idioma para evitar ciclos.
+- `capability="tracker.comments.list"` es una key **real** de `CAPABILITY_MATRIX` — verificado: está en `CAPABILITY_KEYS` (`provider_capabilities.py:16`). Es la capacidad que el Modo B necesita y no tiene.
+- ⚠️ **v2 / C2 — el `provider` sale de `tracker_declarado_del_proyecto`, NO de `tracker_efectivo_de_ticket`.** El v1 escribía `tracker_efectivo_de_ticket(_ticket) if _ticket else "desconocido"` y eso es **imposible dos veces**: `_ticket` no existe en ningún scope de este archivo, y en `_evaluate_functional` **no hay ningún objeto `Ticket`** — `evaluate` lo carga en `:180`, extrae escalares en `:183-189` y lo suelta al cerrar la sesión. `tracker_efectivo_de_ticket` hace `getattr(ticket, "tracker_type", None)` (`project_context.py:233`): sin objeto, no sirve.
+  El hermano correcto es **`tracker_declarado_del_proyecto(project_name)`** (`project_context.py:124`), del **mismo Plan 286**, misma fuente de verdad (`issue_tracker.type`), que devuelve `str | None` — por eso el `or "desconocido"`. En este scope `project_name` **sí** existe: se calcula en `:58` (`stacky_project_name or tracker_project`) y es el mismo valor que el guard ya le pasa a `tracker_is_azure_devops`.
+- `site="business_preflight._evaluate_functional"` — el símbolo **real**. El v1 decía `business_preflight.evaluate`, que es la función de arriba y no la que degrada. Como `site` es parte de la forma canónica congelada de F1 y F4 lo muestra al operador, un símbolo falso manda a leer el archivo equivocado.
+- Import **local** dentro de la función, no a nivel de módulo: `_evaluate_functional` ya usa ese idioma en `:45-49` para evitar ciclos y para seguir siendo parcheable con monkeypatch.
 
 **F2.3 — El consumidor del prompt deja de tirar warnings.** `services/context_enrichment.py:1319`:
 
@@ -464,17 +620,30 @@ _reason = _bp.reason or ("; ".join(_bp.warnings) if _bp.warnings else "preflight
 
 > Hoy hay **un solo** warning, así que este cambio es un no-op observable en el estado actual. Se hace igual porque el `[0]` es una bomba silenciosa: el día que un sitio agregue el segundo warning, se pierde sin aviso. El test de F2.4 lo fija con **dos** warnings.
 
-**F2.4 — Y el consumidor que NO consumía, consume.** `services/context_enrichment.py:1288` es el call site que **sí** tiene contexto de ejecución en el enriquecimiento. Hay que pasarle el `execution_id` que ya circula por `context_enrichment`:
+**F2.4 — La plomería del `execution_id`, en cuatro ediciones exactas.** *(v2 / C3 — reescrita: la "salida" del v1 dejaba F2 muerta.)*
 
-```python
-_bp = business_preflight.evaluate(
-    ticket_id=ticket_id, agent_type=agent_type, execution_id=execution_id
-)
-```
+**Está MEDIDO que `execution_id` NO está en el scope de `context_enrichment.py:1288`**: la función es `_inject_run_directive(*, ticket_id, agent_type, blocks, log)` (`:1261-1334`) y su llamador es `enrich_blocks(*, ticket_id, agent_type, raw_blocks, project_ctx, log)` (`:60-67`, llamada en `:133`). Ninguno lo tiene. **No hay que verificarlo de nuevo ni hay salida alternativa: hay que construir la cadena.**
 
-> ⚠️ **Verificá que `execution_id` esté realmente en el scope de esa función antes de escribir la línea.** Si no lo está, hay que subirlo por parámetro **con default `None`** desde el armador que sí lo tiene, sin cambiar ninguna firma pública de forma incompatible. **Si no se puede sin romper una firma pública, pasá `None` y decilo en el commit** — F3 sigue cubriendo el KPI y esta rama queda documentada como límite conocido. Lo que **no** se acepta es inventar que el argumento existe.
+| # | Archivo | Edición |
+|---|---|---|
+| 1 | `services/context_enrichment.py:60-67` | `enrich_blocks` suma `execution_id: int \| None = None` (keyword-only, al final). |
+| 2 | `services/context_enrichment.py:133` | La llamada a `_inject_run_directive` suma `execution_id=execution_id`. |
+| 3 | `services/context_enrichment.py:1261` | `_inject_run_directive` suma `execution_id: int \| None = None`. |
+| 4 | `services/context_enrichment.py:1288` | `business_preflight.evaluate(ticket_id=ticket_id, agent_type=agent_type, execution_id=execution_id)`. |
+
+**Y los tres runtimes lo pasan** — el valor ya está en sus manos, lo usan en la línea siguiente:
+
+| Runtime | Editar la llamada a `enrich_blocks` en | Queda al lado de |
+|---|---|---|
+| GitHub Copilot Pro | `agent_runner.py:809-815` | `persistir_stats_de_contexto(execution_id=execution_id, ...)` en `:819-821` |
+| Claude Code CLI | `services/claude_code_cli_runner.py:677-683` | `:685-687` |
+| Codex CLI | `services/codex_cli_runner.py:334-340` | `:342-344` |
+
+> **Backward-compatible en cada eslabón.** Los **11 call sites de `enrich_blocks` en `tests/`** (`test_context_enrichment.py` ×5, `test_memory_injection.py` ×5, `test_knowledge_injection.py`, `test_harness_learning_inject.py`, `test_rag_context_enrichment.py`) **no se tocan**: el default `None` los deja idénticos.
 >
-> `api/agents.py:542` (lanzamiento) **se deja como está**: en ese punto todavía no hay fila de `AgentExecution`, así que no hay destino donde anotar. Pasarle un `execution_id` inventado sería peor que no anotar.
+> ⚠️ **`tests/test_plan289_contexto_por_tracker.py:153-155` inspecciona la FORMA de la llamada** (`a, b = <algo>.enrich_blocks(...)`, para leer el nombre del segundo desempaquetado). Agregar un kwarg **no** cambia el desempaquetado, así que sus 34 passed no se mueven — pero es la suite a mirar primero si algo se pone rojo.
+>
+> `api/agents.py:542` (lanzamiento) **se deja como está**: en ese punto todavía no hay fila de `AgentExecution`, así que no hay destino donde anotar. Pasarle un `execution_id` inventado sería peor que no anotar. Su `evaluate(...)` sin el kwarg sigue compilando por el default.
 
 **F2.5 — Tests.** En el mismo `test_plan290_degradacion_declarada.py` de F0 (que pasa de rojo a verde en su caso 1), más en un archivo nuevo `Stacky Agents/backend/tests/test_plan290_preflight_no_regresion.py`:
 
@@ -483,15 +652,18 @@ _bp = business_preflight.evaluate(
 | `test_el_valor_neutro_no_cambio` | Con proyecto no-ADO: `result.ok is True`, `result.mode is None`, `result.warnings == ["tracker no-ADO: sin cross-check de comentarios"]`. **Byte a byte lo de hoy.** |
 | `test_proyecto_ado_no_declara_nada` | Con proyecto ADO: `metadata` **no** tiene la clave `capability_degraded`. Sentinela negativo. |
 | `test_flag_apagada_no_declara_nada` | Con `ruteo_estricto_por_tracker()` falso (monkeypatch sobre el objeto `config`): ni guard ni declaración. |
-| `test_sin_execution_id_no_levanta` | `evaluate(ticket_id=..., agent_type=...)` sin el kwarg: devuelve el mismo resultado y no lanza. |
-| `test_dos_warnings_llegan_completos_al_prompt` | Con dos warnings, el bloque `run-directive` contiene **los dos**, separados por `; `. Se afirma sobre el `content` del bloque, que es **el consumidor**, no sobre `_bp.warnings`. |
+| `test_sin_execution_id_no_levanta` | `evaluate(ticket_id=..., agent_type=...)` sin el kwarg: devuelve el mismo resultado y no lanza. Cubre `api/agents.py:542`. |
+| `test_dos_warnings_llegan_completos_al_prompt` | Con dos warnings, el bloque `run-directive` contiene **los dos**, separados por `; `. Se afirma sobre el `content` del bloque, que es **el consumidor**, no sobre `_bp.warnings`. Hoy ningún camino de producción genera dos: el caso monkeypatchea `business_preflight.evaluate` para devolver un resultado con dos, y **eso es correcto** — lo que se está fijando es el contrato del consumidor, no del productor. |
+| `test_los_tres_runtimes_pasan_el_execution_id` *(v2 / C3)* | **Estático y a propósito**, porque es un defecto de cableado, no de ejecución: parsea por **AST** `agent_runner.py`, `claude_code_cli_runner.py` y `codex_cli_runner.py`, encuentra la llamada a `enrich_blocks` de cada uno y afirma que **las tres** tienen un keyword `execution_id`. Además afirma que encontró **exactamente 3** llamadas (si el parser ve 0, el test se cae con mensaje propio en vez de dar verde por vacío). Es el mismo defecto que el Plan 289 tuvo que arreglar en 2 de 3 runtimes: acá se congela para que no vuelva. |
 
 ```
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_preflight_no_regresion.py" -q
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_business_preflight.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_context_enrichment.py" -q
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan289_contexto_por_tracker.py" -q
 ```
 
-**Criterio binario:** el archivo nuevo da **5 passed**; `test_business_preflight.py` da **exactamente el mismo conteo que en el commit base** (§5.1) **sin haber sido editado** (`git diff --stat` sobre ese archivo debe salir vacío).
+**Criterio binario:** el archivo nuevo da **6 passed** *(v2: 5 del v1 + el de paridad de runtimes)*; `test_business_preflight.py` da **exactamente el mismo conteo que en el commit base** (§5.1) **sin haber sido editado** (`git diff --stat` sobre ese archivo debe salir vacío); `test_plan289_contexto_por_tracker.py` sigue en **34 passed**; `test_context_enrichment.py` en delta cero contra su propia medición del commit base (**medila en F0**, no está en la tabla de §5.1 del v1).
 
 **Flag:** ninguna. Kill-switch heredado: `ruteo_estricto_por_tracker()`.
 **Impacto por runtime:** los 3, por los dos caminos de §3.2. **Fallback:** sin `execution_id`, `declarar` devuelve `False` y el preflight se comporta idéntico a hoy.
@@ -579,7 +751,15 @@ _bp = business_preflight.evaluate(
 
 **Objetivo:** que el operador vea, en el detalle de la ejecución, qué capacidad se degradó y por qué.
 
-**Restricción dura:** **RTL/jsdom no están instalados y vitest de componentes tampoco.** Toda la lógica va en `.ts` puro y el `.tsx` solo pinta. **No propongas ni escribas tests de componentes.** El único gate del frontend es `npx tsc --noEmit` con **0 errores**.
+**Restricción dura (v2 / C11 — el v1 se contradecía consigo mismo dos párrafos después).** Hay que separar dos cosas que el v1 mezcló:
+
+| Qué | Estado real, medido el 2026-08-02 | Consecuencia |
+|---|---|---|
+| **RTL / jsdom** | **NO instalados.** | **Prohibido** escribir `.test.tsx` de componentes. Un `.test.tsx` con RTL reporta *"no tests"* y sale con **exit 0**: un falso verde perfecto. |
+| **`vitest` sobre `.ts` puro** | **SÍ funciona.** Medido: `npx vitest run "src/services/__tests__/parityMatrixModel.test.ts"` → **6 passed**, exit **0**. | **Obligatorio** para toda la lógica de esta fase. |
+| **`npx tsc --noEmit`** | **0 errores** hoy (exit 0). | Gate **absoluto** (el único del plan que no es delta). |
+
+O sea: la lógica va en `.ts` puro y el `.tsx` sólo pinta; y el frontend tiene **dos** gates obligatorios (`tsc` y `vitest` sobre el `.ts`), no uno.
 
 **F4.1 — Modelo puro (archivo nuevo):** `Stacky Agents/frontend/src/services/capabilityDegradedModel.ts`
 
@@ -617,6 +797,12 @@ export function etiquetaDeCapacidad(capability: string): string {
 }
 ```
 
+> ⚠️ **v2 / C4 — el par que se contradecía, resuelto: las DOS keys se quedan en `ETIQUETAS`.**
+>
+> El v1 metía `"tracker.acceptance_criteria"` en este diccionario y **dos subsecciones después** (§F4.3, y otra vez en R4) justificaba todo el diseño diciendo que esa key *"no está... en `ETIQUETAS`"* y que por eso *"el camino desconocido es el camino normal desde el día uno"*. Las dos afirmaciones no pueden ser verdad a la vez, y la salida barata para un modelo menor es **borrar la entrada del diccionario** para que la prosa cierre — degradando la interfaz a mostrar `tracker.acceptance_criteria` en crudo, que es justo lo que la fase viene a evitar.
+>
+> **Regla, y es final:** las **dos** keys que este plan emite (`tracker.comments.list` de F2 y `tracker.acceptance_criteria` de F3) tienen etiqueta legible. Ninguna cae al default. El `?? capability` es un **borde defensivo** para una key futura, no el camino normal — y se prueba con una key sintética que el test declara como tal (`"tracker.inventada.por.el.test"`). Que la key no esté en `CAPABILITY_MATRIX` (§F3.2) es cierto y sigue siendo cierto; que no esté en `ETIQUETAS` es **falso**, y son dos diccionarios distintos con dos propósitos distintos.
+
 **F4.2 — Componente (archivo nuevo):** `Stacky Agents/frontend/src/components/AvisoDegradacionPanel.tsx`
 
 - Recibe `metadata: Record<string, unknown>` (el drawer ya lo tiene como `Record<string, unknown>` en `ExecutionDetailDrawer.tsx:74`).
@@ -627,7 +813,9 @@ export function etiquetaDeCapacidad(capability: string): string {
 
 **F4.3 — Montaje:** en `Stacky Agents/frontend/src/components/ExecutionDetailDrawer.tsx`, junto a los otros paneles alimentados por `metadata`, pasando `metadata={metadata}`. **No se toca `DiagnosticsPage.tsx` ni `ParityMatrixPanel.tsx`.**
 
-> ⚠️ **Capacidad desconocida — el caso que el plan exige.** Como F3.2 emite `"tracker.acceptance_criteria"`, que **no** está en `CAPABILITY_MATRIX` ni (si nadie la agrega) en `ETIQUETAS`, el camino "desconocido" **es el camino normal desde el día uno**, no un borde teórico. Por eso `etiquetaDeCapacidad` devuelve la key cruda en vez de `undefined`: la fila se pinta con el texto `tracker.acceptance_criteria` y el `reason`, que igual es informativo. **Un `Record` sin default haría que React renderice vacío y el aviso quedaría mudo — exactamente el defecto que este plan viene a arreglar, reintroducido en la capa de arriba.**
+> ⚠️ **Capacidad desconocida — borde defensivo, NO el camino normal** *(v2 / C4 — corregido)*. Las dos capacidades que este plan emite tienen etiqueta en `ETIQUETAS` (§F4.1), así que el operador **siempre** lee texto en castellano. El default `?? capability` existe para el día en que alguien instrumente un noveno sitio con una key nueva y se olvide de la etiqueta: en ese caso la fila se pinta con la key cruda **y el `reason`**, que igual es informativo. **Un `Record` sin default haría que React renderice vacío y el aviso quedaría mudo — exactamente el defecto que este plan viene a arreglar, reintroducido en la capa de arriba.** Ese es el motivo del default, y alcanza: no hace falta inventar que la key de F3 no está etiquetada.
+>
+> *(Nota separada, y sigue siendo cierta: `"tracker.acceptance_criteria"` **no** está en `CAPABILITY_MATRIX`, por el motivo de §F3.2. `CAPABILITY_MATRIX` y `ETIQUETAS` son dos diccionarios distintos; no estar en el primero no implica no estar en el segundo.)*
 
 **F4.4 — Tests (lógica pura, con vitest sobre `.ts`):** `Stacky Agents/frontend/src/services/__tests__/capabilityDegradedModel.test.ts`
 
@@ -637,9 +825,9 @@ export function etiquetaDeCapacidad(capability: string): string {
 | `capability_degraded: null` | `[]` |
 | `capability_degraded: "texto"` (no array) | `[]` |
 | array con una entrada válida y una `null` | devuelve **1** entrada |
-| capacidad conocida | etiqueta traducida |
-| **capacidad desconocida** | **devuelve la key cruda, no `undefined` ni `""`** |
-| `etiquetaDeCapacidad("")` | devuelve `""`, no el default (prueba el `??` frente a `||`) |
+| **las DOS keys de producción** (`tracker.comments.list` y `tracker.acceptance_criteria`) | etiqueta traducida, **ninguna** devuelve la key cruda. *(v2 / C4: es el sentinela de que nadie borró la entrada del diccionario para "cerrar" la prosa.)* |
+| capacidad desconocida (`"tracker.inventada.por.el.test"`) | devuelve la key cruda, no `undefined` ni `""` |
+| `etiquetaDeCapacidad("")` | devuelve `""`, no el default (prueba el `??` frente a `\|\|`) |
 
 ```
 cd "Stacky Agents/frontend" && npx vitest run "src/services/__tests__/capabilityDegradedModel.test.ts"
@@ -676,7 +864,7 @@ cd "Stacky Agents/frontend" && npx vitest run "src/services/__tests__/capability
 >
 > **Su default en código NO se toca.** `config.py:1298` sigue en `"false"`. Motivo: GitLab exige instancia + token que no existen en una instalación limpia; encenderlo por default haría fallar el arranque de cualquier instalación nueva. **El `.env` del operador, que hoy tiene `STACKY_GITLAB_ENABLED=true` (`backend/.env:7`), no se modifica**: el `.env` gana sobre el default de código y el operador sigue exactamente como está hoy. Este plan **no cambia el comportamiento de ninguna instalación existente**.
 
-**F5.2 — El hot-apply que falta (backend).** Archivo: `Stacky Agents/backend/api/global_config.py`, dentro de `put_global_config` (`:190`), con el mismo idioma que `api/projects.py:141-142`:
+**F5.2 — El hot-apply que falta (backend).** Archivo: `Stacky Agents/backend/api/global_config.py`, dentro de `put_global_config`, con el mismo idioma que `api/projects.py:141-142`:
 
 ```python
 # Plan 290 F5 — `_write_env` actualiza .env y os.environ, pero NO el singleton
@@ -684,7 +872,7 @@ cd "Stacky Agents/frontend" && npx vitest run "src/services/__tests__/capability
 # ci_variables.py:87, ci_preflight.py:39 y ci_logs_provider.py:38. Sin este
 # setattr la interfaz diría "guardado" y el motor seguiría con el valor viejo
 # hasta reiniciar: un falso verde.
-if "STACKY_GITLAB_ENABLED" in updates:
+if persisted and "STACKY_GITLAB_ENABLED" in updates:
     import config as _config
     setattr(
         _config.config,
@@ -693,7 +881,18 @@ if "STACKY_GITLAB_ENABLED" in updates:
     )
 ```
 
+> **v2 / C8 — DÓNDE va, exactamente.** El v1 decía sólo *"dentro de `put_global_config` (`:190`)"* y eso deja tres ubicaciones plausibles con tres conductas distintas. La correcta es **después** del `try/except OSError` que llama a `_write_env(updates)` (`:242-245`), o sea cuando `persisted` ya tiene su valor final — y **guardada por `persisted`**. Anclá por el símbolo `_write_env(updates)`, no por número de línea.
+>
+> Los dos anclajes que decidieron esta ubicación, verificados:
+>
+> | Línea | Qué hay | Por qué importa |
+> |---|---|---|
+> | `:219-225` | `return jsonify({...}), 400` si el `LOG_LEVEL` es inválido | Un `setattr` **antes** de esto encendería GitLab en un pedido que devuelve 400 y no persiste nada. |
+> | `:242-245` | `try: _write_env(updates) / except OSError: persisted = False` | Un `setattr` **antes** de esto, con el disco lleno o el `.env` de sólo lectura, deja el motor ON y el archivo sin escribir: al reiniciar vuelve a OFF. Es el **falso verde espejo** del que la fase viene a arreglar. |
+>
 > El parseo replica **exactamente** el de `config.py:1297-1299` (`.lower() in ("1","true","yes")`). No inventes otro conjunto de valores verdaderos: `"on"` **no** está y agregarlo divergiría del arranque.
+>
+> ⚠️ **Cuidado con el `""`.** `:203` hace `val = str(data[key] or "").strip()`, así que un `false` booleano o un `null` del cliente llegan como `""`. Con `""`: `_write_env` escribe la línea `STACKY_GITLAB_ENABLED=` **y borra la clave de `os.environ`** (`:164-168`), el `setattr` deja `False`, y al reiniciar `config.py:1297` lee `""` → `False`. Es consistente, pero el modelo puro de F5.3 **debe mandar los strings `"true"`/`"false"`**, nunca un booleano ni `null`, para que el `.env` quede legible.
 
 **F5.3 — El panel (frontend).** Archivo nuevo `Stacky Agents/frontend/src/components/GitlabEngineSwitch.tsx`, **calcado de `LogLevelPanel.tsx`**: `useState` + `useEffect` que lee del GET, un control, y mensajes de ok/error. Se monta en `DiagnosticsPage.tsx` **inmediatamente después de `<LogLevelPanel />`** (hoy en `:328`; anclá por el símbolo `<LogLevelPanel />`, no por el número).
 
@@ -711,8 +910,10 @@ Backend, archivo nuevo `Stacky Agents/backend/tests/test_plan290_gitlab_switch_u
 | `test_put_apaga_y_aplica_en_caliente` | Ídem con `"false"` → `is False`. |
 | `test_get_devuelve_la_clave` | El GET incluye `STACKY_GITLAB_ENABLED`. |
 | `test_valor_basura_no_enciende` | `"quizas"` → `is False` (no truthy por ser string no vacío). |
+| `test_si_no_persiste_no_aplica_en_caliente` *(v2 / C8)* | Con `_write_env` parcheado para levantar `OSError`: la respuesta trae `persisted: false` **y** `config.config.STACKY_GITLAB_ENABLED` **conserva su valor previo**. Es el sentinela del falso verde espejo. |
+| `test_log_level_invalido_no_toca_gitlab` *(v2 / C8)* | PUT con `LOG_LEVEL="TRACE"` (inválido) **y** `STACKY_GITLAB_ENABLED="true"`: sale **400** por `:219-225` y el singleton **no** cambió. |
 
-> ⚠️ El test **debe** apuntar `_ENV_PATH` a un archivo temporal (monkeypatch). **Está prohibido que un test escriba el `.env` real del operador.**
+> ⚠️ El test **debe** apuntar `_ENV_PATH` a un archivo temporal (monkeypatch). **Está prohibido que un test escriba el `.env` real del operador.** Y el `setattr` sobre el singleton hay que **restaurarlo** en teardown (`monkeypatch.setattr(config.config, "STACKY_GITLAB_ENABLED", <previo>)`): dejarlo pisado contamina cualquier test posterior del mismo proceso.
 
 Frontend: `Stacky Agents/frontend/src/services/__tests__/gitlabEngineModel.test.ts` — `"true"`/`"1"`/`"yes"` → `true`; `"false"`/`""`/`"quizas"`/`undefined` → `false`.
 
@@ -722,7 +923,7 @@ cd "Stacky Agents/frontend" && npx vitest run "src/services/__tests__/gitlabEngi
 cd "Stacky Agents/frontend" && npx tsc --noEmit
 ```
 
-**Criterio binario:** backend **4 passed**; frontend **7 passed**; `tsc` **0 errores**.
+**Criterio binario:** backend **6 passed** *(v2: 4 del v1 + los 2 de C8)*; frontend **7 passed**; `tsc` **0 errores**.
 
 **Flag:** ninguna nueva. **Impacto por runtime:** ninguno (configuración, no ejecución).
 **Trabajo del operador: ninguno.** Su `.env` actual sigue igual y el switch aparece ya reflejando `true`.
@@ -802,11 +1003,26 @@ def _normalizar_base_url_gitlab(raw: str) -> str:
 
 **F7.1 — Re-medir antes de tocar.** Correr el script de §2.4 (reproducible: AST sobre `harness_flags.py` + regex sobre `config.py`). Si el conteo **no** da 23, las líneas se movieron: re-generá la tabla, **no** edites por número de línea.
 
-**F7.2 — Corregir el TEXTO y solo el texto.** En `Stacky Agents/backend/services/harness_flags.py`, para cada una de las 23: reemplazar la afirmación falsa (`Default OFF.`, `Privacidad: default OFF.`, etc.) por la verdadera (`Default ON.`).
+**F7.2 — Corregir el TEXTO y solo el texto — en `description=` Y en `label=`.** En `Stacky Agents/backend/services/harness_flags.py`, para cada una de las 23: reemplazar la afirmación falsa (`Default OFF.`, `Privacidad: default OFF.`, etc.) por la verdadera (`Default ON.`).
 
 > ⚠️ **Prohibido cambiar `default=`, `key`, `type`, `group`, `requires`, `env_only`, `min_value`, `max_value`.** Este plan **no** cambia el comportamiento de ninguna flag. Si al leer una descripción te parece que la conducta correcta sería OFF, **no la apagues**: anotalo en el commit y dejalo para el operador. Apagar una flag que hoy está ON es un cambio de comportamiento no solicitado que puede tumbar funcionalidad viva.
+
+> ⚠️ **v2 / C6 — `STACKY_TRACE_PROMPT_TEXT_ENABLED`: son DOS campos que mienten, no uno, y el v1 sólo arreglaba el segundo.** Su `FlagSpec` empieza en `:2207`:
 >
-> ⚠️ **`STACKY_TRACE_PROMPT_TEXT_ENABLED` merece una línea aparte.** Su texto promete *"Privacidad: default OFF"* y está **ON**: hoy el texto completo del prompt se está escribiendo en la metadata. La corrección de texto **dice la verdad pero no arregla la privacidad**. En la misma edición, agregá a su descripción una frase explícita del tipo *"Hoy nace ON: el texto completo del prompt SÍ queda en la metadata. Apagala si el contenido de tus prompts es sensible."* — para que la perilla sea una decisión informada del operador y no una sorpresa. **No la apagues vos** (§5, R6).
+> ```python
+> default=True,   # :2210 — "promovida a default ON (operador 2026-07-15, ...)"
+> label="Texto del prompt en trazabilidad (C0/C1, privacidad OFF)",          # :2211 ← TAMBIÉN MIENTE
+> description=("... Privacidad: default OFF. ..."),                          # :2212-2216
+> ```
+>
+> El `label` es el **título** de la perilla — lo primero que el operador lee, y se renderiza junto a la descripción en `HarnessFlagsPanel.tsx:240`. Corregir sólo `description=` deja el KPI K2 en 0 con el operador leyendo *"privacidad OFF"* en el encabezado. **Censado por AST: es el ÚNICO `label` del registro que contradice su `default`** — o sea, cuesta una edición de un string y no hay una segunda camada escondida.
+>
+> **Las tres ediciones exactas de esta flag** (las tres son texto puro, cero cambio de conducta):
+> 1. `label=` → `"Texto del prompt en trazabilidad (C0/C1, privacidad: nace ON)"`.
+> 2. `description=` → sacar `Privacidad: default OFF.` y poner `Default ON.`
+> 3. Agregar a `description=` la advertencia accionable: *"Hoy nace ON: el texto completo del prompt SÍ queda en la metadata de cada ejecución. Apagala si el contenido de tus prompts es sensible."*
+>
+> **No la apagues vos** (§5, R6 y §7.4). El comentario de `:2210` deja constancia de que **el propio operador** la promovió a ON el 2026-07-15: apagarla no sería "arreglar un descuido", sería revertir una decisión suya sin pedirle permiso — lo contrario del riel human-in-the-loop. Lo que sí corresponde, y es lo que hace esta fase, es que la perilla **diga la verdad** para que su próxima decisión sea informada.
 
 **F7.3 — El guardián (archivo nuevo):** `Stacky Agents/backend/tests/test_plan290_defaults_no_mienten.py`
 
@@ -814,7 +1030,15 @@ def _normalizar_base_url_gitlab(raw: str) -> str:
 def test_ninguna_descripcion_contradice_su_default():
     """KPI K2. Recorre TODAS las FlagSpec por AST y cruza el texto contra el
     default efectivo (FlagSpec.default y la entrada de config.py)."""
+
+def test_ningun_label_contradice_su_default():   # v2 / C6
+    """Mismo barrido, sobre `label=`. Hoy hay exactamente UNA contradicción
+    (STACKY_TRACE_PROMPT_TEXT_ENABLED, :2211); después de F7.2, cero."""
 ```
+
+> **v2 / C6 — el gate cubre los DOS campos.** Un gate que sólo mire `description=` deja abierta la puerta por la que ya entró la peor de las 23: la promesa de privacidad estaba **también** en el título. Los dos tests comparten el barrido AST y el mismo guard anti-parser-roto (`>= 400`).
+>
+> **Lo que este gate NO cubre, y hay que escribirlo para que nadie crea que sí:** la ayuda en lenguaje llano vive en un módulo **separado**, `services/harness_flags_help.py` (`PLAIN_HELP`, con campos `what` / `on_effect` / `off_effect` / `example`), se inyecta en la respuesta del endpoint en `services/harness_flags.py:7469` y se renderiza en `HarnessFlagsPanel.tsx:245-250`. **No** se deriva de `description`. Auditarla es alcance de otro plan (§6) — y su suite, `test_harness_flags_help.py`, ya está roja de fábrica con 4 fallos ajenos. **Consecuencia práctica buena:** como `PLAIN_HELP` es independiente, editar las 23 descripciones **no puede** mover esa suite, lo que hace creíble el delta cero de §F7.4.
 
 **Diseño del gate — los tres moldes de gate muerto, evitados a propósito:**
 
@@ -831,10 +1055,12 @@ def test_ninguna_descripcion_contradice_su_default():
 
 ```
 # ANTES de F7.2 (obligatorio, pegar la salida en el commit):
-"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_defaults_no_mienten.py" -q   # 1 failed, con las 23 en el mensaje
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_defaults_no_mienten.py" -q   # 2 failed: una con las 23 descripciones, otra con el 1 label
 # DESPUÉS de F7.2:
-"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_defaults_no_mienten.py" -q   # 1 passed
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_defaults_no_mienten.py" -q   # 2 passed
 ```
+
+> **El censo es reproducible y ya se corrió** (esta crítica lo ejecutó): AST sobre `services/harness_flags.py` buscando `ast.Call` con `func.id == "FlagSpec"`, cruzado contra un regex `os\.getenv\(\s*["'](KEY)["']\s*,\s*["'](VALOR)["']` sobre `config.py`. Resultado: **490** `FlagSpec`, **23** descripciones contradictorias (las 23 de §2.4, con esas 23 líneas), **1** label contradictorio. Si tu corrida da otro número, **las líneas se movieron: re-generá la tabla, no adivines.**
 
 **F7.4 — Las suites que este cambio puede mover.** Editar `harness_flags.py`, aunque sea solo texto, toca un archivo que vigilan varias suites. Correr **cada una por separado** y comparar contra el baseline de §5.1:
 
@@ -844,12 +1070,89 @@ def test_ninguna_descripcion_contradice_su_default():
 "Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_flags_env_read_meta.py" -q
 ```
 
-**Criterio binario:** el guardián en **1 passed**, y las tres suites de arriba con **exactamente el mismo conteo de passed/failed que en el commit base** — criterio **delta cero**, no absoluto: varias están rojas de fábrica por deuda ajena (§5.1).
+**Criterio binario:** el guardián en **2 passed**, y las tres suites de arriba con **exactamente el mismo conteo de passed/failed que en el commit base** — criterio **delta cero**, no absoluto: varias están rojas de fábrica por deuda ajena (§5.1). Concretamente y ya medido: `test_harness_flags.py` **59 passed**, `test_harness_flags_help.py` **4 failed / 4 passed**, `test_flags_env_read_meta.py` **1 failed / 1 passed**.
 
-**Flag:** ninguna. **Impacto por runtime:** ninguno (texto de descripciones).
+**Flag:** ninguna. **Impacto por runtime:** ninguno (texto de descripciones y de un label).
 **Trabajo del operador: ninguno.** (Queda para él **una decisión informada** sobre `STACKY_TRACE_PROMPT_TEXT_ENABLED`, que este plan **declara** pero no ejecuta — §7.)
 
 **Ratchets:** registrar `tests/test_plan290_defaults_no_mienten.py` en los dos (§F0.1).
+
+---
+
+### F9 — [ADICIÓN ARQUITECTO] El centinela de los ocho sitios: la deuda deja de ser prosa
+
+**El problema que resuelve, y por qué es de este plan y no de otro.** Este plan instrumenta **2 de 8** sitios y manda los otros **6** a §6 y a un `.md` de `docs/sistema/` (F8.1). En este repo, eso tiene un final conocido y documentado: *código construido, testeado, verde y jamás cableado*, y *"deuda conocida"* que nadie vuelve a mirar porque vive en un párrafo. Y hay un agravante específico: el día que alguien agregue un **noveno** guard `Plan 281 F7 sitio N`, no existe nada que lo obligue a decidir si declara o no. Nace mudo, como nacieron estos ocho, y el plan 290 se convierte en el 281 con más pasos.
+
+**Un `.md` no es un mecanismo. Un test sí.**
+
+**Archivo nuevo:** `Stacky Agents/backend/tests/test_plan290_sitios_clasificados.py`
+
+**Símbolo nuevo** en `Stacky Agents/backend/services/capability_degradation.py` (mismo módulo de F1, ningún archivo extra):
+
+```python
+# Plan 290 F9 — los sitios de degradación del Plan 281 F7 que a propósito NO
+# declaran, con su motivo. Es un contrato, no un comentario: el test de
+# tests/test_plan290_sitios_clasificados.py exige que TODO sitio del censo esté
+# instrumentado o esté acá. Agregar un guard nuevo sin clasificarlo pone el
+# arnés en rojo. Sacar uno de acá obliga a instrumentarlo.
+SITIOS_SIN_DECLARAR: dict[str, str] = {
+    "api/agents.py":                  "sin execution_id en el scope ni en su llamador (:1687)",
+    "api/tickets.py":                 "closure sin execution_id; guard cosmetico y ya protegido por su except",
+    "services/acceptance_criteria.py": "gemelo de self_review; ningun llamador tiene execution_id y F3 ya cubre el hecho",
+    "services/similar_tickets.py":    "devuelve [] indistinguible de 'sin coincidencias': ruido de alta frecuencia",
+    "services/ticket_assigner.py":    "devuelve None y ya loguea en debug; el ticket sin asignar se ve en el tracker",
+}
+```
+
+**El test, en tres asserts que se sostienen entre sí:**
+
+```python
+def test_todo_sitio_281_esta_instrumentado_o_declarado_como_deuda():
+    sitios = _censar_sitios()          # grep de "Plan 281 F7 sitio" sobre backend/**/*.py
+    assert len(sitios) >= 8, f"el censo solo vio {len(sitios)} sitios: el parser se rompio"
+    sin_clasificar = [
+        s for s in sitios
+        if not _declara(s.archivo) and s.archivo not in SITIOS_SIN_DECLARAR
+    ]
+    assert sin_clasificar == [], (
+        f"sitios de degradacion sin clasificar: {sin_clasificar}. "
+        "O instrumentalos con capability_degradation.declarar(), o agregalos a "
+        "SITIOS_SIN_DECLARAR con su motivo."
+    )
+
+def test_los_dos_instrumentados_declaran_de_verdad():
+    # Sentinela de PRESENCIA, no de ausencia: si alguien borra la llamada de F2 o
+    # de F3, el test de arriba seguiria verde (el archivo caeria en "no declara" y
+    # nadie lo movio a SITIOS_SIN_DECLARAR... salvo que lo mueva). Este lo impide.
+    assert _declara("services/business_preflight.py")
+    assert _declara("services/self_review.py")
+    assert "services/business_preflight.py" not in SITIOS_SIN_DECLARAR
+    assert "services/self_review.py" not in SITIOS_SIN_DECLARAR
+```
+
+**Los tres moldes de gate muerto, revisados uno por uno** (la pregunta obligatoria: *¿qué tiene que pasar para que se ponga rojo, y ese escenario existe después de la última fase?*):
+
+| Molde | ¿Aplica? | Por qué |
+|---|---|---|
+| **(a)** centinela sobre un símbolo que una fase posterior borra | **No.** | Ninguna fase de este plan borra los comentarios `Plan 281 F7 sitio N`; `test_plan281_sitios_ado_only.py` (18 passed) los defiende desde otro plan. |
+| **(b)** test estático sobre un defecto de ejecución | **No, y es deliberado.** | Lo que vigila es **cableado**, que es un hecho estático: existe un guard sin decisión escrita. El efecto en la fila lo prueban F0/F2/F3, que **sí** ejecutan. Los dos niveles son complementarios. |
+| **(c)** `assert` de ausencia suelto | **Neutralizado por dos vías.** | `len(sitios) >= 8` impide el verde por parser roto (el fallo clásico del censo por subcadena), y el segundo test guarda la **PRESENCIA** de las dos declaraciones para que borrar F2 o F3 no pueda quedar verde. |
+
+**¿Se puede poner rojo, hoy, después de F9?** Sí, y con un escenario que ocurre seguido en este repo: agregar un noveno `Plan 281 F7 sitio 9` en un archivo nuevo. Sin clasificarlo, rojo. **Se prueba contra el defecto**: antes de escribir `SITIOS_SIN_DECLARAR`, el test debe dar **1 failed** listando los 6; después, verde.
+
+⚠️ **La clave del dict es la ruta relativa al backend, con `/`** — no `archivo:línea`. Los ocho anclajes de §2.1 se movieron ya una vez y se van a volver a mover; el archivo, no.
+
+```
+"Stacky Agents/backend/.venv/Scripts/python.exe" -m pytest "Stacky Agents/backend/tests/test_plan290_sitios_clasificados.py" -q
+```
+
+**Criterio binario:** **2 passed**, y el censo interno reporta **exactamente 8** sitios (si reporta 9, alguien agregó un guard: clasificalo, no toques el `>= 8`).
+
+**Flag:** ninguna. **Impacto por runtime:** ninguno (es un test + una constante). **Trabajo del operador: ninguno.**
+
+**Ratchets:** registrar `tests/test_plan290_sitios_clasificados.py` en los dos (§F0.1).
+
+**Orden:** después de F3 (necesita que los dos sitios ya declaren) y antes de F8 (que documenta lo que F9 congela).
 
 ---
 
@@ -861,7 +1164,23 @@ def test_ninguna_descripcion_contradice_su_default():
 
 - Cuenta ejecuciones con `metadata["capability_degraded"]` no vacío, sobre el total de ejecuciones de proyectos no-ADO posteriores al despliegue del plan.
 - Imprime `declaradas / candidatas = N %`.
-- ⚠️ **Abre la base en modo lectura y NUNCA escribe.** La base viva es `Stacky Agents/backend/data`. Para medir en desarrollo, **copiar** el archivo al directorio temporal y medir sobre la copia.
+- ⚠️ **Abre la base en modo lectura y NUNCA escribe.** La base viva es `Stacky Agents/backend/data/stacky_agents.db` (**194 MB** al 2026-08-02).
+
+> ⚠️ **v2 / C12 — el `cp` pelado del `.db` NO sirve, y esta crítica lo comprobó en carne propia.** El motor corre en **WAL** (`db.py:42-49`, `apply_sqlite_pragmas`), así que las escrituras recientes viven en el sidecar `stacky_agents.db-wal` y **no** en el `.db`. Copiar sólo el `.db` da una foto **inconsistente**: al ejecutar esta crítica, medir sobre esa copia hizo que el arranque de la app se cayera con
+>
+> ```
+> sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed:
+>   tickets.stacky_project_name, tickets.tracker_type, tickets.external_id
+> [SQL: UPDATE tickets SET external_id = COALESCE(external_id, ado_id), ...]
+> ```
+>
+> — una migración de arranque que sobre la base real ya corrió sin problema. Una métrica sacada de ahí no es "aproximada": es **falsa**, y peor, se ve como un bug del plan.
+>
+> **Las dos formas correctas, en orden de preferencia:**
+> 1. `sqlite3 <origen> "VACUUM INTO '<destino>'"` — una foto consistente en un solo archivo, sin tocar el origen. **Esta es la que va en el script.**
+> 2. Copiar los **tres** archivos juntos (`.db`, `.db-wal`, `.db-shm`) con el servicio detenido.
+>
+> Lo que **nunca** va: `cp data/stacky_agents.db /tmp/` a secas, ni medir apuntando `DATABASE_URL` a la base viva.
 
 **F8.3 — Barrido de no-regresión.** Correr, **por archivo**, todas las suites que las fases tocaron o vecinan, y comparar contra §5.1:
 
@@ -935,20 +1254,29 @@ test_plan218_capability_matrix.py::test_doc_de_paridad_esta_sincronizado
 
 > **Re-medí igual antes de empezar.** La sesión paralela commitea cada pocos minutos y estos números pueden moverse. Anotá `git rev-parse HEAD` y volvé a correr la tabla; si un conteo difiere, **actualizá la tabla en el commit de F0** y usá ese número como baseline. Lo que no se acepta es comparar contra "0 failed": cuatro de estas suites nunca llegan a cero.
 
+> ✅ **v2 — los 13 baselines fueron RE-MEDIDOS uno por uno en la crítica, con el comando de arriba, y los 13 dieron EXACTAMENTE lo que dice la tabla**, incluidos los 2 fallos nominales de `test_plan218_capability_matrix.py` (`test_full_y_partial_exigen_evidencia` y `test_doc_de_paridad_esta_sincronizado`) y el `tsc --noEmit` en 0 errores / exit 0. La tabla del v1 es de fiar.
+>
+> ⚠️ **Dos suites que este plan toca y que NO estaban en la tabla del v1 — medilas en F0 y sumalas:** `tests/test_context_enrichment.py` y `tests/test_run_directive_block.py`. La segunda importa: `test_run_directive_block.py:53` llama **directo** a `context_enrichment._inject_run_directive(...)`, cuya firma cambia en §F2.4. El default `None` debería dejarla intacta, pero es la primera que hay que mirar si algo se pone rojo.
+>
+> ⚠️ **Trampa de medición que esta crítica se comió** (te va a pasar): correr con `DATABASE_URL` apuntando a una **copia pelada** del `.db` hace que `test_u1_self_review.py` dé **2 errors** en vez de 2 passed, por una migración de arranque que choca contra el índice único. No es deuda ni regresión: es la copia sin WAL (§F8.2 / C12). Medí contra la base real en modo lectura, o contra una base **vacía**, o contra un `VACUUM INTO`.
+
 ### 5.2 Riesgos, uno por uno
 
 | # | Riesgo | Mitigación |
 |---|---|---|
 | **R1** | El implementador "arregla" las degradaciones y cambia semántica. | §1.2 con aviso destacado, y un test de no-regresión por sitio que fija el valor neutro exacto (§F2.5, §F3.3). |
-| **R2** | `declarar()` levanta y tumba una corrida. | `try/except` total en F1 + test `test_declarar_falla_y_el_review_sigue` (§F3.3), que parchea la función para que levante. |
+| **R2** | `declarar()` levanta y tumba una corrida. | `try/except` total en F1 + `log = log or _noop_log` como primera línea (**v2 / C7**: sin eso el propio manejador lanzaba `TypeError`) + `test_declarar_sin_log_y_con_sesion_rota_no_levanta` (§F1) + `test_declarar_falla_y_el_review_sigue` (§F3.3). |
+| **R2b** *(v2)* | El aviso queda escrito en la base y **no llega a la interfaz** — el defecto del 289, una capa más arriba. | **Verificado que el canal está limpio:** `models.py:345` serializa `"metadata": self.metadata_dict` **entero, sin whitelist**, y `api/executions.py:317-327` (`get_execution`) devuelve ese `to_dict(...)` tal cual. No hay filtro que descarte una clave nueva. El drawer ya lee `metadata` completo (`ExecutionDetailDrawer.tsx:74`). **No hay que construir nada en el medio** — pero si alguien agrega un filtro ahí, F4 se queda mudo en silencio. |
 | **R3** | Falsos positivos: se declara degradación en proyectos ADO. | El guard `tracker_is_azure_devops(...) and ruteo_estricto_por_tracker()` se repite en F3.1, con sentinela negativo dedicado (`test_proyecto_ado_sin_criterios_no_declara`). |
-| **R4** | La interfaz no renderiza una capacidad desconocida. | `etiquetaDeCapacidad` devuelve la key cruda; y como F3.2 emite una key **fuera** de la matriz, ese camino es el normal desde el día uno, no un borde. Test dedicado en §F4.4. |
+| **R4** | La interfaz no renderiza una capacidad desconocida. | `etiquetaDeCapacidad` devuelve la key cruda (`?? capability`, nunca `undefined`). **v2 / C4:** las **dos** keys de producción **sí** tienen etiqueta en `ETIQUETAS`; el camino desconocido es un borde defensivo para una key futura, y se prueba con una key sintética. El test de §F4.4 guarda **además** que las dos de producción NO caen al default — sentinela de que nadie borró una entrada del diccionario. |
 | **R5** | El toggle de GitLab dice "guardado" y el motor no cambia. | F5.2 agrega el `setattr` sobre el singleton, y el test lo afirma **junto con** la persistencia en el `.env` temporal, en la misma función. |
 | **R6** | Apagar por error una de las 23 flags al corregir su texto. | F7.2 prohíbe explícitamente tocar cualquier campo que no sea `description=`. El gate de F7.3 **no** mira los defaults: mira la coherencia texto↔código, así que apagar una flag para "cumplir" el test también lo pondría verde — por eso la prohibición es textual y el revisor debe mirar el `git diff` de `harness_flags.py` y confirmar que **solo** hay cambios dentro de strings de `description`. |
 | **R7** | `STACKY_TRACE_PROMPT_TEXT_ENABLED` está ON y filtra prompts completos a la metadata. | Este plan **declara** el hecho en la descripción (F7.2) y **no** cambia la conducta. Queda como decisión del operador (§7), porque apagarla es un cambio de comportamiento fuera del alcance. |
 | **R8** | La sesión paralela pisa los mismos archivos. | Está viva y commitea cada pocos minutos; `api/agents.py`, `services/project_context.py` y `frontend/src/pages/*` figuran sucios. **Antes de cada commit: `git status --short`, y commitear con pathspec explícito** (`git commit -- "<ruta>"`). **Nunca** `amend`, `reset`, `rebase`, `stash` ni `checkout`. |
 | **R9** | Los ratchets se ponen rojos al agregar 6 archivos de tests. | Registro **por fase, en el commit que crea el archivo** (§F0.1), en **los dos** archivos, anclando por símbolo, sin rutas con espacios, y sacando del allowlist si estuviera. |
-| **R10** | `execution_id` no está en el scope de `context_enrichment.py:1288`. | §F2.4 lo declara como incertidumbre a verificar, con salida explícita: pasar `None` y documentarlo. **F3 sostiene el KPI por sí solo**, así que el plan no depende de que F2.4 salga bien. |
+| **R10** | ~~`execution_id` no está en el scope de `context_enrichment.py:1288`.~~ **YA NO ES UN RIESGO: ES UN HECHO MEDIDO Y RESUELTO.** | **v2 / C3.** Está confirmado que no está (la función es `_inject_run_directive(*, ticket_id, agent_type, blocks, log)`, `:1261`). La "salida explícita" del v1 (pasar `None`) queda **prohibida**: con ella F2 no escribe nunca en producción y F0 caso 1 sólo se pone verde probando el productor — el bloqueante del 289 de vuelta. §F2.4 da las 4 ediciones de `context_enrichment.py` y las 3 de los runtimes, todas verificadas. Y **se borra la frase "F3 sostiene el KPI por sí solo"**: era el permiso escrito para no construir F2. |
+| **R12** *(v2)* | Los 3 runtimes se cablean a medias (2 de 3), que es literalmente lo que pasó en el Plan 289. | `test_los_tres_runtimes_pasan_el_execution_id` (§F2.5): AST sobre los 3 archivos, exige el kwarg en las 3 llamadas **y** que el parser haya visto exactamente 3. |
+| **R13** *(v2)* | El barrido de F7 toca `harness_flags.py` y mueve una suite ajena. | Verificado que `PLAIN_HELP` vive en **otro módulo** (`services/harness_flags_help.py`) y no se deriva de `description`, así que `test_harness_flags_help.py` es estructuralmente insensible a esta edición. Igual se corre por separado (§F7.4) con criterio delta cero. |
 | **R11** | Un test escribe en la base o el `.env` reales. | F5.4 exige monkeypatch de `_ENV_PATH`; F8.2 exige copia read-only. Un pytest suelto **sí** escribe en la base viva de este repo. |
 
 ---
@@ -966,7 +1294,11 @@ test_plan218_capability_matrix.py::test_doc_de_paridad_esta_sincronizado
 | `services/similar_tickets.py:122` | Devuelve `[]`, que es indistinguible de "no hubo coincidencias" — un resultado legítimo y frecuente. Declararlo generaría ruido de alta frecuencia y bajo valor. Sin `execution_id` además. |
 | `services/ticket_assigner.py:401` | Devuelve `None` y ya loguea en `debug`. Sin `execution_id`. Bajo daño: el ticket queda sin asignar, que es visible en el propio tracker. |
 
-> **Por qué se acotó a dos y no "los 8, y si falta alguno se agrega":** un criterio así es **alcance infinito con forma de criterio binario** y no se puede declarar cumplido. Los dos elegidos son los únicos donde el destino (`execution_id`) está al alcance sin cambiar firmas públicas, y son los de mayor daño (`ok=True` que se lee como "validado"; `score=1.0` que se lee como "revisado"). **Los otros seis quedan documentados en F8.1 como deuda conocida**, no como olvido.
+> **Por qué se acotó a dos y no "los 8, y si falta alguno se agrega":** un criterio así es **alcance infinito con forma de criterio binario** y no se puede declarar cumplido. Los dos elegidos son los de mayor daño (`ok=True` que se lee como "validado"; `score=1.0` que se lee como "revisado"). **Los otros seis quedan como deuda declarada — y desde v2 la declaración es EJECUTABLE**: viven en `SITIOS_SIN_DECLARAR` con su motivo, vigilados por §F9, no sólo en un párrafo de F8.1.
+>
+> ⚠️ **v2 — una corrección al motivo del recorte.** El v1 decía que los dos elegidos "son los únicos donde el destino está al alcance **sin cambiar firmas públicas**". Eso resultó **falso para F2**: `business_preflight` necesita cambiar **tres** firmas (`evaluate`, `_evaluate_functional` y el despacho de `_PREDICATES`) más **dos** de `context_enrichment` (`enrich_blocks`, `_inject_run_directive`) y **tres** call sites de runtime. Son todas backward-compatible (keyword-only con default `None`), pero son cambios de firma. **El único de los ocho donde el `execution_id` ya está en el scope inmediato es `self_review.review_artifact` (`:76`).** Que quede escrito así, porque un implementador que crea que F2 es "una línea antes del return" va a subestimar la fase por 8 ediciones.
+>
+> **Verificados en la crítica, uno por uno:** `similar_tickets.py:122` (guard; `return []` en `:124`) — su función recibe `project_name`, sin `execution_id`, y `[]` es indistinguible de "sin coincidencias": **exclusión correcta**. `ticket_assigner.py:400-403` (guard; loguea en `debug` en `:404`) — sin `execution_id` y el resultado es visible en el propio tracker: **exclusión correcta**. `api/agents.py:1921` — su llamador es `:1687`, dentro de un armador que tampoco tiene la fila: **exclusión correcta**.
 
 **Otras exclusiones explícitas:**
 
@@ -995,16 +1327,21 @@ test_plan218_capability_matrix.py::test_doc_de_paridad_esta_sincronizado
 ### 7.2 Orden de implementación
 
 ```
-F0  (centinelas ROJOS)  →  F1  (registro)  →  F2  (business_preflight)  →  F3  (self_review)  →  F4  (interfaz)
-                                                                                                    │
-F5 (switch GitLab) ── F6 (base_url) ── F7 (23 descripciones) ─── independientes entre sí ────────────┤
-                                                                                                    ▼
-                                                                                            F8 (docs + métrica)
+F0 (centinelas ROJOS) → F1 (registro) → F2 (business_preflight) → F3 (self_review) → F4 (interfaz)
+                                                                        │
+                                                                        ├──► F9 (centinela de los 8 sitios)
+                                                                        │
+F5 (switch GitLab) ── F6 (base_url) ── F7 (23 desc. + 1 label) ── independientes entre sí ──┐
+                                                                                           ▼
+                                                                                  F8 (docs + métrica)
 ```
 
 - **F0 → F1 → F2 → F3 → F4** es la cadena obligatoria: F4 no tiene qué mostrar sin F2/F3, y F2/F3 no tienen dónde escribir sin F1.
+- **F9 va después de F3** (necesita que los dos sitios ya declaren, si no su segundo test nace rojo) y **antes de F8**.
 - **F5, F6 y F7 son independientes** entre sí y del resto: se pueden hacer en cualquier orden, incluso antes que F0. Si el presupuesto se corta, **cada una entrega valor sola**.
 - **F8 va última** porque documenta lo que quedó construido y mide el KPI.
+
+> ⚠️ **v2 — F2 ya NO es opcional.** El v1 declaraba en R10 que "F3 sostiene el KPI por sí solo", lo que autorizaba a saltear F2 en silencio. Con la salida de `execution_id=None` eliminada (C3), **F2 es parte de la cadena obligatoria**: si se corta el presupuesto antes de F2, lo que se entrega es F1 sin ningún escritor, o sea código construido y jamás cableado. **Cortar en F1 no es una entrega parcial válida.** Los cortes válidos son: después de F4 (la cadena entera), o cualquier subconjunto de {F5, F6, F7}.
 
 Un commit por fase. Mensaje: `feat(plan-290): F<n> — <qué hace>` (o `test(plan-290): F0 — ...`, `docs(plan-290): F8 — ...`).
 
@@ -1014,27 +1351,31 @@ Un commit por fase. Mensaje: `feat(plan-290): F<n> — <qué hace>` (o `test(pla
 |---|---|---|
 | 1 | Los centinelas de F0 se vieron **rojos** antes de F1, con salida pegada en el commit | Salida de pytest en el mensaje del commit de F0, **2 failed**, sin `ImportError` |
 | 2 | `test_plan290_degradacion_declarada.py` en **2 passed** tras F3 | comando §F3.3 |
-| 3 | `test_plan290_registro_degradacion.py` en **8 passed** | comando §F1 |
-| 4 | `test_plan290_preflight_no_regresion.py` en **5 passed** | comando §F2.5 |
+| 3 | `test_plan290_registro_degradacion.py` en **9 passed** | comando §F1 |
+| 4 | `test_plan290_preflight_no_regresion.py` en **6 passed** | comando §F2.5 |
 | 5 | `test_plan290_self_review_no_regresion.py` en **4 passed** | comando §F3.3 |
-| 6 | `test_plan290_gitlab_switch_ui.py` en **4 passed** | comando §F5.4 |
+| 6 | `test_plan290_gitlab_switch_ui.py` en **6 passed** | comando §F5.4 |
 | 7 | `test_plan290_base_url_normalizada.py` en **11 passed** | comando §F6 |
-| 8 | `test_plan290_defaults_no_mienten.py`: **1 failed** antes de F7.2 (con las 23 listadas) y **1 passed** después | comandos §F7.3, **ambas salidas** en el commit |
-| 9 | **K2 = 0** flags con descripción contradictoria | ídem #8 |
+| 8 | `test_plan290_defaults_no_mienten.py`: **2 failed** antes de F7.2 (23 descripciones + 1 label) y **2 passed** después | comandos §F7.3, **ambas salidas** en el commit |
+| 9 | **K2 = 0** flags con descripción **o label** contradictorio | ídem #8 |
+| 9b | *(v2 / C3)* **La cadena del `execution_id` está completa**: `enrich_blocks` la acepta, `_inject_run_directive` la pasa, `evaluate` la reenvía a `_evaluate_functional`, y **los 3 runtimes** la mandan | `test_los_tres_runtimes_pasan_el_execution_id` (§F2.5) + el caso 1 de F0 entrando por `enrich_blocks` |
+| 9c | *(v2 / A1)* `test_plan290_sitios_clasificados.py` en **2 passed**, con el censo reportando **8** sitios | comando §F9 |
 | 10 | **K3**: el switch de GitLab aplica en caliente **y** persiste | test `test_put_enciende_y_aplica_en_caliente` (§F5.4) |
 | 11 | **K4**: las 10 filas de la tabla de `base_url` coinciden cliente/servidor | §F6 |
 | 12 | `npx tsc --noEmit` en **0 errores** | §F8.3 |
 | 13 | Todas las suites de §5.1 en **delta cero** contra el baseline medido | §F8.3 |
 | 14 | `test_business_preflight.py` (12 passed) y `test_u1_self_review.py` (2 passed) **sin editar** | `git diff --stat <base>..HEAD -- "<ruta>"` vacío para los dos |
-| 15 | Los **7** archivos de tests nuevos registrados en **los DOS** scripts (`run_harness_tests.sh` y `.ps1`), y ambos en delta cero | §F0.1 |
-| 15b | El `.ps1` sigue siendo un array válido: la que era última entrada ahora lleva coma | inspección del `git diff` de `scripts/run_harness_tests.ps1` |
-| 16 | **Cero flags nuevas** en `harness_flags.py`; el único cambio ahí es dentro de strings `description=` | `git diff` de `harness_flags.py` revisado a mano |
+| 15 | Los **8** archivos de tests nuevos registrados en **los DOS** scripts: `.sh` de **820 → 828**, `.ps1` de **756 → 764** | §F0.1 |
+| 15b | El `.ps1` sigue siendo un array válido: la que era última entrada (`"tests/test_plan289_stat_de_contexto.py"`, hoy **sin** coma) ahora lleva coma. El diff del `.sh` tiene **0** líneas borradas y el del `.ps1` exactamente **1** | inspección del `git diff` de los dos scripts |
+| 15c | Cada archivo nuevo **pasa aislado**, y ninguno de los 820/756 previos cambió de veredicto | §F0.1, criterio 2 y 3 |
+| 16 | **Cero flags nuevas** en `harness_flags.py`; el único cambio ahí es dentro de strings `description=` y del `label=` de `STACKY_TRACE_PROMPT_TEXT_ENABLED` | `git diff` de `harness_flags.py` revisado a mano |
 | 17 | Ningún archivo de la sesión paralela commiteado | `git status --short` antes de cada commit + pathspec explícito |
 | 18 | Documentación de F8.1 escrita, con los 6 sitios fuera de scope enumerados | inspección |
 
 ### 7.4 Pendiente del operador (no bloquea el DoD)
 
-1. **Decidir sobre `STACKY_TRACE_PROMPT_TEXT_ENABLED`.** Está **ON** y su descripción prometía privacidad. Con F7 la descripción dice la verdad; apagarla o no es decisión del operador (human-in-the-loop). Es la única acción que este plan le deja, y es **informativa**, no un trabajo que el plan haya creado.
+1. **Decidir sobre `STACKY_TRACE_PROMPT_TEXT_ENABLED`.** Está **ON** y su **título y su descripción** prometían privacidad. Con F7 los dos dicen la verdad y la descripción trae la advertencia accionable; apagarla o no es decisión del operador (human-in-the-loop). Es la única acción que este plan le deja, y es **informativa**, no un trabajo que el plan haya creado.
+   > *v2 — por qué NO la apaga el plan, con la evidencia que lo decide:* el comentario de `harness_flags.py:2210` dice literalmente *"promovida a default ON (operador 2026-07-15, config se hace despues desde la UI)"*. **La encendió el operador a propósito.** Apagarla no sería corregir un descuido sino revertir una decisión suya sin consultarlo, y podría vaciar de contenido cualquier herramienta de trazabilidad que hoy dependa del texto del prompt. La conducta correcta es la que hace F7: **corregir los dos textos que mienten** (cambio de cero riesgo) y devolverle la perilla informada.
 2. **Smoke visual** del aviso de F4 y del switch de F5 con un proyecto GitLab real.
 
 ---
@@ -1054,7 +1395,37 @@ Un commit por fase. Mensaje: `feat(plan-290): F<n> — <qué hace>` (o `test(pla
 
 ## 9. Tabla de anclajes verificados (2026-08-02)
 
-Todos los anclajes de este documento fueron abiertos y verificados. Los que llegaron en el encargo y estaban mal, corregidos:
+### 9.0 — Re-verificación del juez (v2): lo que el v1 corrigió MAL, y lo que quedó desfasado
+
+Todos los anclajes del v1 fueron **abiertos de nuevo**. El v1 acertó en casi todo; estas son las excepciones, y una de ellas es una **corrección incorrecta**, que es peor que no haber corregido:
+
+| Anclaje del v1 | Veredicto E1 | Real, verificado |
+|---|---|---|
+| `newProjectGitlabModel.ts:39` = `normalizeGitlabUrl` — el v1 "corrigió" el `:37` del encargo | **CORRECCIÓN INCORRECTA** | **`:37`** es `export function normalizeGitlabUrl(raw: string): string {` — el encargo tenía razón. `:38` es el `const limpio`, `:39` el `.match(...)`. La corrección de **ruta** (`src/projects/`, no `src/services/`) **sí** era correcta. |
+| `STACKY_TRACKER_STRICT_ROUTING` (§3.1) | **INEXISTENTE** ⇒ era BLOQUEANTE (sostenía la decisión de alcance "cero flags nuevas") | **`STACKY_TRACKER_ROUTING_STRICT_ENABLED`**. `config.py:1455-1456` (`"true"` ⇒ ON), `FlagSpec` en `harness_flags.py:6035`, lectura en `project_context.py:97`. |
+| "el guard del sitio 5 está en `evaluate`" (implícito en F2.1) | **INEXISTENTE** ⇒ BLOQUEANTE | Está en **`_evaluate_functional`** (`business_preflight.py:37-44`). `evaluate` es `:161` y despacha por `_PREDICATES` en `:191-197`. |
+| `_ticket` en `business_preflight` (F2.2) | **INEXISTENTE** ⇒ BLOQUEANTE | No existe en ningún scope del archivo. Usar `tracker_declarado_del_proyecto(project_name)` (`project_context.py:124`). |
+| "`execution_id` en el scope de `context_enrichment.py:1288`" (F2.4, como incertidumbre) | **INEXISTENTE — resuelto** ⇒ era BLOQUEANTE por la salida que habilitaba | La función es `_inject_run_directive(*, ticket_id, agent_type, blocks, log)` (`:1261-1334`); su llamador es `enrich_blocks` (`:60-67`, llamada en `:133`). Ninguno lo tiene. §F2.4 construye la cadena. |
+| `DiagnosticsPage.tsx:328` = `<LogLevelPanel />` | **DESFASADO** | **`:327`**. (`<ParityMatrixPanel />` en `:331` **sí** es correcto.) |
+| `parityMatrixModel.ts:81` = `statusMark` | **DESFASADO** | **`:83`** es el `export function statusMark`; `:79-82` es su comentario. |
+| `api/global_config.py:88-93` = "UN solo escritor" (LOG_LEVEL) | **DESFASADO** | El comentario es `:89-92` y `"LOG_LEVEL"` es `:93`. `:88` es `"STACKY_GITLAB_CA_BUNDLE"`. |
+| `test_business_preflight.py:233` como test del guard no-ADO | **DESFASADO EN SENTIDO** (la línea es correcta) | El `assert result.warnings` **está** en `:233`, pero el caso parchea el cliente con `RuntimeError` (`:228`): prueba el `except` de red (`:198-200`), **no** el guard de `:94-99`. |
+| "`review_artifact` desde `criteria_repair` en un contexto sin fila" (§3.2) | **AFIRMACIÓN FALSA** | `harness/criteria_repair.py:82` pasa un `execution_id` **real**. |
+| `business_preflight.py:27` / `:94-99` / `:161` | **OK exacto** | `warnings: list[str] = field(default_factory=list)` en `:27`; el guard y su `return` ocupan `:94-99`; `def evaluate` en `:161`. |
+| `context_enrichment.py:1319` / `:284` | **OK exacto** | El `warnings[0]` en `:1319`; `persistir_stats_de_contexto` en `:284` (idioma de reasignación en `:315-317`). |
+| `self_review.py:76` / `:168` y los 3 call sites de `apply_to_execution` | **OK exacto** | `:76`, `:168`, y `agent_completion_internal.py:174`, `claude_code_cli_runner.py:3227`, `codex_cli_runner.py:2008`. |
+| Los 8 sitios de §2.1 | **OK** (comentario y guard, ±1 donde el `if` es multilínea) | Censo `grep -rn "Plan 281 F7 sitio"` reproducido: 8/8, mismos archivos y mismas líneas. |
+| 490 `FlagSpec` / 23 contradicciones / las 23 líneas de §2.4 | **OK exacto** | Censo AST re-ejecutado: 490 y 23, con las 23 líneas idénticas. |
+| `CAPABILITY_KEYS`=71; ADO 38/8/25; GitLab 34/14/21/2 | **OK exacto** | Reproducido importando el módulo. `tracker.comments.list` **está** en `CAPABILITY_KEYS`; `tracker.acceptance_criteria` **no**. |
+| 820 / 756 entradas de los ratchets, y la coma final del `.ps1` | **OK exacto** | 820 y 756. La última del `.ps1` (línea 987) es `"tests/test_plan289_stat_de_contexto.py"` **sin coma**. |
+| Allowlist: 207 líneas / 194 efectivas / `test_harness_capabilities.py` | **OK exacto** | 207 / 194; la línea de `capability` es la **97**. |
+| `global_config.py:82`, `:136-168`; `projects.py:141-142`; `config.py:1297-1299`; `.env:7`; `parity.py:15`; `harness_flags.py:134`; `setup_guides.py:147`; `endpoints.ts:2371` y `:3392`; `ExecutionDetailDrawer.tsx:74`/`:189`/`:198`; `LogLevelPanel.tsx:9-11`; `project_manager.py:670`; `provider_capabilities.py:95`/`:344`/`:349`/`:354`/`:364`; `agents.py:542`/`:1687`/`:1921` | **OK exacto (los 22)** | Abiertos uno por uno. |
+| `test_self_review.py` inexistente / **exit 4** | **OK — reproducido** | `ls` falla; `pytest tests/test_self_review.py` sale con **4**. |
+| Los 13 baselines de §5.1 y `tsc --noEmit` = 0 | **OK — los 13 reproducidos** | Ver el recuadro de §5.1. |
+
+### 9.1 — Tabla del v1 (anclajes del encargo original)
+
+Los que llegaron en el encargo y estaban mal, corregidos:
 
 | Anclaje del encargo | Estado | Anclaje real verificado |
 |---|---|---|
@@ -1071,11 +1442,11 @@ Todos los anclajes de este documento fueron abiertos y verificados. Los que lleg
 | `api/projects.py:141-142` | **OK** | `_write_global_env` + `setattr` |
 | `harness_flags.py:4591` ("miente sobre el default") | **INCORRECTO** | `:4591` es `default=True` de `STACKY_PIPELINE_*`, cuya descripción **no** afirma OFF. Las que sí mienten son **23** y están tabuladas en §2.4. |
 | `harness_flags.py:4446` ("miente sobre el default") | **INCORRECTO** | `:4446` es el `FlagSpec` de `STACKY_DEPLOYMENTS_SMOKE_TIMEOUT_SEC`, un `int` sin afirmación de default booleano. |
-| `frontend/.../newProjectGitlabModel.ts:37` | **±2** | `:39` — `normalizeGitlabUrl`. Ruta real: `frontend/src/projects/newProjectGitlabModel.ts` (**no** `frontend/src/services/`). |
+| `frontend/.../newProjectGitlabModel.ts:37` | **OK** *(v2 corrige al v1)* | `:37` **era correcto**: `export function normalizeGitlabUrl(...)`. Lo único mal era la **ruta**: es `frontend/src/projects/newProjectGitlabModel.ts`, **no** `frontend/src/services/`. |
 | `project_manager.py:670` | **OK** | `"base_url": url.rstrip("/")`. Ruta real: `backend/project_manager.py` (raíz del backend, **no** `services/`). |
 | `services/provider_capabilities.py:200` | **≈** | `CAPABILITY_MATRIX` se define en **`:95`**; `:200` cae dentro del bloque de `gitlab`. |
 | `ParityMatrixPanel.tsx:16` | **OK** | Componente en `frontend/src/components/ParityMatrixPanel.tsx` |
-| `DiagnosticsPage.tsx:329` | **±2** | `<ParityMatrixPanel />` está en **`:331`**; `<LogLevelPanel />` en `:328` |
+| `DiagnosticsPage.tsx:329` | **±2** | `<ParityMatrixPanel />` está en **`:331`**; `<LogLevelPanel />` en **`:327`** *(v2: el v1 decía `:328`)* |
 | Conteo GitLab "34/14/**22**/2" | **CORREGIDO** | Medido en proceso: **34 full / 14 partial / 21 absent / 2 n-a** = 71. ADO 38/8/25 = 71 ✓ |
 | `persistir_stats_de_contexto` llamada por los 3 runtimes | **OK** | `agent_runner.py:819`, `claude_code_cli_runner.py:685`, `codex_cli_runner.py:342` |
 | `tracker_efectivo_de_ticket` | **OK** | `services/project_context.py:206` |

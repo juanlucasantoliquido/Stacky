@@ -22,6 +22,7 @@ import LogNoiseCard from "../components/LogNoiseCard";
 import LedgerHealthCard from "../components/LedgerHealthCard";
 import LogLevelPanel from "../components/LogLevelPanel";
 import ParityMatrixPanel from "../components/ParityMatrixPanel";
+import HarnessPatternsCard from "../components/HarnessPatternsCard";
 import ExecutionDetailDrawer from "../components/ExecutionDetailDrawer";
 import styles from "./DiagnosticsPage.module.css";
 
@@ -328,6 +329,12 @@ export default function DiagnosticsPage() {
       {/* Plan 218 F8 — Paridad del tracker (ADO ↔ GitLab). No se monta si la flag
           maestra STACKY_PROVIDER_PARITY_ENABLED está apagada (el endpoint da 404). */}
       <ParityMatrixPanel />
+
+      {/* Plan 35 F4 — lo que el arnés aprendió: los fallos que se repiten en este
+          proyecto y el remedio que funcionó. LECTURA más confirmar/descartar; no
+          lanza runs ni publica en el tracker. Descartar es DEFINITIVO: la cosecha
+          no vuelve a crear ese patrón. No se monta sin proyecto activo. */}
+      <HarnessPatternsCard />
 
       {/* Drawer para detalle de ejecución (Plan 38 C2) */}
       <ExecutionDetailDrawer executionId={detailId} onClose={() => setDetailId(null)} />

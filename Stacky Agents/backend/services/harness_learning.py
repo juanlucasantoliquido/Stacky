@@ -538,3 +538,30 @@ def build_pattern_hint_block(
             + "\n".join(lineas)
         ),
     }
+
+
+# ── F4 — KPI de cobertura para harness_health (K2) ───────────────────────────
+
+# Umbral de "patrón con señal": el mismo que gobierna la inyección por default.
+HIGH_CONFIDENCE_THRESHOLD = 0.5
+
+
+def pattern_counts(projects, *, high_confidence: float = HIGH_CONFIDENCE_THRESHOLD) -> dict:
+    """K2 — {proyecto: {"total": n, "high_conf": m}}. Solo lectura, best-effort.
+
+    Vive en `services/` y lo consume `api/`, nunca al revés: el riel es que
+    `services/` NUNCA importa de `api/`.
+    """
+    out: dict[str, dict] = {}
+    for project in projects or ():
+        if not project:
+            continue
+        try:
+            pats = list_patterns(project, min_confidence=0.0, limit=_PATTERN_SCAN_LIMIT)
+        except Exception:  # noqa: BLE001
+            continue
+        out[project] = {
+            "total": len(pats),
+            "high_conf": sum(1 for p in pats if p.confidence >= high_confidence),
+        }
+    return out

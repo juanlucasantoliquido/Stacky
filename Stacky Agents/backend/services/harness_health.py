@@ -116,6 +116,9 @@ class HarnessHealth:
     _acceptance_contract: dict = field(default_factory=dict)
     # Plan 71 F7 -- cobertura efimera del sub-puerto CIProvider (efimero: resetea en restart)
     ci_provider_coverage: dict = field(default_factory=dict)
+    # Plan 35 F4 — patrones aprendidos por proyecto (K2). Solo lectura.
+    # {proyecto: {"total": n, "high_conf": m}}
+    learning_patterns: dict = field(default_factory=dict)
 
     def _rate(self, num: int, den: int) -> float | None:
         return round(num / den, 4) if den else None
@@ -186,6 +189,8 @@ class HarnessHealth:
             "acceptance_contract_kpis": self._acceptance_contract,
             # Plan 71 F7 -- cobertura efimera del sub-puerto CIProvider
             "ci_provider_coverage": self.ci_provider_coverage,
+            # Plan 35 F4 -- K2: cobertura de patrones aprendidos, por proyecto
+            "learning_patterns": self.learning_patterns,
         }
 
 
@@ -404,6 +409,17 @@ def compute_health(
     try:
         from api.tickets import _ci_provider_coverage  # noqa: PLC0415
         h.ci_provider_coverage = dict(_ci_provider_coverage)
+    except Exception:  # noqa: BLE001
+        pass
+    # Plan 35 F4 — K2: patrones aprendidos por proyecto. Solo lectura y
+    # best-effort: si la memoria no está disponible, la métrica queda vacía y la
+    # salud del arnés se calcula igual.
+    try:
+        from services import harness_learning  # noqa: PLC0415
+
+        h.learning_patterns = harness_learning.pattern_counts(
+            [p for p in h._by_project if p]
+        )
     except Exception:  # noqa: BLE001
         pass
     return h

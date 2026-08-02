@@ -417,3 +417,39 @@ def test_h8_by_project_field_always_present():
     h = compute_health(window_days=14).to_dict()
     assert "by_project" in h
     assert isinstance(h["by_project"], dict)
+
+
+def test_health_reports_pattern_counts():
+    """Plan 35 F4 — K2: la salud reporta cobertura de patrones aprendidos.
+
+    Es SOLO LECTURA: no cosecha, no inyecta, no toca el tracker. Si la memoria no
+    estuviera disponible, la métrica queda vacía y la salud se calcula igual.
+    """
+    from services.harness_health import compute_health
+    from services.harness_learning import HarnessPattern, persist_pattern
+
+    proj = "ProjectPatterns35"
+    t = _mk_ticket_project(90035, project=proj)
+    _mk_cli_exec(t, status="completed")
+
+    def _p(key):
+        return HarnessPattern(
+            project=proj, agent_type="developer", ticket_kind="bug",
+            signal_kind="criterion_fail", signal_key=key, remedy_hint="",
+            occurrences=1, confidence=0.0, last_seen="2026-08-01",
+        )
+
+    # uno visto 1 vez (confianza 0.2 < 0.5) y otro visto 5 (confianza 1.0)
+    persist_pattern(_p("senal poco vista"))
+    for _ in range(5):
+        persist_pattern(_p("senal muy vista"))
+
+    h = compute_health(window_days=14).to_dict()
+    assert "learning_patterns" in h
+    assert isinstance(h["learning_patterns"], dict)
+    stats = h["learning_patterns"].get(proj)
+    assert stats is not None, f"falta el proyecto en learning_patterns: {h['learning_patterns']}"
+    assert stats["total"] == 2
+    assert stats["high_conf"] == 1, (
+        "high_conf debe contar SOLO los que superan el umbral de inyección"
+    )

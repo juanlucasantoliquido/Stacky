@@ -1258,3 +1258,89 @@ def ledgers_purge_test_lines():
     if not resultado.get("ok"):
         return jsonify(resultado), 409
     return jsonify(resultado)
+
+
+# ---------------------------------------------------------------------------
+# Plan 35 F4 — patrones aprendidos por el arnés (lectura + confirmar/descartar)
+#
+# Riel de arquitectura: `services/` NUNCA importa de `api/`. La dependencia va
+# en un solo sentido: api/diag.py -> services/harness_learning.py.
+#
+# Regla 11: estos endpoints leen patrones y cambian el estado de una PISTA.
+# Ninguno publica en el tracker, transiciona un work item ni relanza un run.
+# ---------------------------------------------------------------------------
+
+_HARNESS_PATTERNS_LIST_LIMIT = 200
+
+
+@bp.route("/harness-patterns", methods=["GET"])
+def harness_patterns_list():
+    """Patrones del proyecto, ordenados por confianza descendente."""
+    from services import harness_learning
+
+    project = (request.args.get("project") or "").strip()
+    if not project:
+        return jsonify({"patterns": [], "project": "", "error": "project_required"}), 400
+
+    try:
+        min_conf = float(request.args.get("min_confidence") or 0.0)
+    except (TypeError, ValueError):
+        min_conf = 0.0
+
+    patrones = harness_learning.list_patterns(
+        project, min_confidence=min_conf, limit=_HARNESS_PATTERNS_LIST_LIMIT
+    )
+
+    # `list_patterns` devuelve dataclasses sin el memory_id (es un detalle del
+    # store). Se reconcilia por topic_key contra las filas activas del scope.
+    from services import memory_store
+
+    ids_por_topic = {
+        r.get("topic_key"): r.get("memory_id")
+        for r in memory_store.list_observations(
+            project=project,
+            scope=harness_learning.HARNESS_PATTERN_SCOPE,
+            status=harness_learning.PATTERN_STATUS_ACTIVE,
+            limit=500,
+        )
+    }
+
+    items = []
+    for p in patrones:
+        items.append({
+            "id": ids_por_topic.get(harness_learning.pattern_topic_key(p)),
+            "project": p.project,
+            "agent_type": p.agent_type,
+            "ticket_kind": p.ticket_kind,
+            "signal_kind": p.signal_kind,
+            "signal_key": p.signal_key,
+            "remedy_hint": p.remedy_hint,
+            "occurrences": p.occurrences,
+            "confidence": p.confidence,
+            "last_seen": p.last_seen,
+        })
+    return jsonify({"project": project, "patterns": items, "total": len(items)})
+
+
+def _set_pattern_status(memory_id: str, status: str):
+    from services import memory_store
+
+    if not memory_store.set_status(memory_id, status):
+        return jsonify({"ok": False, "error": "not_found", "id": memory_id}), 404
+    return jsonify({"ok": True, "id": memory_id, "status": status})
+
+
+@bp.route("/harness-patterns/<memory_id>/dismiss", methods=["POST"])
+def harness_patterns_dismiss(memory_id: str):
+    """Descarta el patrón. Es DE POR VIDA: la cosecha no vuelve a crearlo."""
+    from services.harness_learning import PATTERN_STATUS_DISMISSED
+
+    return _set_pattern_status(memory_id, PATTERN_STATUS_DISMISSED)
+
+
+@bp.route("/harness-patterns/<memory_id>/confirm", methods=["POST"])
+def harness_patterns_confirm(memory_id: str):
+    """Reactiva un patrón. El operador siempre puede revertir su propio descarte."""
+    from services.harness_learning import PATTERN_STATUS_ACTIVE
+
+    return _set_pattern_status(memory_id, PATTERN_STATUS_ACTIVE)

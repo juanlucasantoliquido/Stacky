@@ -141,7 +141,11 @@ def test_ado_sigue_publicando_igual_que_hoy(monkeypatch, tmp_path):
     from services import ado_publisher, project_context
     from services.comment_publish_router import resolve_comment_publisher
 
-    ticket = _TicketFalso(tracker_type="azure_devops")
+    # El proyecto tiene que ser uno REALMENTE de ADO. Con el default "RIPLEY"
+    # (que es GitLab) este test afirmaba que la columna mentirosa manda sobre el
+    # proyecto: congelaba como verde el defecto que mata el plan 286.
+    ticket = _TicketFalso(tracker_type="azure_devops",
+                          stacky_project_name="RSPACIFICO")
     _preparar(monkeypatch, tmp_path, ticket)
     cliente = _ClienteAdoFalso()
     monkeypatch.setattr(project_context, "build_ado_client", lambda *_a, **_k: cliente)

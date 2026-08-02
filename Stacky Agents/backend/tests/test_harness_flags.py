@@ -1068,6 +1068,27 @@ _CURATED_DEFAULTS_ON = {
     # `default_is_known` es `spec.default is not None`, o sea type-agnóstico.
     "STACKY_HARNESS_LEARNING_HARVEST_ENABLED",  # Plan 35 F1 — cosecha pasiva, sin LLM
     "STACKY_HARNESS_LEARNING_INJECT_ENABLED",   # Plan 35 F2 — pista podable, prioridad 45
+    # Plan 285 — el Documentador pisa firme. Entran SOLO las 6 bool que declaran
+    # `default=True`. Ninguna cae en las excepciones: (A) no hay loop, daemon,
+    # barrido ni llamada a modelo — el indexado es TF-IDF puro sobre .md locales
+    # y el retrieval viaja dentro del prompt que ya se iba a mandar, todo
+    # on-demand cuando el operador aprieta el botón; (B) escriben en docs_index,
+    # una tabla DERIVADA de Stacky, nunca en un sistema del operador, y no le
+    # sacan ninguna decisión (la barrera HITL del 284 queda intacta: este plan
+    # la MEJORA dándole contexto al artefacto que el operador aprueba).
+    # Las otras 3 keys del plan NO van acá y este assert es de IGUALDAD de
+    # conjuntos, así que agregarlas lo pondría en rojo con un "Faltantes":
+    #  - STACKY_DOCS_CORPUS_PURGE_ENABLED nace OFF (excepción B: DESTRUYE datos
+    #    de forma irreversible) y por eso no declara `default=`.
+    #  - las 2 numéricas (…_RIGOR_MIN_DENSITY float, …_RIGOR_MIN_CITATIONS int)
+    #    tampoco: `default_is_known` es `spec.default is not None`, o sea
+    #    type-agnóstico, y un `default=0.5` las volvería "conocidas".
+    "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED",       # Plan 285 F1.1 — TF-IDF local, on-demand
+    "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED",       # Plan 285 F1.4 — lectura pura al prompt
+    "STACKY_DOCS_CORPUS_ORPHANS_ENABLED",         # Plan 285 F1.3 — sólo lista, no borra
+    "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED",        # Plan 285 F2 — endurece, no afloja
+    "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED",  # Plan 285 F3 — muestra lo que ya se calculaba
+    "STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED",    # Plan 285 F4 — sólo presentación
 }
 
 

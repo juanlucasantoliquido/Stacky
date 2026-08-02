@@ -155,6 +155,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_CITATION_GATE_MIN_RATIO",
         "STACKY_DOCS_TICKET_MINING_MAX",
         "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS",
+        # Plan 285 — los 2 knobs numéricos del rigor por afirmación
+        "STACKY_DOCS_RIGOR_MIN_DENSITY",
+        "STACKY_DOCS_RIGOR_MIN_CITATIONS",
         # Plan 35 — aprendizaje del arnés (cosecha + reinyección + 2 knobs).
         # Reusan esta categoría en vez de crear "harness_learning": un grupo
         # nuevo sin entrada acá pone rojo test_every_registry_flag_is_categorized.
@@ -473,6 +476,16 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_PIPELINE_STAGES_ENABLED",  # Plan 284 — pipeline de 5 etapas
         "STACKY_DOCS_PIPELINE_AUTOAPPLY",       # Plan 284 — escribe sin confirmación (OFF)
         "STACKY_DOCS_RADIOGRAPHY_ENABLED",      # Plan 284 — cobertura sobre el grafo
+        # Plan 285 — corpus vivo, rigor por afirmación y descarte trazable.
+        # OJO: la categorización NO se deriva del prefijo. Toda flag nueva se
+        # declara acá a mano o test_every_registry_flag_is_categorized se pone rojo.
+        "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED",       # Plan 285 — indexa antes de documentar
+        "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED",       # Plan 285 — el corpus se LEE
+        "STACKY_DOCS_CORPUS_ORPHANS_ENABLED",         # Plan 285 — lista los huérfanos
+        "STACKY_DOCS_CORPUS_PURGE_ENABLED",           # Plan 285 — purga (OFF, destructiva)
+        "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED",        # Plan 285 — rigor por afirmación
+        "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED",  # Plan 285 — descarte trazable
+        "STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED",    # Plan 285 — el árbol deja de mezclar
         "STACKY_DOCS_RAG_HYBRID_ENABLED",       # Plan 112 — retrieval híbrido docs
         "STACKY_CAPS_ADVISOR_ENABLED",          # I3.3 — GET /metrics/caps-advisor (solo lectura)
         "STACKY_MIGRATOR_ADO_TO_GITLAB_ENABLED",# Plan 74 — migrador ADO→GitLab (dry-run + HITL)
@@ -2973,6 +2986,150 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_DOCS_GRAPH_ENABLED",
+    ),
+    # ── Plan 285 — el Documentador pisa firme ────────────────────────────────
+    FlagSpec(
+        key="STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: indexar la documentación del proyecto antes de escribir (Plan 285)",
+        description=(
+            "Plan 285 — Si está en ON, al lanzar el Documentador se re-indexa la "
+            "documentación .md del proyecto en el corpus de búsqueda, para que el "
+            "agente pueda consultarla en vez de reescribirla desde cero. Es lectura "
+            "de archivos locales más una tabla derivada propia de Stacky: no hay "
+            "bucle ni proceso de fondo y no llama a ningún modelo. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: pasarle al agente la documentación ya escrita (Plan 285)",
+        description=(
+            "Plan 285 — Si está en ON, el Documentador busca en el corpus la "
+            "documentación que el proyecto YA tiene y se la pasa al agente para que "
+            "amplíe o corrija en vez de duplicar. Viaja dentro del prompt que igual se "
+            "iba a mandar: no agrega ninguna llamada a un modelo. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_CORPUS_ORPHANS_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: listar proyectos huérfanos del corpus (Plan 285)",
+        description=(
+            "Plan 285 — Si está en ON, se puede ver qué proyectos quedaron en el "
+            "corpus de búsqueda sin existir ya en la configuración de Stacky, con su "
+            "conteo de fragmentos. Sólo lista y muestra: no borra nada. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        # EXCEPCION (B) — DESTRUYE DATOS. Borra filas del corpus de forma
+        # irreversible: el re-indexado sólo regenera proyectos que existen, así
+        # que un huérfano borrado NO vuelve (docs_rag.py:199 purga por
+        # project_name; nada re-crea un proyecto que ya no está configurado).
+        # Nace OFF, hace backup a .jsonl antes de cualquier DELETE, valida el
+        # conteo de filas y exige confirmación explícita del operador en la UI.
+        # Sin `default=`: default_is_known() es `spec.default is not None`, así
+        # que hasta un default=False explícito rompe test_default_known_only_for_curated.
+        key="STACKY_DOCS_CORPUS_PURGE_ENABLED",
+        type="bool",
+        label="Documentador: permitir borrar los proyectos huérfanos del corpus (Plan 285)",
+        description=(
+            "Plan 285 — Si la encendés, se habilita el borrado de los fragmentos que "
+            "quedaron en el corpus de búsqueda de proyectos que ya no existen. Es la "
+            "única operación de este plan que destruye datos, por eso viene apagada: "
+            "antes de borrar deja una copia de respaldo y te pide confirmar el número "
+            "exacto de filas. Default OFF."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: exigir rigor por afirmación (Plan 285)",
+        description=(
+            "Plan 285 — Si está en ON, un documento largo que apenas trae una marca de "
+            "confianza suelta y ninguna cita al código se rechaza antes de escribirse, "
+            "con el motivo a la vista. Endurece un artefacto que Stacky genera en su "
+            "propia rama, siempre revertible. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RIGOR_MIN_DENSITY",
+        type="float",
+        label="Documentador: proporción mínima de afirmaciones marcadas",
+        description=(
+            "Plan 285 — Qué parte de las afirmaciones de un documento tienen que "
+            "llevar marca de confianza para que se escriba. Los encabezados y las "
+            "líneas dentro de un bloque de código no cuentan como afirmación, y un "
+            "documento muy corto nunca se rechaza. Default 0.5."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=0.0,
+        max_value=1.0,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_RIGOR_MIN_CITATIONS",
+        type="int",
+        label="Documentador: citas al código mínimas por documento",
+        description=(
+            "Plan 285 — Cuántas citas archivo:línea válidas tiene que traer un "
+            "documento largo para que se escriba. Si no se pudieron contar las citas, "
+            "este chequeo se omite en vez de rechazar. Default 1."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+        min_value=0,
+        max_value=50,
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentador: mostrar los tickets descartados y por qué (Plan 285)",
+        description=(
+            "Plan 285 — Si está en ON, el panel del Documentador muestra qué tickets "
+            "quedaron afuera del barrido y con qué motivo. Guarda y muestra el "
+            "resultado de un cálculo que ya se hacía y se tiraba. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED",
+        default=True,  # curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated)
+        type="bool",
+        label="Documentación: separar los planes de la documentación del proyecto (Plan 285)",
+        description=(
+            "Plan 285 — Si está en ON, el árbol de documentación agrupa por clase y te "
+            "deja filtrar, así los documentos de plan dejan de aparecer revueltos con "
+            "la documentación del proyecto. Sólo cambia cómo se presenta información "
+            "que el backend ya envía. Default ON."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_DOCS_DOCUMENTER_ENABLED",
     ),
     FlagSpec(
         key="STACKY_PROCESS_DISCIPLINE_ENABLED",

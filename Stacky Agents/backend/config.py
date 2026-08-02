@@ -789,6 +789,42 @@ class Config:
         "STACKY_DOCS_RADIOGRAPHY_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes", "on")
 
+    # ── Plan 285 — corpus vivo, rigor por afirmación y descarte trazable ─────
+    # Plan 285 F1.1 — auto-indexación del corpus antes de documentar
+    STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 285 F1.4 — el corpus SE LEE y viaja al prompt
+    STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 285 F1.3 — listar los proyectos huérfanos del corpus (sólo lectura)
+    STACKY_DOCS_CORPUS_ORPHANS_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_CORPUS_ORPHANS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 285 F1.3 — purga del corpus huérfano. Excepción (B): destruye datos.
+    STACKY_DOCS_CORPUS_PURGE_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_CORPUS_PURGE_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 285 F2 — gate de rigor por afirmación
+    STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    STACKY_DOCS_RIGOR_MIN_DENSITY: float = float(
+        os.getenv("STACKY_DOCS_RIGOR_MIN_DENSITY", "0.5") or "0.5"
+    )
+    STACKY_DOCS_RIGOR_MIN_CITATIONS: int = int(
+        os.getenv("STACKY_DOCS_RIGOR_MIN_CITATIONS", "1") or "1"
+    )
+    # Plan 285 F3 — el descarte de tickets se vuelve trazable
+    STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+    # Plan 285 F4 — el árbol de documentación agrupa y filtra por clase
+    STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED: bool = os.getenv(
+        "STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes", "on")
+
     # ── Plan 129 — Paleta global: búsqueda profunda multi-fuente (default OFF, editable por UI) ─
     STACKY_PALETTE_DEEP_SEARCH_ENABLED: bool = os.getenv(
         "STACKY_PALETTE_DEEP_SEARCH_ENABLED", "true"

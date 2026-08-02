@@ -2398,6 +2398,60 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo dejás vacío: la conexión con el calendario queda apagada con un aviso que dice qué falta, y el camino manual sigue disponible.",
         example="Es una cadena larga con guiones que te pasa quien administra el Microsoft de tu empresa: se pega una vez y queda guardada.",
     ),
+    "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED": PlainHelp(
+        what="Repasa la documentación que ya escribiste del proyecto para que el Documentador pueda consultarla.",
+        on_effect="Si la activás: cada vez que lanzás el Documentador se repasan tus archivos de documentación y quedan listos para buscar dentro de ellos.",
+        off_effect="Si la apagás: el Documentador trabaja sin saber qué documentación ya existe y tiende a reescribir lo mismo de nuevo.",
+        example="Tenés quince notas escritas del proyecto: con esto activado el Documentador las tiene a mano en vez de arrancar de cero.",
+    ),
+    "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED": PlainHelp(
+        what="Le muestra al Documentador la documentación que el proyecto ya tiene, para que amplíe en vez de duplicar.",
+        on_effect="Si la activás: antes de escribir, el Documentador recibe una lista de las notas que ya existen y de qué habla cada una.",
+        off_effect="Si la apagás: el Documentador no ve lo ya escrito y puede entregarte una versión repetida de algo que ya tenías.",
+        example="Ya existe una nota sobre cómo funciona el cobro: el Documentador la amplía en lugar de crear una segunda nota igual.",
+    ),
+    "STACKY_DOCS_CORPUS_ORPHANS_ENABLED": PlainHelp(
+        what="Muestra qué proyectos quedaron guardados en la búsqueda de documentación aunque ya no existan en Stacky.",
+        on_effect="Si la activás: podés ver la lista de esos restos con cuántos pedazos de texto ocupa cada uno. Sólo los muestra.",
+        off_effect="Si la apagás: esos restos siguen ahí ensuciando las búsquedas, pero no los ves.",
+        example="Aparecen ocho nombres de proyectos viejos que ya borraste: los ves listados con su tamaño, sin que se toque nada.",
+    ),
+    "STACKY_DOCS_CORPUS_PURGE_ENABLED": PlainHelp(
+        what="Habilita borrar de la búsqueda de documentación los restos de proyectos que ya no existen.",
+        on_effect="Si la activás: aparece el botón para limpiarlos. Antes de borrar se guarda una copia de respaldo y se te pide confirmar el número exacto de filas.",
+        off_effect="Si la apagás: el borrado queda deshabilitado y sólo podés mirar la lista. Viene apagada porque es la única acción que destruye datos.",
+        example="Ves que sobran cincuenta pedazos de texto de proyectos borrados: la encendés, confirmás el número y recién ahí se limpian.",
+    ),
+    "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED": PlainHelp(
+        what="Exige que un documento largo marque de dónde saca lo que afirma, en vez de conformarse con una marca suelta.",
+        on_effect="Si la activás: un documento con muchas afirmaciones y casi ninguna marca de respaldo se rechaza antes de guardarse, y te dice por qué.",
+        off_effect="Si la apagás: alcanza con una sola marca en todo el documento para que se guarde, aunque el resto sea invento.",
+        example="Sesenta líneas de afirmaciones con una sola marca al principio: se rechaza en vez de quedar guardado como si estuviera verificado.",
+    ),
+    "STACKY_DOCS_RIGOR_MIN_DENSITY": PlainHelp(
+        what="Qué parte de las afirmaciones de un documento tiene que llevar marca de respaldo para aceptarlo.",
+        on_effect="Si subís el número: sos más exigente y se rechazan más documentos flojos; en 1 exigís que cada afirmación esté marcada.",
+        off_effect="Si lo bajás: aceptás documentos con más afirmaciones sin respaldo.",
+        example="Con 0,5 un documento de diez afirmaciones se acepta si al menos cinco están marcadas.",
+    ),
+    "STACKY_DOCS_RIGOR_MIN_CITATIONS": PlainHelp(
+        what="Cuántas referencias al código tiene que traer un documento largo para aceptarlo.",
+        on_effect="Si subís el número: exigís más referencias concretas y se rechazan los documentos que sólo hablan en general.",
+        off_effect="Si lo ponés en cero: no se exige ninguna referencia y sólo queda el chequeo de las marcas.",
+        example="Con 1 alcanza con que el documento apunte a un archivo y una línea que existan de verdad.",
+    ),
+    "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED": PlainHelp(
+        what="Te muestra qué tickets quedaron afuera al documentar y con qué motivo cada uno.",
+        on_effect="Si la activás: al terminar ves una lista de los tickets descartados agrupada por motivo, y podés abrirla para revisarlos uno por uno.",
+        off_effect="Si la apagás: el descarte sigue ocurriendo igual pero no ves cuáles fueron ni por qué.",
+        example="De doscientos tickets entraron treinta: ves que ciento diez quedaron afuera por no tener descripción y cincuenta por ser de prueba.",
+    ),
+    "STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED": PlainHelp(
+        what="Separa los documentos de plan de la documentación propia del proyecto en el árbol de la pantalla.",
+        on_effect="Si la activás: aparecen filtros arriba del árbol y los planes quedan ocultos por defecto, con su cantidad a la vista para prenderlos de un clic.",
+        off_effect="Si la apagás: volvés a ver todo mezclado en una sola lista, como hasta ahora.",
+        example="Doscientos cuarenta planes tapaban tus quince notas del proyecto: ahora ves tus notas y los planes quedan detrás de un filtro.",
+    ),
 }
 
 

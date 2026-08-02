@@ -2711,4 +2711,22 @@ class Config:
         "STACKY_TRACKER_CONTEXT_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 291 — El commit del agente crea la rama que necesita ─────────────
+    # Nace OFF por EXCEPCION (B): encenderla hace que GitLab CREE una rama en el
+    # repositorio real del operador. Ninguna otra cosa de este plan escribe.
+    STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED: bool = os.getenv(
+        "STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # Nace ON: SOLO LEE y reporta. No cambia ni un byte de lo que se commitea.
+    STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED: bool = os.getenv(
+        "STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
+    # Nace OFF por EXCEPCION (B): enmascarar CAMBIA el contenido del archivo que se
+    # escribe en el repositorio real del operador (y el camino ADO ya esta vivo).
+    STACKY_AUTOCOMMIT_REDACT_ENABLED: bool = os.getenv(
+        "STACKY_AUTOCOMMIT_REDACT_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "yes")
+
 config = Config()

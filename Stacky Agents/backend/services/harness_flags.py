@@ -509,6 +509,10 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_INCIDENT_AUTO_PUBLISH_ENABLED",    # Plan 166 F3 — creación directa/lote
         "STACKY_INCIDENT_DEV_RESOLVER_ENABLED",    # Plan 166 F4/F5 — Dev Resolutor
         "STACKY_INCIDENT_DEV_PR_ENABLED",          # Plan 177 — auto-PR del Dev Resolutor
+        # Plan 291 — el commit del agente crea la rama que necesita (GitLab)
+        "STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED",   # Plan 291 — crea la rama destino (OFF)
+        "STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED",       # Plan 291 — detecta y reporta secretos (ON)
+        "STACKY_AUTOCOMMIT_REDACT_ENABLED",            # Plan 291 — enmascara antes de commitear (OFF)
         "STACKY_NOTIFICATION_CENTER_ENABLED",      # Plan 152 — centro de actividad (campana + feed, default ON)
         # Plan 202 — La Fragua Nocturna: master opt-in (default OFF) + su techo de
         # gasto. Van juntas acá porque son la MISMA capacidad opt-in; el techo no
@@ -7263,6 +7267,88 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         env_only=False,
         # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
         default=True,
+    ),
+    # ── Plan 291 — el commit del agente crea la rama que necesita ─────────────
+    FlagSpec(
+        key="STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED",
+        # SIN default= A PROPOSITO (regla dura): una flag default OFF NO declara
+        # default=False, porque `default_is_known(spec)` es literalmente
+        # `spec.default is not None` y eso la meteria en el conjunto que
+        # test_default_known_only_for_curated exige que sea EXACTAMENTE
+        # _CURATED_DEFAULTS_ON. El OFF vive SOLO en config.py.
+        #
+        # Nace OFF por EXCEPCION (B): es lo unico de este plan que hace que Stacky
+        # ESCRIBA en un sistema real del operador — con esto encendido, GitLab CREA
+        # una rama en el repositorio del operador. Mismo precedente que
+        # STACKY_MEETINGS_PUBLISH_ENABLED (plan 283) y
+        # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED: ver y diagnosticar va ON,
+        # escribir de verdad va OFF.
+        #
+        # SIN requires= A PROPOSITO: STACKY_GITLAB_ENABLED NO esta en FLAG_REGISTRY
+        # (romperia R1 de validate_requires_graph) y STACKY_INCIDENT_DEV_PR_ENABLED
+        # ya tiene requires propio (romperia R4, profundidad maxima 1). Ver plan 291
+        # seccion 3.5.
+        type="bool",
+        label="Crear la rama del fix cuando no existe (GitLab)",
+        description=(
+            "Plan 291 — Cuando Stacky va a commitear en una rama de GitLab que "
+            "todavía no existe, le pide a GitLab que la cree a partir de la rama "
+            "principal del repositorio. Nace APAGADA porque es lo único que hace "
+            "que Stacky escriba de verdad en el GitLab de la empresa. Con OFF, ese "
+            "commit no se intenta y Stacky avisa con un mensaje claro cuál es la "
+            "rama que falta. Azure DevOps ya crea la rama desde siempre; esto "
+            "empareja GitLab. Requiere que GitLab esté habilitado. IMPORTANTE: "
+            "aplica a TODO commit de Stacky a GitLab, no solo al arreglo de una "
+            "incidencia — también al armado de pipelines, que usa nombres de rama "
+            "propios. Ver plan 291 sección 3.6."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED",
+        type="bool",
+        # Curada en _CURATED_DEFAULTS_ON (test_default_known_only_for_curated).
+        # Nace ON: SOLO LEE. No cambia un byte de lo que se commitea; agrega una
+        # advertencia a la descripcion del MR. No cae en (A) ni en (B).
+        default=True,
+        label="Avisar si el arreglo del agente trae algo que parece un secreto",
+        description=(
+            "Plan 291 — Antes de subir un archivo que escribió el agente, Stacky "
+            "lo revisa buscando claves de acceso conocidas (Amazon, GitHub, GitLab, "
+            "Slack) y bloques de clave privada. Si encuentra algo, NO toca el "
+            "archivo: lo sube igual y agrega una advertencia con la lista de "
+            "archivos sospechosos en la descripción de la propuesta de cambio, "
+            "para que vos decidas antes de integrarla. Nace ENCENDIDA porque solo "
+            "mira y avisa."
+        ),
+        group="global",
+        env_only=False,
+    ),
+    FlagSpec(
+        key="STACKY_AUTOCOMMIT_REDACT_ENABLED",
+        # SIN default= A PROPOSITO: misma regla dura que la de start_branch.
+        #
+        # Nace OFF por EXCEPCION (B). El v1 de este plan la ponia ON y estaba MAL:
+        # enmascarar reemplaza texto DENTRO del archivo que se sube al repositorio
+        # real del operador — y el camino de Azure DevOps ya esta vivo hoy, asi que
+        # habria cambiado los bytes escritos en el ADO de la empresa sin que nadie
+        # lo decidiera. Ademas, medido: aplicar el saneador de diffs completo a
+        # codigo fuente rompe codigo legitimo (`password = cfg.get(...)` ->
+        # `password = ***REDACTED***`). Por eso aca se usa SOLO el subconjunto de
+        # patrones de alta confianza (plan 291 F5), nunca redact_secrets entero.
+        type="bool",
+        label="Tapar el secreto dentro del archivo antes de subirlo",
+        description=(
+            "Plan 291 — Va de la mano de la opción de aviso. Con esta ENCENDIDA, "
+            "Stacky ya no se limita a avisar: reemplaza el valor sospechoso por una "
+            "marca dentro del archivo antes de subirlo, y lo aclara en la propuesta "
+            "de cambio. Nace APAGADA porque modifica el contenido que se guarda en "
+            "el repositorio de la empresa, y esa es una decisión tuya. Con OFF, el "
+            "archivo se sube tal cual lo escribió el agente y solo recibís el aviso."
+        ),
+        group="global",
+        env_only=False,
     ),
 )
 

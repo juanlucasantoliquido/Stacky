@@ -2483,6 +2483,25 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: el agente arranca sin los comentarios del ticket de GitLab, igual que antes de este cambio.",
         example="Como leer los mensajes anteriores de una conversación antes de contestar, en vez de responder viendo solo el asunto.",
     ),
+    # ── Plan 291 — el commit del agente crea la rama que necesita ──────────
+    "STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED": PlainHelp(
+        what="Deja que Stacky cree en GitLab la rama nueva donde va a dejar el arreglo que preparó el agente.",
+        on_effect="Si la activás: cuando el agente termina un arreglo, Stacky crea la rama en GitLab, sube los archivos y abre la propuesta de cambio. Vos seguís siendo quien la aprueba y la integra.",
+        off_effect="Si la apagás: Stacky no crea ninguna rama en GitLab y te avisa en el ticket cuál era la rama que faltaba, sin tocar nada de tu repositorio.",
+        example="Como pedirle al archivo que abra una carpeta nueva antes de guardar el borrador, en vez de que el guardado falle porque la carpeta no estaba.",
+    ),
+    "STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED": PlainHelp(
+        what="Revisa los archivos que escribió el agente buscando claves de acceso conocidas o bloques de clave privada.",
+        on_effect="Si la activás: los archivos se suben igual, pero la propuesta de cambio te lista arriba cuáles traen algo que parece una clave, para que lo mires antes de integrarla.",
+        off_effect="Si la apagás: nadie revisa nada y la propuesta de cambio no te avisa si quedó una clave adentro de algún archivo.",
+        example="Como el aviso del corrector antes de mandar el mail: te marca lo dudoso y vos decidís.",
+    ),
+    "STACKY_AUTOCOMMIT_REDACT_ENABLED": PlainHelp(
+        what="Además de avisarte, reemplaza el valor sospechoso por una marca dentro del archivo antes de subirlo.",
+        on_effect="Si la activás: el valor que parecía una clave se reemplaza por una marca dentro del archivo que se guarda en el repositorio de la empresa, y queda anotado en la propuesta de cambio.",
+        off_effect="Si la apagás: el archivo se sube tal cual lo escribió el agente y solo recibís el aviso, sin que nadie le cambie el contenido.",
+        example="Como pasar un marcador negro por un dato de una fotocopia antes de archivarla: protege, pero el original ya no vuelve.",
+    ),
 }
 
 

@@ -1109,6 +1109,15 @@ _CURATED_DEFAULTS_ON = {
     # es SOLO LECTURA de los comentarios del issue, no escribe en el tracker, no
     # borra nada y no decide nada por el operador.
     "STACKY_TRACKER_CONTEXT_ENABLED",
+    # ── Plan 291 — el commit del agente crea la rama que necesita ─────────────
+    # Nace ON. No cae en (A): no enciende loop, daemon, barrido, sondeo ni llamada
+    # a modelo — corre dentro del post-hook que ya existe. No cae en (B): SOLO MIRA
+    # el texto que el agente ya iba a subir y agrega una advertencia a la
+    # descripcion de la propuesta; el archivo se commitea BYTE-IDENTICO.
+    # Sus dos hermanas del plan 291 (STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED y
+    # STACKY_AUTOCOMMIT_REDACT_ENABLED) NO figuran aca a proposito: nacen OFF por
+    # la excepcion (B) y por lo tanto no declaran default= en su FlagSpec.
+    "STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED",
 }
 
 

@@ -17,7 +17,7 @@
 | F0 | **IMPLEMENTADA** | `test_plan286_columna_no_rutea.py` nace **`2 failed, 2 passed`** (4 collected), y las dos patas listan **exactamente** los 4 sitios. Ratchets: parity **12 passed**, meta **4 passed** |
 | F1 | **IMPLEMENTADA** | Rojo previo real: `ImportError: cannot import name '_reset_memo_tracker_declarado'`. Después: **`14 passed`** (14 collected). En vivo: RIPLEY→`gitlab`, RSPACIFICO→`azure_devops`. Perf **`108 us/llamada`** (bar < 400, línea base sin memo 1.057) |
 | F2 | **IMPLEMENTADA** | Rojo previo real, los 2 predichos: `#1 assert 'ado_client' == 'provider'`, `#5 assert 'azure_devops' == 'gitlab'`. Después **`6 passed`** (6 collected). No-regresión exacta: 270→**14**, 271→**13**, ratchet 270→**6**, 281 sitios→**18**. Ratchets: parity **12**, meta **4 passed** |
-| F3 | pendiente | |
+| F3 | **IMPLEMENTADA, con UN rojo ajeno declarado (ver C12)** | Rojo previo real: `#7 assert 'ado_client' == 'gitlab_adapter'`. Después **`9 passed`** (9 collected). **PERO** `test_plan282_publicacion_comentario.py` pasa de **`7 passed`** a **`1 failed, 6 passed`** — y el que falla estaba **congelando el defecto**. No se tocó. Ver C12 |
 | F4 | pendiente | |
 | F5 | pendiente | |
 | F6 | pendiente | |
@@ -34,6 +34,54 @@
 > de fábrica (`test_campos_obligatorios` y `test_self_test_coherente` por
 > `PLAN239-OUTLET-EN-BLANCO` sin `self_test`; `test_status_enum` porque `guarded` **no está**
 > en el enum del test aunque sí esté en uso en el catálogo). F7 debe conservar ese número.
+
+### C12 — BLOQUEANTE NUEVO, encontrado al implementar F3. El juez v2 no lo vio.
+
+**`tests/test_plan282_publicacion_comentario.py::test_ado_sigue_publicando_igual_que_hoy`
+estaba CONGELANDO el defecto que este plan mata, y contradice frontalmente al test F3#7
+del propio plan.** No es una regresión de F3: es una contradicción que el plan no detectó.
+
+La evidencia, ejecutada:
+
+```
+FAILED tests/test_plan282_publicacion_comentario.py::test_ado_sigue_publicando_igual_que_hoy
+E       AssertionError: assert 'gitlab_adapter' == 'ado_client'
+```
+
+El mecanismo, verificado abriendo el archivo:
+
+- `_TicketFalso.__init__` declara **`stacky_project_name="RIPLEY"` como default**
+  (`tests/test_plan282_publicacion_comentario.py:22-23`).
+- `_preparar` (`:97-127`) monkeypatchea `session_scope`, `_emit_and_persist`,
+  `read_and_validate` y demás — pero **NO** `project_manager.get_project_config`.
+- Por lo tanto el helper de F1 lee el **config REAL de disco**,
+  `backend/projects/RIPLEY/config.json`, que declara **`"type": "gitlab"`** (Anexo A, punto 5).
+- O sea: ese test asserta que un ticket de **RIPLEY** (proyecto GitLab) con la columna en
+  el default mentiroso `azure_devops` (`models.py:49`) publica su comentario en **Azure
+  DevOps**. **Eso es exactamente el defecto de §1**, escrito como aserción verde.
+
+**Es irreconciliable con el plan, no con mi implementación.** El test F3#7 de este documento
+(`test_comentario_de_ripley_con_columna_mentirosa_va_a_gitlab`) es **el mismo input**
+—RIPLEY + columna `azure_devops`— con el resultado **opuesto**. Los dos no pueden estar
+verdes a la vez. El baseline `7 passed` de §4.6 se midió **antes** del cambio y nunca se
+cruzó contra la semántica que el propio plan introduce.
+
+**Qué hice: NADA sobre el test ajeno.** §4.6 dice *"no edites el test ajeno"* y §7 no
+autoriza tocarlo. Queda **rojo y declarado**, no tapado, no `skip`, no `xfail`.
+
+**Decisión que le queda al operador (human-in-the-loop), con el fix de una línea:** la
+intención de ese test la declara su propio nombre y su comentario interno
+(*"El router clasifica ADO como ADO y devuelve el cliente de siempre"*): valida el **camino
+ADO**, no a RIPLEY. Su dependencia de RIPLEY es un accidente del default de `_TicketFalso`.
+El arreglo que **preserva la intención** es apuntar ese caso a un proyecto que de verdad sea
+ADO:
+
+```python
+    ticket = _TicketFalso(tracker_type="azure_devops", stacky_project_name="RSPACIFICO")
+```
+
+Con eso el caso vuelve a probar lo que dice probar y deja de depender del bug. **No lo
+apliqué**: cambia un archivo de otro eje y esa es una decisión de alcance del operador.
 
 ---
 

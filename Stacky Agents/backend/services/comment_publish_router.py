@@ -115,20 +115,22 @@ def routing_enabled() -> bool:
     return bool(getattr(_cfg, "STACKY_COMMENT_PUBLISH_ROUTED_ENABLED", True))
 
 
-def _norm_tracker_type(ticket) -> str:
-    raw = getattr(ticket, "tracker_type", None)
-    if not isinstance(raw, str):
-        return ""
-    return raw.strip().lower()
-
-
 def resolve_comment_publisher(ticket) -> CommentPublisher:
     """Devuelve el publicador de comentarios del tracker del TICKET, o levanta.
 
-    - tracker_type ausente / "azure_devops" -> kind="ado_client" con el cliente
-      que el publicador construye HOY (incluido su fallback al cliente por
-      defecto cuando el ticket no tiene stacky_project_name). Camino sin cambios.
-    - tracker_type == "gitlab" -> kind="gitlab_adapter" envolviendo
+    Plan 286 F3 — el tracker NO sale de la columna `ticket.tracker_type`, sale
+    de `services.project_context.tracker_efectivo_de_ticket(ticket)` (columna
+    explicita > config del proyecto > default). La columna tiene default
+    "azure_devops" en el ORM (models.py:49), asi que MIENTE para todo ticket
+    creado sin ese campo en un proyecto que no es Azure DevOps: con la columna
+    cruda, un ticket sintetico de un proyecto GitLab publicaba su HTML en Azure
+    DevOps o fallaba con "no usa Azure DevOps" (ado_publisher.py:459).
+
+    - tracker efectivo "azure_devops" (o sin resolver) -> kind="ado_client" con
+      el cliente que el publicador construye HOY (incluido su fallback al
+      cliente por defecto cuando el ticket no tiene stacky_project_name).
+      Camino sin cambios.
+    - tracker efectivo "gitlab" -> kind="gitlab_adapter" envolviendo
       get_tracker_provider(stacky_project_name). Si esa fabrica levanta
       TrackerConfigError (p.ej. STACKY_GITLAB_ENABLED=false) se RE-LEVANTA como
       CapabilityUnavailable. NUNCA se cae a ADO.
@@ -137,7 +139,11 @@ def resolve_comment_publisher(ticket) -> CommentPublisher:
     """
     from services.tracker_provider import CapabilityUnavailable, TrackerConfigError
 
-    ttype = _norm_tracker_type(ticket)
+    # Import local, como el resto del archivo: no liga la referencia al importar
+    # el modulo y evita el ciclo router <-> publicador.
+    from services.project_context import tracker_efectivo_de_ticket
+
+    ttype = tracker_efectivo_de_ticket(ticket)
 
     if ttype in _ADO_TRACKER_TYPES:
         # Import local (evita el ciclo router <-> publicador) y REUSA el helper

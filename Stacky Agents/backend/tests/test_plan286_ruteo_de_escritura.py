@@ -163,3 +163,57 @@ def test_kill_switch_apagado_manda_el_ticket_mentiroso_a_ado(
 
     w = twr.resolve_state_writer(_ripley_mentiroso())
     assert w.kind == "ado_client"
+
+
+# ── F3 — comment_publish_router (publicador de COMENTARIOS, Plan 282) ────────
+
+@pytest.fixture
+def ado_publisher_spy(monkeypatch):
+    """Espia `_client_for_ticket_project` SIN construir el cliente real."""
+    calls = []
+    fake = _FakeAdoClient()
+
+    def _fake_client(*, stacky_project_name=None, tracker_project=None):
+        calls.append(stacky_project_name)
+        return fake
+
+    from services import ado_publisher
+
+    monkeypatch.setattr(ado_publisher, "_client_for_ticket_project", _fake_client)
+    return SimpleNamespace(calls=calls, client=fake)
+
+
+def test_comentario_de_ripley_con_columna_mentirosa_va_a_gitlab(
+    monkeypatch, ado_publisher_spy, provider_spy
+):
+    """Es el camino de ado_publisher.publish, el que emitia el
+    'ADO client build failed: ... no usa Azure DevOps' (ado_publisher.py:459)."""
+    _con_config(monkeypatch)
+    from services import comment_publish_router as cpr
+
+    p = cpr.resolve_comment_publisher(_ripley_mentiroso())
+    assert p.kind == "gitlab_adapter"
+    assert p.tracker_type == "gitlab"
+    assert ado_publisher_spy.calls == [], (
+        f"se construyo un cliente ADO para un comentario de GitLab: "
+        f"{ado_publisher_spy.calls}"
+    )
+
+
+def test_comentario_de_rspacifico_sigue_yendo_a_ado(
+    monkeypatch, ado_publisher_spy
+):
+    _con_config(monkeypatch)
+    from services import comment_publish_router as cpr
+
+    p = cpr.resolve_comment_publisher(_ticket("azure_devops", "RSPACIFICO"))
+    assert p.kind == "ado_client"
+
+
+def test_comentario_sin_proyecto_sigue_yendo_a_ado(monkeypatch, ado_publisher_spy):
+    """P3 — el fallback al cliente por defecto del publicador, byte-identico."""
+    _con_config(monkeypatch)
+    from services import comment_publish_router as cpr
+
+    p = cpr.resolve_comment_publisher(_ticket("azure_devops", None))
+    assert p.kind == "ado_client"

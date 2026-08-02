@@ -461,6 +461,8 @@ $HarnessTestFiles = @(
   "tests/test_plan177_ado_commit_web_url.py"
   "tests/test_incident_dev_diff.py"
   "tests/test_incident_dev_autocommit.py"
+  # Plan 291 - el auto-PR avisa si el arreglo trae un secreto
+  "tests/test_plan291_autocommit_redaccion.py"
   # ===== Plan 154 F1 - reclasificacion de tests sin gatear (verdes aislados) =====
   # Plan 102 - Publicar en un paso
   "tests/test_plan102_one_click_flag.py"

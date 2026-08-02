@@ -14,6 +14,7 @@ el operador revisa. Corre en el thread del runner SIN app/request context → PR
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -23,6 +24,57 @@ _BRANCH_PREFIX = "stacky/incidencia-"   # + {ticket_id}-exec-{execution_id}
 _MAX_FILES = 60                          # cap de archivos por PR (ver Riesgos R5)
 _MAX_TEXT_BYTES = 1_000_000              # C7 — cap de texto propio del auto-PR (NO el del intake)
 _TERMINAL_STATUSES = ("opened", "blocked_empty", "error", "skipped")
+
+# Plan 291 F5 — SOLO patrones que no pueden confundirse con codigo fuente.
+# DELIBERADAMENTE NO se usa services.pr_review_sanitize.redact_secrets entero:
+# ese modulo sanea DIFFS QUE VAN A UN MODELO (docstring :1-3), donde perder
+# informacion es gratis. Aca el texto se ESCRIBE en el repositorio del operador.
+# Medido 2026-08-02: sus patrones `password|secret|api_key\s*[=:]` convierten
+# `password = cfg.get("db_password")` en `password = ***REDACTED***`, o sea
+# rompen codigo valido; y su patron de email tapa la atribucion de una cabecera
+# de licencia. Los seis de abajo no tienen ese modo de fallo.
+#
+# [ADICION ARQUITECTO] Se escriben con contrato explicito y CERO dependencias de
+# este modulo, para que un segundo consumidor los pueda mover a services/ sin
+# reescribirlos. NO se mueven ahora: sin ese segundo consumidor seria abstraccion
+# prematura.
+_PATRONES_ALTA_CONFIANZA = (
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                  # AWS access key id
+    re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"),              # GitHub PAT
+    re.compile(r"\bglpat-[A-Za-z0-9\-_]{20,}\b"),         # GitLab PAT
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b"),     # Slack
+    re.compile(r"(?i)(authorization\s*:\s*bearer\s+)[A-Za-z0-9._\-]+"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
+)
+_MARCA = "***REDACTED***"
+
+
+def _inspeccionar(texto):
+    """(texto_a_commitear, hubo_hallazgo).
+
+    DOS flags, dos mitades, y el orden importa:
+      - STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED (ON):  solo MIRA. Devuelve el texto
+        INTACTO y True si encontro algo. El archivo se commitea byte-identico.
+      - STACKY_AUTOCOMMIT_REDACT_ENABLED      (OFF): ademas REEMPLAZA. Solo con
+        esta encendida el texto devuelto difiere del original. Es excepcion (B):
+        cambia los bytes que se escriben en un sistema real del operador.
+    Con las dos apagadas: (texto, False) — camino byte-identico a hoy.
+    """
+    from config import config as _cfg
+    if not bool(getattr(_cfg, "STACKY_AUTOCOMMIT_SECRET_SCAN_ENABLED", True)):
+        return texto, False
+    hallazgo = any(p.search(texto) for p in _PATRONES_ALTA_CONFIANZA)
+    if not hallazgo:
+        return texto, False
+    if not bool(getattr(_cfg, "STACKY_AUTOCOMMIT_REDACT_ENABLED", False)):
+        return texto, True          # ← avisa, NO toca el archivo
+    saneado = texto
+    for p in _PATRONES_ALTA_CONFIANZA:
+        saneado = p.sub(
+            lambda m, _p=p: (m.group(1) + _MARCA) if _p.groups >= 1 else _MARCA,
+            saneado,
+        )
+    return saneado, True
 
 
 def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, agent_type, error=None, **_):
@@ -70,7 +122,9 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
 
         classify = incident_dev_pr.classify_changed_files(changed)
         branch = f"{_BRANCH_PREFIX}{ticket_id}-exec-{execution_id}"
-        title, description = _build_pr_body(ado_id, classify, deleted, origin)
+        # Plan 291 F5 — _build_pr_body se MOVIO a después del bucle de commits:
+        # la lista `sospechosos` no existe todavía en este punto. Antes se armaba
+        # acá y por eso la sección de aviso habría salido siempre vacía.
 
         from services.repo_writer import get_repo_writer
         from services.merge_request_provider import get_merge_request_provider
@@ -79,13 +133,22 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
 
         committed: list[str] = []
         skipped_binary: list[str] = []
+        sospechosos: list[str] = []
         commit_msg = f"fix(incidencia #{ado_id if ado_id is not None else ticket_id}): resolución del Dev Resolutor + tests"
         for rel in changed:
             content = _read_text_or_none(repo_root, rel)   # None si binario/no-utf8/ilegible/>_MAX_TEXT_BYTES
             if content is None:
                 skipped_binary.append(rel)
                 continue
-            writer.commit_file(rel, content, branch, commit_msg)   # crea la rama en el 1er call
+            content, hubo_hallazgo = _inspeccionar(content)   # Plan 291 F5
+            if hubo_hallazgo:
+                sospechosos.append(rel)
+            # Azure DevOps crea la rama solo (ado_provider.py:183-190). GitLab la crea
+            # solo desde el plan 291 y SOLO con STACKY_GITLAB_COMMIT_START_BRANCH_ENABLED
+            # encendida; con la flag apagada esto lanza TrackerApiError(kind="branch_missing")
+            # y el except de abajo lo comenta en la Issue. El comentario viejo
+            # ("crea la rama en el 1er call") era falso para GitLab.
+            writer.commit_file(rel, content, branch, commit_msg)
             committed.append(rel)
 
         if not committed:
@@ -96,12 +159,20 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
         if skipped_binary:
             logger.info("auto-PR exec=%s: %s archivos omitidos (binarios/ilegibles)", execution_id, len(skipped_binary))
 
+        # Plan 291 F5 — acá SÍ existe `sospechosos`. `classify` (arriba) y `origin`
+        # se calcularon antes del bucle, y entre el bucle y este punto solo está el
+        # corte `if not committed`, que no usa title/description: mover la llamada
+        # no rompe ninguna dependencia.
+        title, description = _build_pr_body(ado_id, classify, deleted, origin,
+                                            sospechosos=sospechosos)
+
         target = _default_branch_for(mrp, project)
         pr = mrp.create_merge_request(source_branch=branch, target_branch=target,
                                       title=title, description=description)
         pr_url = pr.get("web_url") or ""
         incident_dev_pr.mark_intent(execution_id, status="opened", pr_id=pr.get("id"),
-                                    pr_url=pr_url, branch=branch, files_committed=committed, origin=origin)
+                                    pr_url=pr_url, branch=branch, files_committed=committed,
+                                    origin=origin, secret_scan_files=sospechosos)
         _comment_issue_safe(ado_id, project, f"🚀 PR abierto automáticamente con el fix y los tests: {pr_url}")
     except Exception as exc:  # noqa: BLE001 — K3/Plan 135: el fallo NUNCA queda mudo
         logger.warning("auto-PR incidencia exec=%s falló: %s", execution_id, exc, exc_info=True)
@@ -205,7 +276,7 @@ def _worktree_maps_to_wrong_repo(origin, project):
     return bool(oh and ph and oh != ph)
 
 
-def _build_pr_body(ado_id, classify, deleted, origin):
+def _build_pr_body(ado_id, classify, deleted, origin, *, sospechosos=None):
     title = f"[Incidencia #{ado_id}] Fix automático del Dev Resolutor"
     code = classify.get("code") or []
     tests = classify.get("tests") or []
@@ -220,6 +291,12 @@ def _build_pr_body(ado_id, classify, deleted, origin):
     if deleted:
         lines += ["", "**Archivos eliminados (no reflejados por la API REST, revisar manual)**"]
         lines += [f"- `{p}`" for p in deleted]
+    if sospechosos:
+        lines += ["", "**⚠️ Revisá estos archivos antes de integrar**",
+                  "Parecen traer una clave de acceso o una clave privada. "
+                  "Se subieron TAL CUAL los escribió el agente salvo que hayas "
+                  "encendido el tapado automático.",
+                  *[f"- `{p}`" for p in sospechosos]]
     return title, "\n".join(lines)
 
 

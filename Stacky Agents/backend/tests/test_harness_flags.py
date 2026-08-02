@@ -1089,6 +1089,13 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED",        # Plan 285 F2 — endurece, no afloja
     "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED",  # Plan 285 F3 — muestra lo que ya se calculaba
     "STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED",    # Plan 285 F4 — sólo presentación
+    # ── Plan 287 — la ficha del ticket a pantalla completa ────────────────────
+    # Las 3 nacen ON. Ninguna cae en (A): no enciende loop, daemon, barrido,
+    # sondeo ni llamada a modelo — todo es bajo demanda del operador. Ninguna
+    # cae en (B): no escribe en ningun sistema, no borra nada y no decide nada.
+    "STACKY_TICKET_FULLVIEW_ENABLED",
+    "STACKY_TICKET_HISTORY_API_ENABLED",
+    "STACKY_TRACKER_CAPABILITIES_API_ENABLED",
 }
 
 

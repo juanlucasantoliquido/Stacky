@@ -2677,4 +2677,21 @@ class Config:
         os.getenv("STACKY_HARNESS_LEARNING_INJECT_MIN_CONF", "0.5")
     )
 
+    # ── Plan 287 — la ficha del ticket a pantalla completa ────────────────────
+    # Las 3 nacen ON. Ninguna cae en (A): no encienden loop, daemon, barrido,
+    # sondeo, prefetch ni llamada a modelo — todo es bajo demanda del operador
+    # (abrir la ficha, abrir el panel). Ninguna cae en (B): son de solo lectura,
+    # no escriben en ningún sistema, no borran datos y no deciden nada.
+    # Este es el default EFECTIVO: sin atributo acá, el getattr del consumidor
+    # cae siempre al default hardcodeado y el panel del operador no apaga nada.
+    STACKY_TICKET_FULLVIEW_ENABLED: bool = os.getenv(
+        "STACKY_TICKET_FULLVIEW_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_TICKET_HISTORY_API_ENABLED: bool = os.getenv(
+        "STACKY_TICKET_HISTORY_API_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_TRACKER_CAPABILITIES_API_ENABLED: bool = os.getenv(
+        "STACKY_TRACKER_CAPABILITIES_API_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+
 config = Config()

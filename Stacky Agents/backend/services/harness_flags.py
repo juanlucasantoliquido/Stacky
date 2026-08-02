@@ -577,6 +577,7 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_CONSOLE_RICH_RENDER_ENABLED",   # Plan 265
         "STACKY_CONSOLE_REPO_PANEL_ENABLED",    # Plan 265
         "STACKY_CONSOLE_AUDIT_LOG_ENABLED",     # Plan 265
+        "STACKY_TICKET_FULLVIEW_ENABLED",       # Plan 287 — ficha del ticket a pantalla completa
     ),
     "paridad_proveedores": (
         "STACKY_PROVIDER_PARITY_ENABLED",             # Plan 218 F2/F8 — registro de capacidades + panel
@@ -601,6 +602,9 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_GITLAB_HIERARCHY_LABEL_WRITE_ENABLED",  # Plan 277 F5 — publicar etiquetas EN el GitLab del operador (OFF)
         # Plan 281 — El ruteo por tracker deja de mentir
         "STACKY_TRACKER_ROUTING_STRICT_ENABLED",  # Plan 281 F3/F4/F7 — "no se" deja de significar "es ADO"
+        # Plan 287 — la ficha lee del puerto, igual para los dos trackers
+        "STACKY_TICKET_HISTORY_API_ENABLED",        # Plan 287 F1 — historial por fetch_item_updates
+        "STACKY_TRACKER_CAPABILITIES_API_ENABLED",  # Plan 287 F2 — la matriz de capacidades, publicada
     ),
     # "otros" intencionalmente vacío: es el fallback de categorize().
 }
@@ -7179,6 +7183,47 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="contexto_memoria",
         env_only=False,
         # SIN requires= : misma razón que la anterior.
+    ),
+    # ── Plan 287 — la ficha del ticket a pantalla completa ────────────────────
+    FlagSpec(
+        key="STACKY_TICKET_FULLVIEW_ENABLED",
+        type="bool",
+        label="Ficha del ticket a pantalla completa",
+        description=(
+            "Plan 287 — Habilita abrir un ticket en una ficha a pantalla completa "
+            "con descripcion, comentarios, adjuntos, historial e hijos, y navegar "
+            "padre/hijos/hermanos sin cerrarla. Solo lectura y presentacion."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+        # SIN requires= a proposito: ver Plan 287 seccion 5.1.
+    ),
+    FlagSpec(
+        key="STACKY_TICKET_HISTORY_API_ENABLED",
+        type="bool",
+        label="Historial de cambios del ticket",
+        description=(
+            "Plan 287 — Expone el historial de cambios del ticket leyendolo del "
+            "puerto TrackerProvider (fetch_item_updates), igual para Azure DevOps "
+            "y GitLab. Se consulta solo cuando el operador abre el panel."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_TRACKER_CAPABILITIES_API_ENABLED",
+        type="bool",
+        label="Avisar que un panel viene incompleto",
+        description=(
+            "Plan 287 — Publica el estado declarado de cada capacidad del tracker "
+            "activo para que cada panel de la ficha avise cuando su informacion "
+            "viene parcial, y con que perdida. Lee un diccionario en memoria."
+        ),
+        group="global",
+        env_only=False,
+        default=True,
     ),
 )
 

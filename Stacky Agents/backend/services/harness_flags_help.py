@@ -2452,6 +2452,24 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si la apagás: volvés a ver todo mezclado en una sola lista, como hasta ahora.",
         example="Doscientos cuarenta planes tapaban tus quince notas del proyecto: ahora ves tus notas y los planes quedan detrás de un filtro.",
     ),
+    "STACKY_TICKET_FULLVIEW_ENABLED": PlainHelp(
+        what="Permite abrir la ficha completa de un ticket a pantalla completa, con su descripcion, comentarios, adjuntos e hijos.",
+        on_effect="Si la activas: cada ticket suma un boton que abre su ficha a pantalla completa y te deja saltar al padre, a los hijos y a los hermanos sin volver atras.",
+        off_effect="Si la apagas: el tablero queda como hasta ahora y el ticket solo se despliega dentro de su tarjeta.",
+        example="Abris una epica, ves sus ocho hijos en una lista y saltas al tercero sin perder de vista de donde venias.",
+    ),
+    "STACKY_TICKET_HISTORY_API_ENABLED": PlainHelp(
+        what="Trae el historial de cambios del ticket desde el sistema donde vive para mostrarlo dentro de la ficha.",
+        on_effect="Si la activas: la ficha suma un panel con quien cambio que y cuando, y solo se consulta cuando abris ese panel.",
+        off_effect="Si la apagas: la ficha se ve igual pero sin el panel de historial de cambios.",
+        example="Ves que el estado paso a En curso hace dos dias y quien lo movio, sin salir de Stacky.",
+    ),
+    "STACKY_TRACKER_CAPABILITIES_API_ENABLED": PlainHelp(
+        what="Publica que cosas soporta el sistema de tickets del proyecto activo y con que limitaciones.",
+        on_effect="Si la activas: cada panel de la ficha avisa cuando su informacion viene incompleta y explica que falta en ese sistema de tickets.",
+        off_effect="Si la apagas: los paneles que no pueden traer todo aparecen vacios sin decir por que.",
+        example="En un proyecto de GitLab el listado de adjuntos sale de la descripcion del issue: la ficha lo aclara en vez de mostrar una lista vacia.",
+    ),
 }
 
 

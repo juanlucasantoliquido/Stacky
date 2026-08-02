@@ -1,10 +1,72 @@
 # Plan 289 — El agente deja de trabajar a ciegas sobre un ticket de GitLab
 
-**Estado:** v1 — PROPUESTO (papel). NO implementado.
+**Estado:** **v1 -> v2 — MEJORADO tras crítica adversarial.** Veredicto de la v1: **RECHAZADO**
+(6 bloqueantes). NO implementado.
 **Rama en la que se escribió:** `docs/plan-279`
-**Fecha:** 2026-08-02
+**Fecha:** 2026-08-02 (v1) / 2026-08-02 (v2)
 **Depende de:** Plan 286 (IMPLEMENTADO, `64a58ff4`..`af9a5ec1`) — reusa su helper `tracker_efectivo_de_ticket`.
 **Frontera con planes hermanos en vuelo:** 287 y 288 (sesión paralela VIVA). Ver §3.6.
+
+> **Juez v2: subagente independiente, misma corrida, contexto limpio**
+
+---
+
+## 0. CHANGELOG v1 -> v2
+
+Todo lo de abajo se verificó **ejecutando**, no leyendo: se abrió cada archivo citado, se corrió
+cada suite de la tabla de baselines y se consultó una **copia read-only** de la BD viva
+(`$SCRATCH/ro.db`, 194.068.480 bytes). **No se escribió en la BD del operador ni se tocó ningún
+archivo ajeno.**
+
+### Las 7 afirmaciones medibles de la v1, reproducidas
+
+| # | Afirmación de la v1 | Veredicto | Evidencia ejecutada |
+|---|---|---|---|
+| 1 | El enriquecimiento devuelve **0 bloques** con `ado_client_init_failed` sobre un proyecto GitLab | **CONFIRMADA** | `build_ado_context_blocks(1124, project_name="RIPLEY", ticket=…)` → `BLOQUES: 0  STATS: {…'errors': ["ado_client_init_failed: El proyecto 'RIPLEY' no usa Azure DevOps (tracker_type=gitlab)."]}` |
+| 2 | `test_ado_context.py` = `9 failed, 8 passed`, rojo **ambiental** por este mismo defecto | **CONFIRMADA** | `9 failed, 8 passed in 1.68s`; los 9 traen `WARNING …ado_context.py:218 … El proyecto 'RIPLEY' no usa Azure DevOps (tracker_type=gitlab).`; `--collect-only` = **17 tests** (9+8) |
+| 3 | Los runners CLI descartan el stat; sólo `agent_runner` lo persiste; 173/222 son `claude_code_cli`, 0/222 con `comments_count>0` | **CONFIRMADA EN SUSTANCIA, DENOMINADOR CORREGIDO** | grep: `claude_code_cli_runner.py:677` y `codex_cli_runner.py:334` = `enriched_blocks, _ado_stats`; `agent_runner.py:871` y `:1051` = `md["ado_context"]`. BD: **223** ejecuciones (no 222) — `claude_code_cli` **173/0**, `github_copilot` **24/4**, sin runtime **26**; `comments_count>0` = **0**. Ver **C10** |
+| 4 | `gitlab_sync.py:145` guarda el **iid** en `ticket.ado_id` (load-bearing) | **CONFIRMADA** | `services/gitlab_sync.py:144` `external_id = _a_int(item.get("id"))`, `:145` `ado_id = _a_int(item.get("iid"))`; `gitlab_provider._normalize_issue:148-149` emite `id` e `iid` por separado. **Matiz medido:** en esta base los **63** tickets `gitlab` tienen `ado_id == external_id` (0 divergencias), así que el corolario "`external_id` guarda el id global" es hoy **indistinguible en los datos**; la decisión (`str(ticket.ado_id)`) es correcta igual |
+| 5 | `acceptance_criteria.py:42` y `self_review.py:56` son un `return ""` deliberado del Plan 281 F7, no un `except` que traga | **CONFIRMADA** | `acceptance_criteria.py:42-46` es el `if (…)` del guard con el motivo escrito en `:38-41`, dentro de `resolve` (def `:25`); `self_review.py:56-60` idem con comentario `:50-55`, dentro de `_resolve_criteria` (def `:43`). Ambos `return ""`. El recorte de scope de §7.6.2 está bien fundado |
+| 6 | `STACKY_GITLAB_ENABLED` tiene default `false` **en código** y está en `true` sólo por `.env` | **CONFIRMADA** | `config.py:1297-1299` `os.getenv("STACKY_GITLAB_ENABLED", "false").lower() in ("1","true","yes")`; `backend/.env:7` `STACKY_GITLAB_ENABLED=true`. (El comentario de `:1291` dice "OFF default" y **esta vez no miente**.) |
+| 7 | Los baselines hardcodeados, en particular `test_harness_flags_help` = `4 failed, 4 passed` rojo de fábrica ajeno | **CONFIRMADA — las 20 suites dan exactamente el número declarado** | `test_harness_flags_help.py` = **`4 failed, 4 passed`**; `test_harness_flags.py` = **59 passed**; `test_context_enrichment.py` 8; `…client_profile` 14; `…acceptance_criteria_injection` 9; `…plan282_*` 7/2/4/6; `…plan286_*` 16/13/6; `…tracker_provider_conformance` 13; `…gitlab_provider` 26; `…u1_self_review` 2; `…ratchet_meta` 4; `…plan259_ratchet_script_parity` 12. Y los dos que la v1 dejaba sin medir: **`test_ado_blocker_block.py` = 4 passed** y **`test_block_priorities_contract.py` = 4 passed** |
+
+### Los 6 BLOQUEANTES corregidos
+
+| # | Qué estaba roto | Dónde se corrige en la v2 |
+|---|---|---|
+| **C1** | **`enrich()` descarta las dos claves nuevas de `stats`.** `ado_context.py:389-394` reconstruye `stats` con una **whitelist de 4 claves**. `comments_truncated` (mitigación de R1) y `attachments_skipped_reason` (la "declaración del hueco" de §7.6.1) **nunca llegan a `metadata["ado_context"]`**. Los tests de F4 los asertan sobre la tupla de `fetch_comentarios_normalizados` ⇒ **verdes con la capacidad inexistente**. Falso verde de capa | **F6.3** (nuevo): se extiende el `stats.update` de `enrich` y se agrega **F6.4**, un test de CONTRATO al nivel de `enrich` |
+| **C2** | **DoD #11 / P6 / §4.2 son insatisfacibles.** `services/context_enrichment.py:24-25` importa `from db import session_scope` y `from models import AgentExecution, Ticket` **a nivel de módulo**: `test_plan289_stat_de_contexto.py` los arrastra transitivamente y crea el engine contra la base del operador | **P6 reescrito** + **DoD #11 reescrito** + **§4.1** exige `DATABASE_URL` redirigido |
+| **C3** | **F0 declara un criterio binario sobre nombres de función que el propio plan no fija** ("verificalos vos"). Ambigüedad pura para un modelo menor | **F0**: los tres nombres quedan **congelados y verificados por AST** el 2026-08-02 |
+| **C4** | **La PATA B es un censo ESTÁTICO sobre un defecto de EJECUCIÓN**: se satisface con `persistir_stats_de_contexto(execution_id=None, stats=None)` o con la llamada en una rama muerta | **F0**: la pata exige por AST que `stats=` reciba **el mismo nombre** al que `enrich_blocks` desempaqueta su 2º valor, y que `execution_id=` se pase |
+| **C5** | **§4.4 se contradice con F2 y con el censo de F0**: dice "GitHub Copilot Pro: **no cambia**" mientras F2 lista `agent_runner.py:809` entre los archivos que edita y el censo exige la llamada ahí | **§4.4** reescrita: los **tres** cambian |
+| **C6** | **F2 no lista en "Archivos" el archivo cuyo `xfail` debe sacar**, pero su criterio lo exige | **F2**: `tests/test_plan289_contexto_por_tracker.py` entra en la lista |
+
+### Los 7 IMPORTANTES corregidos
+
+| # | Qué | Dónde |
+|---|---|---|
+| **C7** | **§4.7 punto 2 es técnicamente FALSO.** Los 17 tests llaman `build_ado_context_blocks(N)` **sin `project_name` y sin `ticket`** (`:121,140,162,186,206,217,238`) ⇒ tras F6, `tracker_is_azure_devops(None)` devuelve **True** ⇒ camino ADO. El dispatcher **no** los manda a GitLab | §4.7 |
+| **C8** | **Dos ratchets de acoplamiento que este plan mueve no estaban en §4.6.** Medidos hoy: `test_plan218_coupling_ratchet.py` = **`3 failed, 7 passed`** (rojo de fábrica ajeno) y `test_plan281_ratchet_ado_only.py` = **`11 passed`** (VERDE, y es el que atraparía un error de este plan) | §4.6 y §4.10 |
+| **C9** | **"arriba de todo" contradice el uso de `stats`**, que se inicializa en `:202-207` | F6.2 |
+| **C10** | **El denominador de la BD viva ya cambió** (222 → **223**) y estaba hardcodeado en 5 lugares | §1.2 y §4.11 |
+| **C11** | **El ORDEN de los comentarios diverge entre trackers y el plan no lo decía.** `ado_client.py:439` pide `order=desc` ⇒ ADO renderiza **más nuevo primero**; F4 conserva las más recientes **al final** ⇒ GitLab renderiza **más viejo primero** | F4 + §4.12 |
+| **C12** | **"Dos `.agent.md`" son TRES archivos en DOS árboles** (`backend/agents/Developer.agent.md:176` es el olvidado), y `README_ado_context.md` menciona `ado-comments` también en **`:92`** | F5 Decisión 1 y F7 |
+| **C13** | **La justificación del gate de F3 apunta al censo equivocado**: `test_plan282_censo_paridad.py` censa **constructores directos de `GitLabTrackerProvider`**, no `scan_ado_only_sites`/`ADO_BUILDERS` (que además excluye `services/ado_*` por prefijo) | F3 |
+
+### Anclajes corregidos con la línea real (§9 trae la tabla completa)
+
+`project_context.py:521-524` → **`:526-529`** · `:417-422` → **`:422-427`** · `:201` → **`:206`** ·
+`:505` → def `:504` / llamada `:510` · `models.py:50` → **`:49`** · `config.py:1291-1298` → el
+`os.getenv` real es **`:1297-1299`** · allowlist "208 líneas" → **207** ·
+`context_enrichment.py:1481-1502` → **`:1482-1508`** · pata 3 del flag: el punto de inserción real
+es **`harness_flags.py:582`**.
+
+### [ADICIÓN ARQUITECTO]
+
+Dos, ambas en **F6.4** y **F5**: un **test de contrato que prohíbe que `enrich` vuelva a comerse una
+clave de `stats`** (mata la CLASE de bug de C1, no sólo la instancia), y el **sello de procedencia y
+recorte dentro del propio bloque**, que es la única declaración que el agente ve aunque la metadata
+se pierda. Ver §11.
 
 ---
 
@@ -35,33 +97,42 @@ Medidos el **2026-08-02** contra una **copia read-only** de la BD viva
 `Stacky Agents/backend/data/stacky_agents.db` (194.068.480 bytes). **No se escribió en la BD del
 operador.**
 
-| # | KPI | Hoy (medido) | Meta | Cómo se verifica |
+> **v2 / C10 — LEÉ ESTO ANTES DE MIRAR UN NÚMERO.** La base está **VIVA**: entre la medición de la
+> v1 y la re-medición del juez el total pasó de **222 a 223** ejecuciones (y "sin runtime" de 25 a
+> 26). **Los denominadores de esta tabla son una foto, no un contrato.** El criterio de aceptación
+> de este plan **NUNCA** es "el número sigue siendo 222": es la **forma** (`0` con la clave en
+> `claude_code_cli`, `0` con `comments_count>0`). Si al implementar medís otro total, **no es un
+> error tuyo y no cambies nada**: re-corré el script de §4.11, que imprime el reparto entero, y
+> anotá el número del día en la sección `## 10. IMPLEMENTADO`.
+
+| # | KPI | Hoy (medido 2026-08-02, re-verificado por el juez) | Meta | Cómo se verifica |
 |---|---|---|---|---|
 | K1 | Bloques de comentarios que recibe un agente sobre un issue de GitLab con N comentarios | **0** | **1 bloque con hasta 30 comentarios** | `tests/test_plan289_contexto_por_tracker.py` (F6) |
-| K2 | Ejecuciones de la BD viva con la clave `ado_context` en su metadata | **4 de 222** (1,8 %) — las 4 son de `github_copilot` y las 4 dicen `skipped_reason: agent_not_in_enrich_list` | **las 3 runtimes escriben la clave** | F2 + §7.3 (smoke manual) |
+| K2 | Ejecuciones con la clave `ado_context` en su metadata | **4 de 223** (1,8 %) — las 4 son de `github_copilot` y las 4 dicen `skipped_reason: agent_not_in_enrich_list` | **los 3 runtimes escriben la clave** | F2 + §7.3 (smoke manual) |
 | K3 | Ejecuciones del runtime `claude_code_cli` con la clave `ado_context` | **0 de 173** | **> 0** | F2 |
-| K4 | Ejecuciones de la BD viva con `ado_context.comments_count > 0` | **0 de 222** | **> 80 %** de las corridas sobre issues **que tienen** comentarios | §7.3 — **sólo declarable con F2 hecha** |
+| K4 | Ejecuciones con `ado_context.comments_count > 0` | **0 de 223** | **> 80 %** de las corridas **posteriores al deploy** sobre issues **que tienen** comentarios | §7.3 — **sólo declarable con F2 hecha** |
 | K5 | Ejecuciones `functional`/`technical` de RIPLEY (GitLab) con contexto de tracker | **0 de 6** (ids 211, 212, 215, 216, 219, 220) | **> 0** | §7.3 |
 | K6 | Comentarios del bloque que pasan por enmascarado de secretos (ADO **y** GitLab) | **0 %** — `ado_context` no llama a `mask_token_values` | **100 %** | F5 |
 | K7 | `tests/test_ado_context.py` | **9 failed, 8 passed** — rojo **ambiental**, causado por este mismo defecto | **17 passed** | F1 |
+| **K8** | **Claves de `stats` que `build_ado_context_blocks` produce y `enrich` NO propaga a `metadata`** | **2** (`comments_truncated`, `attachments_skipped_reason` — hoy ni siquiera se producen; con la v1 se habrían producido y perdido) | **0, y con un test de contrato que lo congela** | **F6.4** (C1) |
 
 > **K2/K3/K4 son la razón por la que este plan tiene una fase (F2) que parece ajena al título.**
 > Sin ella, cualquier criterio de aceptación que hable de porcentajes de ejecuciones es
-> **inventado**: el dato no existe en la base porque **173 de 222 ejecuciones corrieron por
+> **inventado**: el dato no existe en la base porque **173 de 223 ejecuciones corrieron por
 > `claude_code_cli`, y ese runtime tira el contador**.
 
-**Reparto medido por runtime (222 ejecuciones, BD viva, 2026-08-02):**
+**Reparto medido por runtime (223 ejecuciones, BD viva, 2026-08-02, re-verificado):**
 
 | `metadata.runtime` | ejecuciones | con clave `ado_context` |
 |---|---|---|
 | `claude_code_cli` | **173** | **0** |
-| `github_copilot` | 24 | **4** |
-| *(sin runtime)* | 25 | 0 |
+| `github_copilot` | 24 | **4** (las 4 con `skipped_reason: agent_not_in_enrich_list`) |
+| *(sin runtime)* | 26 | 0 |
 
 **Corrección de una cifra que circulaba en la formulación del pedido:** no son *"5 ejecuciones
 `functional`/`technical` de RIPLEY"* sino **6** (ids 211 `functional`, 212 `technical`, 215
 `functional`, 216 `technical`, 219 `technical`, 220 `technical`); y el `0` no es sólo de RIPLEY:
-es **0 de 222** en toda la base, incluido Azure DevOps.
+es **0 en toda la base**, incluido Azure DevOps.
 
 ---
 
@@ -159,8 +230,9 @@ Los tres runtimes llaman al mismo pipeline, `services/context_enrichment.enrich_
 | Claude Code CLI | `services/claude_code_cli_runner.py:677` | lo asigna a **`_ado_stats`** y **lo tira** |
 | Codex CLI | `services/codex_cli_runner.py:334` | lo asigna a **`_ado_stats`** y **lo tira** |
 
-Con `claude_code_cli` representando **173 de 222** ejecuciones de la base, el contador
-prácticamente no existe. Cualquier métrica sobre él es hoy inmedible.
+Con `claude_code_cli` representando **173 de 223** ejecuciones de la base (v2: re-medido; el total
+sube solo, ver §1.2 y §4.11), el contador prácticamente no existe. Cualquier métrica sobre él es
+hoy inmedible.
 
 **(c) La consecuencia real sobre el trabajo del agente.**
 
@@ -204,11 +276,30 @@ el provider no hace hoy.** De ahí el recorte de scope.
   Prohibido `GitLabTrackerProvider(...)` a mano (§2.2).
 - **P5 — El tope de comentarios es explícito y está testeado.** GitLab no acepta `top`; sin tope
   del lado de Stacky un issue con 200 notas revienta la ventana de contexto.
-- **P6 — Ningún test nuevo toca la BD real ni la red.** `backend/tests/conftest.py` **no aísla la
-  base**: sólo setea `STACKY_TEST_MODE` (`:18`) y bloquea el egress no-loopback (`:35`). Un test
-  que importe `db`, `app` o `models` escribe en la base **del operador**. Los archivos de test de
-  este plan **no importan `db`, ni `app`, ni `models`**: usan `types.SimpleNamespace` y
-  `monkeypatch`.
+- **P6 — Ningún test nuevo ABRE UNA CONEXIÓN a la BD real ni sale a la red.** (**v2 / C2 — la
+  redacción de la v1 era falsa y su DoD era insatisfacible. Leé el párrafo entero.**)
+  `backend/tests/conftest.py` **no aísla la base**: sólo setea `STACKY_TEST_MODE` (`:19`) y bloquea
+  el egress no-loopback. Pero el hecho medido es este:
+
+  > **`services/context_enrichment.py:24-25` hace `from db import session_scope` y
+  > `from models import AgentExecution, Ticket` A NIVEL DE MÓDULO.**
+
+  Por lo tanto `tests/test_plan289_stat_de_contexto.py`, que necesariamente hace
+  `from services.context_enrichment import persistir_stats_de_contexto`, **importa `db` y `models`
+  de forma transitiva. Eso es inevitable y NO se "arregla".** Lo que sí se garantiza, y es lo que
+  el DoD mide:
+
+  1. **Ninguno de los dos archivos de test nuevos tiene una sentencia `import db`, `import models`,
+     `import app` ni `from db/models/app import …` propia.** Eso sí es verificable y es el criterio.
+  2. **Ninguno abre una conexión.** Importar `db` construye el `Engine` con `create_engine(...)`,
+     que es **perezoso**: no conecta. La única forma de conectar sería llamar a `session_scope()`
+     real, y **F2 inyecta siempre `session_factory=`** en los 6 tests. `db.py:14`
+     (`data_dir().mkdir(exist_ok=True)`) es la única escritura a disco y es idempotente.
+  3. **Aun así, todos los comandos de este plan se corren con `DATABASE_URL` redirigido**
+     (§4.1). Cinturón y tirantes: si mañana alguien agrega un test que sí conecte, conecta a un
+     temporal, no a la base del operador.
+
+  Los tests representan el ticket con `types.SimpleNamespace` y el provider con dobles locales.
 - **P7 — Human-in-the-loop y mono-operador.** El plan no agrega pantallas, ni decisiones, ni auth,
   ni roles. `403` en Stacky significa "flag apagada", nunca "permiso".
 - **P8 — Trabajo del operador: ninguno.** Repetido en cada fase.
@@ -252,12 +343,20 @@ suites medidas en §4.6.
 baselines de §4.6. (El Plan 286 mandaba usar `venv`; da lo mismo, pero **no mezcles**: si empezás
 con uno, terminá con ese.)
 
-Todos los comandos se corren **parado en `Stacky Agents/backend`**:
+**v2 / C2 — `DATABASE_URL` redirigido, SIEMPRE.** `config.py:64-65` resuelve
+`DATABASE_URL` a `sqlite:///{data_dir()}/stacky_agents.db`, que **es la base del operador**. Todos
+los comandos de este plan se corren con la variable apuntando a un temporal. Es una línea y elimina
+la clase entera de "un pytest suelto escribió en la BD real":
 
 ```bash
 cd "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend"
+export DATABASE_URL="sqlite:///$TEMP/plan289/pytest.db"   # una vez por sesión de shell
 ./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py -q
 ```
+
+(En PowerShell: `$env:DATABASE_URL = "sqlite:///$env:TEMP/plan289/pytest.db"`.)
+**Todos los baselines de §4.6 se tomaron así**, y dan el mismo número con y sin la redirección —
+justamente porque ninguna de esas suites conecta.
 
 **Correr SIEMPRE por archivo. Nunca `pytest tests` entero** — la suite completa tiene
 contaminación cruzada conocida y **no es un veredicto**.
@@ -282,16 +381,31 @@ Ver P6. Concretamente, en este plan:
   `monkeypatch.setattr("services.tracker_provider.get_tracker_provider", lambda p=None: fake)`.
 - El **contexto de proyecto** se inyecta con
   `monkeypatch.setattr("services.project_context.resolve_project_context", lambda *a, **k: ctx)`.
-- La **sesión de BD** (sólo en F2) se inyecta como `session_factory=`; **no se importa `db`**.
+  **Funciona** porque `build_ado_client` (`project_context.py:517`) llama a
+  `require_project_context` (def `:504`), que resuelve `resolve_project_context` **como global del
+  módulo en cada llamada** (`:510`).
+- La **sesión de BD** (sólo en F2) se inyecta **siempre** como `session_factory=`, así que la rama
+  `from db import session_scope` **nunca se ejecuta en tests**. (El módulo igual importa `db` a
+  nivel de módulo — ver P6; eso no abre conexión.)
+
+**Un seam que NO alcanza con parchear `resolve_project_context`, y hay que saberlo:**
+`tracker_efectivo_de_ticket` y `tracker_is_azure_devops` **no pasan por `resolve_project_context`**.
+El primero lee la columna del ticket y, si no es explícita, `tracker_declarado_del_proyecto` →
+`project_manager.get_project_config`; el segundo va derecho a `get_project_config`. Por eso los
+tests de la PATA A le dan al ticket `tracker_type="gitlab"` **explícito**: con eso
+`tracker_efectivo_de_ticket` devuelve `"gitlab"` en el paso 1 (`project_context.py:239-240`) y no
+toca disco. **No inventes un tercer parche.**
 
 ### 4.3 Ratchets: DOS archivos, sintaxis distinta, registro en la fase que crea el test
 
 Rutas absolutas (verificadas 2026-08-02):
 
 - `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\scripts\run_harness_tests.ps1`
+  (array `$HarnessTestFiles` abre en `:13`)
 - `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\scripts\run_harness_tests.sh`
+  (array `HARNESS_TEST_FILES` abre en `:20`)
 - allowlist: `N:\GIT\RS\STACKY\Stacky\Stacky Agents\backend\tests\harness_ratchet_allowlist.txt`
-  (208 líneas)
+  (**207** líneas — v2: la v1 decía 208)
 
 Ambos scripts hacen `cd` a `backend/` antes de correr, así que las rutas van como `tests/...`,
 **sin espacios y sin el prefijo `Stacky Agents/`** (los ratchets **no admiten rutas con espacios**).
@@ -348,7 +462,17 @@ allowlist es una decisión de otro plan.
 | Fase | Codex CLI | Claude Code CLI | GitHub Copilot Pro | Fallback |
 |---|---|---|---|---|
 | F0, F1, F3, F4, F5, F6, F7 | idéntico | idéntico | idéntico | ninguno hace falta: el código vive en `services/`, **por debajo** de la bifurcación de runtime, y se alcanza por el seam común `context_enrichment.enrich_blocks` (`agent_runner.py:809`, `claude_code_cli_runner.py:677`, `codex_cli_runner.py:334`) |
-| **F2** | **cambia** (`codex_cli_runner.py:334`) | **cambia** (`claude_code_cli_runner.py:677`) | no cambia — ya persiste (`agent_runner.py:871, 1051`); se le agrega la escritura temprana para que los tres compartan la misma función | la escritura es best-effort: si falla, se loguea `warn` y el run sigue |
+| **F2** | **CAMBIA** (`codex_cli_runner.py:334`) | **CAMBIA** (`claude_code_cli_runner.py:677`) | **CAMBIA TAMBIÉN** (`agent_runner.py:809`) | la escritura es best-effort: si falla, se loguea `warn` y el run sigue |
+
+> **v2 / C5 — la v1 decía aquí "GitHub Copilot Pro: **no cambia**" y eso contradecía a la propia
+> F2 (que lista `agent_runner.py:809` entre los archivos que edita) y al censo de la PATA B (que
+> exige que `agent_runner.py::_run_in_background` llame a `persistir_stats_de_contexto`). Un
+> implementador que le creyera a esta tabla dejaría 1 de las 3 patas B en rojo y el criterio de F2
+> (`9 passed, 1 xfailed`) sería inalcanzable. **Los TRES cambian.**
+>
+> Lo que **no** cambia en `agent_runner.py` son sus dos escrituras existentes de `md["ado_context"]`
+> (`:871` y `:1051`): **se conservan tal cual**. Son idempotentes con la escritura temprana (mismo
+> valor, misma clave) y sacarlas sería una regresión de un camino que hoy funciona.
 
 **No hay que escribir ni un `if runtime == ...` en todo el plan.**
 
@@ -369,8 +493,8 @@ Medidos el **2026-08-02**, en `docs/plan-279`, con
 | `tests/test_context_enrichment.py` | `8 passed` | F2 |
 | `tests/test_context_enrichment_client_profile.py` | `14 passed` | — (control) |
 | `tests/test_acceptance_criteria_injection.py` | `9 passed` | — (control; §6.2) |
-| `tests/test_ado_blocker_block.py` | **medilo en F0** y anotalo acá | F5 (extracción del armador) |
-| `tests/test_block_priorities_contract.py` | **medilo en F0** y anotalo acá | F5/F6 (id de bloque) |
+| `tests/test_ado_blocker_block.py` | **`4 passed`** ← v2: MEDIDO por el juez, ya no "medilo vos" | F5 (extracción del armador) |
+| `tests/test_block_priorities_contract.py` | **`4 passed`** ← v2: MEDIDO por el juez | F5/F6 (id de bloque) |
 | `tests/test_plan282_publicacion_comentario.py` | `7 passed` | — (control) |
 | `tests/test_plan282_censo_paridad.py` | `2 passed` | F4 (archivo nuevo en `services/`) |
 | `tests/test_plan282_fabrica_unica.py` | `4 passed` | F4 (usa la fábrica) |
@@ -385,6 +509,30 @@ Medidos el **2026-08-02**, en `docs/plan-279`, con
 | `tests/test_harness_flags_help.py` | **`4 failed, 4 passed`** ← **ROJO DE FÁBRICA** | **F6** — el criterio es **delta CERO** |
 | `tests/test_harness_ratchet_meta.py` | `4 passed` | F0/F2 |
 | `tests/test_plan259_ratchet_script_parity.py` | `12 passed` | F0/F2 |
+| **`tests/test_plan281_ratchet_ado_only.py`** | **`11 passed`** ← v2/C8: VERDE. **Es el gate que atraparía un error de este plan** | F3/F6 |
+| **`tests/test_plan218_coupling_ratchet.py`** | **`3 failed, 7 passed`** ← v2/C8: **ROJO DE FÁBRICA AJENO**, criterio **delta CERO** | F3/F6 |
+
+> **v2 / C8 — las DOS suites nuevas de esta tabla, y por qué faltaban.** La v1 no las nombraba y
+> son exactamente las que este plan puede mover:
+>
+> - **`test_plan281_ratchet_ado_only.py` = `11 passed` (VERDE).** Corre
+>   `provider_coupling_audit.scan_ado_only_sites()`, que marca funciones que construyen un cliente
+>   ADO sin preguntar el tracker. **No se mueve con este plan** y está verificado por qué:
+>   `_ADO_ONLY_EXCLUDED_PREFIXES = ("services/ado_",)` (`provider_coupling_audit.py:168`) **excluye
+>   `services/ado_context.py` entero**, y el archivo nuevo `services/tracker_context.py` **no llama
+>   a ningún `ADO_BUILDERS`** (`{_ado_client_for_ticket, build_ado_client, _client_for_ticket_project}`,
+>   `:125-127`), así que el censo lo saltea en `:314`. **Si esta suite se pone roja, el cambio se
+>   fue de scope: paralo y revisá.**
+> - **`test_plan218_coupling_ratchet.py` = `3 failed, 7 passed` (ROJO DE FÁBRICA AJENO).** Los 3
+>   que fallan hoy son `test_ratchet_importers_no_crece` (43 archivos vs baseline 36),
+>   `test_ratchet_literales_no_crece` (121 ocurrencias vs baseline 82) y
+>   `test_ratchet_rutas_ado_no_crece` (21 vs 19), contra
+>   `tests/provider_coupling_baseline.json`. **Es deuda de otros planes; no la arregles acá.**
+>   Ojo con la segunda: cuenta **líneas que contienen un literal de tracker** por archivo
+>   (`provider_coupling_audit.py:93-96`), y hoy `services/ado_context.py` **NO está** en esa lista.
+>   F6 le mete `"azure_devops"` y F3 crea `tracker_context.py`: el contador **va a subir**. Como la
+>   suite ya está roja, el criterio es **delta CERO en pass/fail** (`3 failed, 7 passed` antes y
+>   después), **no** "el contador no sube".
 
 > **`tests/test_harness_flags_help.py` está ROJO DE FÁBRICA y no lo rompiste vos.** Los 4 que
 > fallan hoy son `test_plain_help_covers_all_registry_keys`,
@@ -404,9 +552,10 @@ lo contrario). Si da otro, **el cambio rompió algo — no edites el test ajeno*
 
 ### 4.7 El rojo ambiental de `test_ado_context.py` — leelo antes de F0
 
-`build_ado_context_blocks()` se llama en esos tests **sin `project_name`**, así que
+`build_ado_context_blocks()` se llama en esos tests **sin `project_name` y sin `ticket`**
+(las 7 llamadas: `tests/test_ado_context.py:121, 140, 162, 186, 206, 217, 238`), así que
 `resolve_project_context` cae a su paso 4: **el proyecto activo**
-(`project_context.py:417-422`). En esta máquina el proyecto activo es `RIPLEY`
+(`project_context.py:422-427`). En esta máquina el proyecto activo es `RIPLEY`
 (`backend/data/active_project.json`), cuyo `issue_tracker.type` es `gitlab`
 (`backend/projects/RIPLEY/config.json`). Resultado: `build_ado_client` levanta y **9 tests fallan**.
 
@@ -415,10 +564,24 @@ Consecuencias que el implementador tiene que tener presentes:
 1. **El baseline `9 failed, 8 passed` es de ESTA máquina.** En una máquina con proyecto activo ADO
    ese archivo da `17 passed`. **Volvelo determinista en F1** para que deje de depender del
    entorno; si no, F5 y F6 no tienen gate de no-regresión utilizable.
-2. **Cuando F6 encienda el dispatcher, esos 9 tests seguirían rojos** (con OTRO mensaje de error:
-   el camino iría a GitLab, el `_FakeAdoClient` no se usaría y saldría por `TrackerConfigError` o
-   por el bloqueo de egress del conftest). Por eso F1 va **antes** que F6: hacerlos deterministas
-   los pone verdes **y los mantiene verdes**.
+2. **v2 / C7 — CORRECCIÓN: el dispatcher de F6 NO rompe esos tests, y la v1 afirmaba lo
+   contrario.** La v1 decía "cuando F6 encienda el dispatcher, esos 9 tests seguirían rojos con
+   otro mensaje: el camino iría a GitLab". **Es falso, verificado abriendo las 7 llamadas.** Como
+   pasan `ticket=None` y `project_name=None`, el dispatcher entra por su rama sin ticket y llama
+   `tracker_is_azure_devops(None)` → `raw = ""` → **`return True`** (fail-closed,
+   `project_context.py:70-72`) → `_es_ado = True` → **camino ADO, byte-idéntico**.
+
+   **F1 sigue siendo obligatoria y sigue yendo antes que F5/F6**, pero por el motivo correcto:
+   sin ella, `test_ado_context.py` está rojo por el entorno y **F5 y F6 se quedan sin su gate de
+   no-regresión** (no podés distinguir "lo rompí yo" de "ya estaba roto"). No la saltees porque
+   descubriste que el punto 2 original era erróneo.
+3. **Lo que F1 SÍ tiene que sostener después de F6** (y por eso su criterio se repite en F5 y F6):
+   la fixture de F1 fija un contexto **ADO**, así que aunque un test futuro pasara `project_name`,
+   `build_ado_client` seguiría viendo `azure_devops`. Lo que la fixture **no** cubre es
+   `tracker_is_azure_devops`, que va derecho a `project_manager.get_project_config` sin pasar por
+   `resolve_project_context`. Hoy no hace falta cubrirlo (`project_name=None`); **si alguna vez
+   agregás un test a `test_ado_context.py` que pase `project_name`, vas a tener que parchear
+   también `project_manager.get_project_config`.** Está escrito acá para que no te sorprenda.
 
 Proyectos y trackers de esta máquina (leídos de `backend/projects/*/config.json`, 2026-08-02):
 
@@ -456,6 +619,88 @@ atributos ya cargados **siguen accesibles** en la instancia detached.
 
 ⇒ Es **seguro** leer `ticket_obj.tracker_type` y `ticket_obj.stacky_project_name` fuera de la
 sesión. **No re-consultes la base** para obtenerlos.
+
+**Y el `ticket` SÍ llega a `build_ado_context_blocks` en producción — verificado:**
+`context_enrichment._inject_ado_context` (def `:1462`) pasa `ticket=ticket_obj` en **los dos**
+caminos, el cacheado (`:1497`) y el directo (`:1517`). Así que en producción el dispatcher de F6
+entra por la rama `tracker_efectivo_de_ticket(ticket)`, no por la de fallback. La rama sin ticket
+existe para el flujo *epic-from-brief* y para los tests.
+
+### 4.10 El `stats` que sobrevive: la whitelist de `enrich` (v2 / C1 — LEELO ANTES DE F4)
+
+Éste es el hallazgo que hizo rechazar la v1 y **es la trampa central de este plan**.
+
+`ado_context.enrich` **no devuelve el `stats` que arma `build_ado_context_blocks`**: arma uno
+propio (`:355-362`) y después lo actualiza con **una whitelist de exactamente 4 claves**
+(`:389-394`):
+
+```python
+    stats.update({
+        "comments_count":          build_stats.get("comments_count", 0),
+        "attachments_count":       build_stats.get("attachments_count", 0),
+        "attachments_text_inlined":build_stats.get("attachments_text_inlined", 0),
+        "errors":                  build_stats.get("errors", []),
+    })
+```
+
+⇒ **Toda clave nueva que `build_ado_context_blocks` ponga en `stats` se pierde en silencio.**
+Con la v1, `comments_truncated` (la mitigación escrita de R1) y `attachments_skipped_reason` (la
+"declaración del hueco" de §7.6.1) **nunca habrían llegado a `metadata["ado_context"]`** — y los
+tests de F4 habrían salido **verdes**, porque asertan sobre la tupla que devuelve
+`fetch_comentarios_normalizados`, una capa más abajo. Falso verde de capa, de manual.
+
+**Regla dura para todas las fases:** si una fase agrega una clave a `stats`, **esa misma fase**
+agrega la clave a la whitelist de `enrich` **y** un test que lo verifique **llamando a `enrich`**,
+no a `build_ado_context_blocks`. Lo hace **F6.3**, y **F6.4** lo congela para siempre.
+`errors` sí está en la whitelist, así que `tracker_provider_unavailable: …` sí llega. Ese no era
+el problema.
+
+### 4.11 Script de re-medición de la BD (léela viva, nunca hardcodees el total)
+
+Se corre **siempre** contra una **copia**, nunca contra la viva:
+
+```bash
+cp "N:/GIT/RS/STACKY/Stacky/Stacky Agents/backend/data/stacky_agents.db" "$TEMP/plan289/ro.db"
+./.venv/Scripts/python.exe - "$TEMP/plan289/ro.db" <<'EOF'
+import json, sqlite3, sys, collections
+con = sqlite3.connect(sys.argv[1]); con.row_factory = sqlite3.Row
+per_rt = collections.Counter(); ac_per_rt = collections.Counter()
+tot = con_ac = con_com = 0
+for r in con.execute("select metadata_json md from agent_executions"):
+    try: m = json.loads(r["md"] or "{}")
+    except Exception: m = {}
+    if not isinstance(m, dict): m = {}
+    tot += 1
+    rt = m.get("runtime") or "(sin runtime)"; per_rt[rt] += 1
+    ac = m.get("ado_context")
+    if ac is not None:
+        con_ac += 1; ac_per_rt[rt] += 1
+        if isinstance(ac, dict) and (ac.get("comments_count") or 0) > 0: con_com += 1
+print(f"total={tot} con_ado_context={con_ac} comments_count>0={con_com}")
+for k in sorted(per_rt, key=lambda x: -per_rt[x]):
+    print(f"  {k:22s} ejec={per_rt[k]:4d}  con ado_context={ac_per_rt.get(k,0)}")
+EOF
+```
+
+**Salida del 2026-08-02 (juez):** `total=223 con_ado_context=4 comments_count>0=0`;
+`claude_code_cli 173/0`, `(sin runtime) 26/0`, `github_copilot 24/4`.
+
+### 4.12 El orden de los comentarios diverge entre trackers (v2 / C11 — declarado, no arreglado)
+
+- **Azure DevOps**: `ado_client.py:439` pide `?$top={top}&order=desc` ⇒ la lista llega **del más
+  nuevo al más viejo**, y el bloque se renderiza en ese orden.
+- **GitLab**: `_request_paginated` sobre `/issues/{iid}/notes` devuelve **del más viejo al más
+  nuevo**, y F4 conserva **la cola** (las más recientes) sin invertirla.
+
+⇒ **El bloque `ado-comments` tiene el mismo `id`, el mismo formato y el mismo armador, pero la
+conversación se lee en sentido inverso según el tracker.** Es una divergencia real y este plan
+**la declara en vez de taparla**:
+
+1. **No se invierte ninguno de los dos.** Invertir ADO cambiaría el prompt de todos los agentes de
+   RSPACIFICO sin pedirlo nadie (violaría P1); invertir GitLab dejaría la conversación al revés de
+   como se lee en la web del issue.
+2. **El bloque lo dice.** El sello de procedencia de F5 (§11, [ADICIÓN ARQUITECTO] 2) incluye el
+   sentido: `_(GitLab · N comentarios, del más antiguo al más reciente)_`.
 
 ---
 
@@ -609,37 +854,72 @@ def test_un_issue_de_gitlab_con_3_notas_produce_un_bloque_con_las_3(proyecto_git
 
 # ── PATA B — el contador que se pierde (verde en F2) ─────────────────────────
 
+# v2 / C3 — CONGELADO. Los tres nombres estan VERIFICADOS POR AST el 2026-08-02, no
+# asumidos: `_run_in_background` en los tres, y en cada archivo el nombre es UNICO
+# (no hay dos funciones con ese nombre, asi que `_funcion_del_modulo` no puede
+# devolver la equivocada):
+#   agent_runner.py                     :: _run_in_background   lineas 718..1231
+#   services/claude_code_cli_runner.py  :: _run_in_background   lineas 595..2179
+#   services/codex_cli_runner.py        :: _run_in_background   lineas 258..1260
+# NO "verifiques y corregi": ya esta verificado. Si alguna pata de presencia sale
+# ROJA, es porque la sesion paralela renombro algo — parala y avisa, no la edites.
 _SITIOS_DE_ENRIQUECIMIENTO = (
-    # (ruta relativa a backend/, funcion que llama a enrich_blocks)
     ("agent_runner.py", "_run_in_background"),
     ("services/claude_code_cli_runner.py", "_run_in_background"),
     ("services/codex_cli_runner.py", "_run_in_background"),
 )
-# NOTA (obligatoria, es la trampa de este censo): los nombres de funcion de arriba
-# hay que VERIFICARLOS abriendo cada archivo en F0 y corrigiendolos si difieren.
-# El censo tiene DOS patas justamente para eso.
 
 
 def _funcion_del_modulo(ruta_rel: str, nombre: str):
-    """Devuelve el nodo AST de la funcion, o None si no existe."""
+    """Devuelve el nodo AST de la funcion, o None si no existe.
+
+    Guarda anti-ambiguedad (v2): si hubiera DOS funciones con el mismo nombre en
+    el archivo, devolver "la primera" haria que el censo mirase la equivocada.
+    Se falla ruidosamente en vez de elegir.
+    """
     arbol = ast.parse((ROOT / ruta_rel).read_text(encoding="utf-8"))
-    for nodo in ast.walk(arbol):
-        if isinstance(nodo, (ast.FunctionDef, ast.AsyncFunctionDef)) and nodo.name == nombre:
-            return nodo
-    return None
+    encontradas = [
+        n for n in ast.walk(arbol)
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == nombre
+    ]
+    assert len(encontradas) <= 1, (
+        f"{ruta_rel} tiene {len(encontradas)} funciones llamadas {nombre!r}: el censo "
+        f"miraria una arbitraria. Desambigua antes de seguir."
+    )
+    return encontradas[0] if encontradas else None
 
 
-def _llama_a(nodo, nombre_funcion: str) -> bool:
-    """True si dentro del nodo hay una llamada `f(...)` o `mod.f(...)`."""
+def _llama_a(nodo, nombre_funcion: str):
+    """Devuelve el nodo ast.Call de la PRIMERA llamada `f(...)` o `mod.f(...)`, o None."""
     for hijo in ast.walk(nodo):
         if not isinstance(hijo, ast.Call):
             continue
         f = hijo.func
         if isinstance(f, ast.Name) and f.id == nombre_funcion:
-            return True
+            return hijo
         if isinstance(f, ast.Attribute) and f.attr == nombre_funcion:
-            return True
-    return False
+            return hijo
+    return None
+
+
+def _nombre_del_stat_de_enrich(nodo) -> str | None:
+    """Nombre local al que se desempaqueta el 2o valor de enrich_blocks(...).
+
+    Busca `a, b = <algo>.enrich_blocks(...)` y devuelve el nombre de `b`.
+    """
+    for hijo in ast.walk(nodo):
+        if not isinstance(hijo, ast.Assign) or not isinstance(hijo.value, ast.Call):
+            continue
+        f = hijo.value.func
+        nombre = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
+        if nombre != "enrich_blocks":
+            continue
+        destino = hijo.targets[0]
+        if isinstance(destino, ast.Tuple) and len(destino.elts) == 2:
+            segundo = destino.elts[1]
+            if isinstance(segundo, ast.Name):
+                return segundo.id
+    return None
 
 
 @pytest.mark.parametrize("ruta,funcion", _SITIOS_DE_ENRIQUECIMIENTO)
@@ -647,21 +927,46 @@ def test_pata_de_presencia_la_funcion_vigilada_existe(ruta, funcion):
     """Sin esta pata, borrar o renombrar la funcion dejaria el censo verde POR AUSENCIA."""
     assert _funcion_del_modulo(ruta, funcion) is not None, (
         f"{ruta}::{funcion} no existe. El censo de abajo quedaria verde por ausencia, "
-        f"no por correccion. Actualiza _SITIOS_DE_ENRIQUECIMIENTO."
+        f"no por correccion. NO edites _SITIOS_DE_ENRIQUECIMIENTO sin leer el plan 289 F0."
     )
 
 
 @pytest.mark.parametrize("ruta,funcion", _SITIOS_DE_ENRIQUECIMIENTO)
 def test_pata_de_presencia_la_funcion_llama_al_pipeline(ruta, funcion):
     """La funcion vigilada es, de verdad, la que enriquece."""
-    assert _llama_a(_funcion_del_modulo(ruta, funcion), "enrich_blocks")
+    assert _llama_a(_funcion_del_modulo(ruta, funcion), "enrich_blocks") is not None
 
+
+# ── v2 / C4 — el censo NO se conforma con "que la llamada exista" ─────────────
+# Un censo por presencia de llamada se satisface con
+#   persistir_stats_de_contexto(execution_id=None, stats=None)
+# o con la llamada metida en una rama muerta: verde, y el contador se sigue
+# perdiendo. Este censo exige ADEMAS que los dos kwargs esten y que `stats=`
+# reciba EXACTAMENTE el nombre al que se desempaqueto el 2o valor de
+# enrich_blocks. Eso es determinista, barato y no se puede fingir sin cablearlo
+# de verdad. (Lo que sigue sin cubrir un censo estatico es que la funcion HAGA
+# lo suyo: eso lo prueba tests/test_plan289_stat_de_contexto.py, ejecutandola.)
 
 @pytest.mark.xfail(strict=True, reason="Plan 289 F2 lo pone verde: hoy 2 de 3 runtimes tiran el stat")
 @pytest.mark.parametrize("ruta,funcion", _SITIOS_DE_ENRIQUECIMIENTO)
 def test_los_3_runtimes_persisten_el_contador(ruta, funcion):
-    assert _llama_a(_funcion_del_modulo(ruta, funcion), "persistir_stats_de_contexto"), (
+    nodo = _funcion_del_modulo(ruta, funcion)
+    llamada = _llama_a(nodo, "persistir_stats_de_contexto")
+    assert llamada is not None, (
         f"{ruta}::{funcion} llama a enrich_blocks pero no persiste el contador"
+    )
+    kwargs = {k.arg: k.value for k in llamada.keywords if k.arg}
+    assert "execution_id" in kwargs and "stats" in kwargs, (
+        f"{ruta}::{funcion} llama al helper sin execution_id= y/o sin stats=: {sorted(kwargs)}"
+    )
+    esperado = _nombre_del_stat_de_enrich(nodo)
+    assert esperado is not None, (
+        f"{ruta}::{funcion} ya no desempaqueta enrich_blocks en 2 nombres"
+    )
+    recibido = getattr(kwargs["stats"], "id", None)
+    assert recibido == esperado, (
+        f"{ruta}::{funcion} persiste `{recibido}` pero enrich_blocks devolvio `{esperado}`: "
+        f"la llamada existe pero NO esta cableada al stat real"
     )
 ```
 
@@ -671,11 +976,17 @@ def test_los_3_runtimes_persisten_el_contador(ruta, funcion):
 - `ticket.ado_id` es `int`, el provider recibe `str` → el assert
   `proyecto_gitlab.llamadas == ["1124"]` lo fija.
 - La función vigilada podría renombrarse → la **pata de presencia** lo grita.
+- Alguien podría "cumplir" la PATA B con una llamada decorativa → el assert de **cableado** por AST
+  (`stats=` == el nombre desempaquetado de `enrich_blocks`) lo grita. **v2 / C4.**
 
-**Antes de commitear F0, verificá los nombres de función.** El pseudocódigo asume
-`_run_in_background` en los tres. **Abrí los tres archivos y confirmalo**; si en alguno el nombre es
-otro, corregí `_SITIOS_DE_ENRIQUECIMIENTO`. Si no, las dos patas de presencia salen rojas y **eso
-es correcto**: te están avisando.
+**v2 / C3 — los nombres de función YA ESTÁN VERIFICADOS, no los re-adivines.** La v1 dejaba una
+nota que obligaba al implementador a inferirlos, mientras el criterio binario de la fase decía
+`6 passed`: si acertaba, 6; si no, 6 rojos contra un criterio que dice verde. Eso es ambigüedad
+pura para un modelo menor. **Medido por AST el 2026-08-02**: los tres son `_run_in_background`,
+únicos en su archivo, y contienen la línea de `enrich_blocks` (`agent_runner.py` 718-1231 contiene
+`:809`; `claude_code_cli_runner.py` 595-2179 contiene `:677`; `codex_cli_runner.py` 258-1260
+contiene `:334`). **Si una pata de presencia sale roja, la sesión paralela renombró algo: parala,
+avisá y NO edites la tupla para "arreglarlo".**
 
 **Registro en los ratchets (en ESTE commit).** `.ps1`: agregarle coma a la última entrada actual e
 insertar `  "tests/test_plan289_contexto_por_tracker.py"` antes del `)`. `.sh`: insertar
@@ -692,8 +1003,9 @@ comentario de bloque:
 ./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py --collect-only -q | tail -3
 #   → 10 tests (1 pata A + 3+3 presencia + 3 pata B)
 
-./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py -q
-#   → "6 passed, 4 xfailed"   (NUNCA "xpassed": si dice xpassed, el defecto no existe y el plan sobra)
+./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py -q -rxX
+#   → "6 passed, 4 xfailed"   (NUNCA "xpassed": si dice xpassed, el defecto no existe y el plan sobra.
+#      El -rxX imprime el resumen de xfail/xpass: sin el, un xpassed pasa desapercibido en el -q)
 
 ./.venv/Scripts/python.exe -m pytest tests/test_harness_ratchet_meta.py -q
 #   → 4 passed
@@ -781,8 +1093,12 @@ sola función compartida**, para que la métrica de este plan (K2/K3/K4) sea med
 - **EDITA** `backend/services/context_enrichment.py` — agrega `persistir_stats_de_contexto`.
 - **EDITA** `backend/services/claude_code_cli_runner.py` — línea `:677`.
 - **EDITA** `backend/services/codex_cli_runner.py` — línea `:334`.
-- **EDITA** `backend/agent_runner.py` — línea `:809`.
+- **EDITA** `backend/agent_runner.py` — línea `:809`. **SÍ, éste también** (§4.4 / C5).
 - **CREA** `backend/tests/test_plan289_stat_de_contexto.py`.
+- **EDITA** `backend/tests/test_plan289_contexto_por_tracker.py` — **v2 / C6: sacarle el marcador
+  `xfail` a la PATA B**. La v1 lo pedía en un comentario del criterio pero **no lo listaba acá**, y
+  con `strict=True` no hacerlo da `XPASS(strict)` = **FAILED**, con lo que el criterio de la fase
+  (`9 passed, 1 xfailed`) era inalcanzable siguiendo la lista de archivos al pie de la letra.
 - **EDITA** los DOS ratchets (registro del archivo nuevo).
 
 **Tests PRIMERO.** `backend/tests/test_plan289_stat_de_contexto.py`:
@@ -908,7 +1224,8 @@ def persistir_stats_de_contexto(
     Los 3 runtimes llaman a ESTA funcion. Antes de este plan solo agent_runner lo
     persistia (agent_runner.py:871 y :1051); claude_code_cli_runner.py:677 y
     codex_cli_runner.py:334 asignaban el valor a `_ado_stats` y lo TIRABAN, con lo
-    que 173 de 222 ejecuciones de la base no tenian el dato.
+    que 173 de 223 ejecuciones de la base no tenian el dato (medido 2026-08-02; la
+    base es VIVA y el total sube solo: lo que importa es el 0, no el denominador).
 
     Se escribe TEMPRANO (justo despues de enriquecer) y no al cerrar el run, a
     proposito: si el run muere despues, el dato de contexto igual queda. Idempotente:
@@ -1185,16 +1502,26 @@ def normalizar_notas_gitlab(notas) -> list[dict]:
 #   → 17 tests   (10 de F0 + 7 de F3)
 ./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py -q
 #   → "16 passed, 1 xfailed"   (solo la PATA A sigue en xfail)
-./.venv/Scripts/python.exe -m pytest tests/test_gitlab_provider.py -q     # → 26 passed
-./.venv/Scripts/python.exe -m pytest tests/test_plan282_censo_paridad.py -q  # → 2 passed
+./.venv/Scripts/python.exe -m pytest tests/test_gitlab_provider.py -q          # → 26 passed
+./.venv/Scripts/python.exe -m pytest tests/test_plan282_censo_paridad.py -q    # → 2 passed
+./.venv/Scripts/python.exe -m pytest tests/test_plan281_ratchet_ado_only.py -q # → 11 passed  (v2/C8)
 ```
 
-> **Por qué `test_plan282_censo_paridad.py` está en el criterio:** F3 agrega un archivo nuevo a
-> `services/`, y hay censos por AST que recorren `services/*.py`
-> (`services/provider_coupling_audit.py:206 _archivos_censables`). `tracker_context.py` **no debe
-> moverlos**, porque el censo de `scan_ado_only_sites` sólo mira funciones que llaman a
-> `ADO_BUILDERS` (`provider_coupling_audit.py:125-127, 314-315`) y este módulo **no llama a
-> `build_ado_client`**. Si el número cambia, algo se coló.
+> **v2 / C13 — por qué esas suites están en el criterio, con el censo CORRECTO.** La v1 justificaba
+> `test_plan282_censo_paridad.py` describiendo `scan_ado_only_sites`/`ADO_BUILDERS`, que **no es lo
+> que ese archivo censa**. Verificado abriéndolo: `test_plan282_censo_paridad.py` tiene 2 tests y
+> censa (a) **constructores directos de `GitLabTrackerProvider(...)` en `services/*.py`** (glob NO
+> recursivo, excluyendo `tracker_provider.py`) y (b) que `services/ado_publisher.py` referencie
+> `resolve_comment_publisher`. `services/tracker_context.py` **no construye el provider a mano**
+> (P4: usa la fábrica) ⇒ el censo (a) sigue en `[]` y la suite en `2 passed`. **Si sale roja, es
+> que violaste P4.**
+>
+> El censo del que hablaba la v1 vive en `services/provider_coupling_audit.py` y lo corre
+> **`tests/test_plan281_ratchet_ado_only.py` (= `11 passed`, ahora sí en §4.6)**. Ese tampoco se
+> mueve: `_archivos_censables` (`:206`) barre `services/*.py`, pero `scan_ado_only_sites` **saltea
+> toda función que no llame a `ADO_BUILDERS`** (`:314`) y `tracker_context.py` no llama a ninguno;
+> y `services/ado_context.py` está excluido **por prefijo** (`_ADO_ONLY_EXCLUDED_PREFIXES =
+> ("services/ado_",)`, `:168`), así que ni siquiera F6 lo mueve. **Corré las dos.**
 
 **Flag:** ninguna — función pura sin consumidor todavía.
 **Impacto por runtime:** ninguno (código muerto hasta F6). **Fallback:** n/a.
@@ -1221,7 +1548,8 @@ def test_lee_los_comentarios_por_la_fabrica_y_los_normaliza(proyecto_gitlab):
     comentarios, stats = fetch_comentarios_normalizados(project_name="GITLABTEST", item_id=1124)
     assert [c["text"] for c in comentarios] == [
         "Primera nota del cliente", "Segunda nota con detalle", "Tercera nota"]
-    assert stats == {"comments_count": 3, "comments_truncated": False, "errors": []}
+    assert stats == {"comments_count": 3, "comments_truncated": False,
+                     "comments_total_disponibles": 3, "errors": []}
     assert proyecto_gitlab.llamadas == ["1124"]     # str, y es el iid (§4.8)
 
 
@@ -1238,7 +1566,9 @@ def test_el_tope_recorta_y_lo_DECLARA(monkeypatch):
     assert len(comentarios) == 30                     # el default, = top=30 de ADO
     assert stats["comments_count"] == 30
     assert stats["comments_truncated"] is True
-    # Se quedan las MAS RECIENTES: las notas vienen mas viejas primero.
+    assert stats["comments_total_disponibles"] == 200   # v2: lo necesita el sello de F5/F6
+    # Se quedan las MAS RECIENTES: las notas vienen mas viejas primero (v2 §4.12: ADO
+    # las trae al reves, con order=desc; el sentido se DECLARA en el sello, no se invierte).
     assert comentarios[-1]["text"] == "nota 199"
     assert comentarios[0]["text"] == "nota 170"
 
@@ -1324,7 +1654,15 @@ def fetch_comentarios_normalizados(
     todo lo que no se pudo hacer: un contexto vacio SIN explicacion es el defecto
     que este plan cierra.
     """
-    stats: dict = {"comments_count": 0, "comments_truncated": False, "errors": []}
+    stats: dict = {
+        "comments_count": 0,
+        "comments_truncated": False,
+        # v2 — cuantos habia ANTES de recortar. Lo consume el sello del bloque (F5/F6):
+        # sin este numero el bloque puede decir "30 comentarios" y el agente creer que
+        # esos son TODOS, que es exactamente el trabajo a ciegas que el plan cierra.
+        "comments_total_disponibles": 0,
+        "errors": [],
+    }
 
     # Import LOCAL y por MODULO (no `from ... import get_tracker_provider`): los
     # tests parchean el atributo del modulo, y un import por nombre congelaria la
@@ -1353,6 +1691,7 @@ def fetch_comentarios_normalizados(
         return [], stats
 
     comentarios = normalizar_notas_gitlab(crudos)
+    stats["comments_total_disponibles"] = len(comentarios)   # v2: ANTES de recortar
 
     tope = max_comments()
     if len(comentarios) > tope:
@@ -1412,11 +1751,18 @@ miente", y la decisión está tomada, no queda ambigua:
      `_DEFAULT_PRIORITY = 50` (`:434`), es decir **más alto** que `harness-patterns` (45) y
      `ado-similar-tickets` (40): bajo presión de presupuesto se podarían **otros** bloques en vez de
      éste. Sería un cambio de comportamiento silencioso, no una mejora.
-  2. El guard de idempotencia depende del id (`ado_context.py:372-373`).
-  3. Dos `.agent.md` de producción lo nombran por escrito: `Stacky/agents/Developer.agent.md:178`
-     y `Stacky/agents/FunctionalAnalyst.agent.md:51` y `:312`.
-  4. `tests/test_ado_blocker_block.py` y `tests/test_block_priorities_contract.py:49` asertan sobre
-     ese id.
+  2. El guard de idempotencia depende del id (`ado_context.py:372-373` — `:372` arma
+     `existing_ids`, `:373` es el `if`).
+  3. **v2 / C12 — son TRES archivos `.agent.md` en DOS árboles, no dos.** Verificado con grep:
+     `backend/Stacky/agents/Developer.agent.md:176`… no: **`:178`**;
+     `backend/Stacky/agents/FunctionalAnalyst.agent.md:51` y `:312`; **y además
+     `backend/agents/Developer.agent.md:176`**, que la v1 no vio (hay dos árboles de agentes vivos;
+     el runtime lee `backend/Stacky/agents`). Ninguno se toca — es un argumento MÁS a favor de no
+     renombrar.
+  4. **Cuatro** archivos de test asertan sobre ese id, no dos: `tests/test_ado_blocker_block.py`
+     (`:44`, `:52`, `:66`), `tests/test_ado_context.py` (`:126`, `:279`, `:287`),
+     `tests/test_block_priorities_contract.py:49` y `tests/test_context_budget.py:20`
+     (+ `tests/test_claude_code_cli_prompt.py:44` lo usa como fixture).
 - **El título pasa a depender del tracker.** ADO conserva **exactamente** `"Comentarios ADO del
   ticket"` (lo asertan `ado_context.py:273` y `tests/test_ado_context.py:127`); GitLab recibe
   `"Comentarios del ticket (GitLab)"`.
@@ -1497,6 +1843,31 @@ def test_sin_comentarios_no_hay_bloque():
     from services.ado_context import construir_bloques_de_comentarios
 
     assert construir_bloques_de_comentarios([], titulo="X") == ([], 0)
+
+
+# ── [ADICION ARQUITECTO] 2 — el bloque declara su procedencia y su recorte ────
+
+def test_el_bloque_lleva_sello_de_procedencia_y_de_recorte():
+    """El sello es la UNICA declaracion que el agente ve aunque la metadata se pierda.
+
+    Con recorte: dice cuantos de cuantos. Sin recorte: dice cuantos y el sentido.
+    """
+    from services.ado_context import construir_bloques_de_comentarios
+
+    coms = [{"author": "A", "date": "2026-01-0%d" % (i + 1), "text": f"c{i}", "is_html": False}
+            for i in range(3)]
+    bloques, _ = construir_bloques_de_comentarios(
+        coms, titulo="Comentarios del ticket (GitLab)",
+        sello="GitLab · 3 de 200 comentarios (los mas recientes, del mas antiguo al mas reciente)",
+    )
+    contenido = bloques[0]["content"]
+    assert contenido.startswith("_(GitLab · 3 de 200 comentarios")
+    assert "del mas antiguo al mas reciente)_" in contenido
+    assert "c0" in contenido and "c2" in contenido
+    # SIN sello (camino ADO por defecto): el contenido es BYTE-IDENTICO al de hoy.
+    sin, _ = construir_bloques_de_comentarios(coms, titulo="Comentarios ADO del ticket")
+    assert not sin[0]["content"].startswith("_(")
+    assert sin[0]["content"].startswith("**A** (2026-01-01):")
 ```
 
 **Implementación — refactor de `services/ado_context.py`.**
@@ -1506,7 +1877,7 @@ Se extrae el cuerpo que hoy vive en `:228-275` a una función pura, **conservand
 
 ```python
 def construir_bloques_de_comentarios(
-    raw_comments: list[dict], *, titulo: str,
+    raw_comments: list[dict], *, titulo: str, sello: str | None = None,
 ) -> tuple[list[dict], int]:
     """Plan 289 F5 — Arma los bloques de comentarios. UNICO armador, los 2 trackers.
 
@@ -1514,6 +1885,13 @@ def construir_bloques_de_comentarios(
       - `is_html` AUSENTE significa True (camino ADO: byte-identico a antes del plan).
       - `is_html=False` (camino GitLab, Markdown) SALTEA _html_to_text: pasarle
         Markdown al parser de HTML borra fragmentos como `List<int>`.
+
+    `sello` (Plan 289 v2, [ADICION ARQUITECTO] 2) es una linea de procedencia que se
+    antepone al contenido: de que tracker vienen, cuantos de cuantos son y en que
+    sentido estan ordenados. AUSENTE por defecto => el camino ADO queda BYTE-IDENTICO.
+    Existe porque `enrich` filtra las claves de `stats` por whitelist (§4.10): el
+    sello es la unica declaracion que sobrevive hasta el prompt del agente pase lo
+    que pase con la metadata.
 
     Devuelve (bloques, cantidad_de_comentarios_renderizados). Los bloques salen en el
     mismo orden que antes: ado-blocker (si hay) primero, ado-comments despues.
@@ -1566,11 +1944,14 @@ def construir_bloques_de_comentarios(
         lineas.append(f"**{c.get('author', '?')}** ({c.get('date', '')}):\n{texto}")
 
     if lineas:
+        cuerpo = "\n\n---\n\n".join(lineas)
+        if sello:                                   # v2, [ADICION ARQUITECTO] 2
+            cuerpo = f"_({sello})_\n\n{cuerpo}"
         bloques.append({
             "kind": "text",
             "id": "ado-comments",
             "title": titulo,
-            "content": "\n\n---\n\n".join(lineas),
+            "content": cuerpo,
         })
     return bloques, len(lineas)
 ```
@@ -1607,12 +1988,15 @@ Y el bloque `:227-278` de `build_ado_context_blocks` queda:
 **Criterio BINARIO:**
 
 ```bash
+./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py --collect-only -q | tail -3
+#   → 32 tests   (24 de F4 + 8 de F5: 7 originales + el sello)
 ./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py -q
-#   → "30 passed, 1 xfailed"
+#   → "31 passed, 1 xfailed"
 ./.venv/Scripts/python.exe -m pytest tests/test_ado_context.py -q               # → 17 passed  (F1)
-./.venv/Scripts/python.exe -m pytest tests/test_ado_blocker_block.py -q         # → el baseline de F0
-./.venv/Scripts/python.exe -m pytest tests/test_block_priorities_contract.py -q # → el baseline de F0
+./.venv/Scripts/python.exe -m pytest tests/test_ado_blocker_block.py -q         # → 4 passed   (v2: medido)
+./.venv/Scripts/python.exe -m pytest tests/test_block_priorities_contract.py -q # → 4 passed   (v2: medido)
 ./.venv/Scripts/python.exe -m pytest tests/test_context_enrichment.py -q        # → 8 passed
+./.venv/Scripts/python.exe -m pytest tests/test_context_budget.py -q            # → su baseline (usa ado-comments)
 ```
 
 **Flag:** ninguna. El enmascarado **no lleva flag a propósito**: una flag para "¿enmascaro
@@ -1637,8 +2021,10 @@ ADO.
 - **EDITA** `backend/services/harness_flags.py` (patas 2 y 3)
 - **EDITA** `backend/services/harness_flags_help.py` (pata 5)
 - **EDITA** `backend/tests/test_harness_flags.py` (pata 4)
-- **EDITA** `backend/services/ado_context.py` (el dispatcher)
-- **EDITA** `backend/tests/test_plan289_contexto_por_tracker.py` (**sacar el `xfail` de la PATA A**)
+- **EDITA** `backend/services/ado_context.py` (el dispatcher **§6.2**, la rama no-ADO, **y la
+  whitelist de `enrich` §6.3 — sin esto la fase no entrega nada, v2/C1**)
+- **EDITA** `backend/tests/test_plan289_contexto_por_tracker.py` (**sacar el `xfail` de la PATA A**
+  + los **2 tests de contrato de §6.4**)
 
 #### 6.1 La flag: `STACKY_TRACKER_CONTEXT_ENABLED`, **default ON**
 
@@ -1660,9 +2046,13 @@ esto.
 |---|---|---|
 | 1 | `backend/config.py` | `STACKY_TRACKER_CONTEXT_ENABLED = os.getenv("STACKY_TRACKER_CONTEXT_ENABLED", "true").lower() == "true"` — nótese **`"true"`**: es el default EFECTIVO |
 | 2 | `backend/services/harness_flags.py` → `FLAG_REGISTRY` | una `FlagSpec` con **`default=True`** |
-| 3 | `backend/services/harness_flags.py` → `_CATEGORY_KEYS` (`:120`) | la key dentro de la tupla de `"paridad_proveedores"` (`CategorySpec` en `:112`) |
-| 4 | `backend/tests/test_harness_flags.py` → `_CURATED_DEFAULTS_ON` (`:467-1099`) | la key |
+| 3 | `backend/services/harness_flags.py` → `_CATEGORY_KEYS` (abre en `:120`) | la key dentro de la tupla `"paridad_proveedores"`, que **empieza en `:582`** y hoy tiene 9+ keys (v2: la v1 apuntaba a `:112`, que es el `CategorySpec` del catálogo, **no** el punto de inserción) |
+| 4 | `backend/tests/test_harness_flags.py` → `_CURATED_DEFAULTS_ON` (abre en `:467`) | la key |
 | 5 | `backend/services/harness_flags_help.py` → `PLAIN_HELP` (`:25`) | una entrada `PlainHelp(what=…, on_effect=…, off_effect=…, example=…)` |
+
+> **v2 — pata 6 opcional, sin gate:** `deployment/harness_defaults.env` existe y ya está stale
+> respecto del registro, y **ningún test lo vigila** (verificado: no hay ninguna suite que lo
+> importe). Regenerarlo es cortesía, no requisito, y **no** es criterio de esta fase.
 
 **Las patas 3 y 4 no son opcionales y cada una rompe un test distinto**, y los dos están **verdes**
 hoy (`test_harness_flags.py` = `59 passed`):
@@ -1716,8 +2106,13 @@ Por eso una flag **OFF** se declara **sin** `default=` en su `FlagSpec` (ni siqu
 
 #### 6.2 El dispatcher
 
-Va **arriba de todo** en `build_ado_context_blocks`, antes del `try` que construye el cliente ADO
-(hoy `ado_context.py:209`):
+**v2 / C9 — dónde va, exactamente.** La v1 decía "arriba de todo", pero el dispatcher **usa
+`stats`**, que se inicializa en `ado_context.py:202-207`. Ponerlo antes da `NameError` **dentro de
+su propio `except`** (que también usa `stats`), o sea una excepción no contenida que sale de la
+función. La ubicación es, sin ambigüedad:
+
+> **inmediatamente DESPUÉS de la inicialización de `stats` (`:202-207`) y ANTES del `try` que
+> construye el cliente ADO (`:209`).**
 
 ```python
     # ── Plan 289 F6 — dispatcher por tracker. ADITIVO: si el proyecto es ADO
@@ -1769,14 +2164,116 @@ def _bloques_por_proveedor(
     comentarios, cstats = tracker_context.fetch_comentarios_normalizados(
         project_name=project_name, item_id=item_id,
     )
+    # v2, [ADICION ARQUITECTO] 2 — el sello viaja DENTRO del bloque, no solo en stats:
+    # `enrich` filtra stats por whitelist (§4.10) pero el content llega intacto al prompt.
+    total = cstats.get("comments_total_disponibles", len(comentarios))
+    sello = (
+        f"GitLab · {len(comentarios)} de {total} comentarios (los mas recientes)"
+        if cstats.get("comments_truncated")
+        else f"GitLab · {len(comentarios)} comentarios"
+    ) + ", del mas antiguo al mas reciente"
     bloques, cantidad = construir_bloques_de_comentarios(
-        comentarios, titulo="Comentarios del ticket (GitLab)",
+        comentarios, titulo="Comentarios del ticket (GitLab)", sello=sello,
     )
     stats["comments_count"] = cantidad
     stats["comments_truncated"] = cstats.get("comments_truncated", False)
     stats["errors"].extend(cstats.get("errors") or [])
     stats["attachments_skipped_reason"] = "provider_sin_descarga_de_adjuntos"
     return bloques, stats
+```
+
+> **F4 debe agregar `comments_total_disponibles` a su `stats`** (la cantidad ANTES de recortar).
+> Es una clave más y un `len()`; sin ella el sello no puede decir "3 de 200". El test
+> `test_el_tope_recorta_y_lo_DECLARA` de F4 gana un assert:
+> `assert stats["comments_total_disponibles"] == 200`.
+
+#### 6.3 La whitelist de `enrich` — sin esto, F6 no entrega nada (v2 / C1, BLOQUEANTE de la v1)
+
+`ado_context.enrich` **no propaga** el `stats` de `build_ado_context_blocks`: lo copia clave por
+clave (`:389-394`). Las dos claves que F6 acaba de escribir **se pierden ahí mismo**. Esta fase
+las agrega, en el **mismo commit**:
+
+```diff
+     stats.update({
+         "comments_count": build_stats.get("comments_count", 0),
+         "attachments_count": build_stats.get("attachments_count", 0),
+         "attachments_text_inlined": build_stats.get("attachments_text_inlined", 0),
+         "errors": build_stats.get("errors", []),
+     })
++    # Plan 289 F6.3 — las claves del camino por proveedor NO estaban en la whitelist
++    # de arriba y se perdian en silencio: el operador veia comments_count=0 sin motivo
++    # y attachments_count=0 sin saber que el proveedor no descarga adjuntos.
++    # Se copian solo si el productor las puso: en el camino ADO no existen y el
++    # metadata queda BYTE-IDENTICO al de antes del plan.
++    for _clave in ("comments_truncated", "comments_total_disponibles",
++                   "attachments_skipped_reason"):
++        if _clave in build_stats:
++            stats[_clave] = build_stats[_clave]
+```
+
+#### 6.4 [ADICIÓN ARQUITECTO] 1 — el test de contrato que mata la CLASE de bug, no la instancia
+
+Arreglar las 3 claves a mano resuelve **hoy**. Lo que hace falta es que la whitelist **no pueda
+volver a comerse una clave**, porque el modo de fallo es invisible: la fase escribe el dato, su
+test unitario pasa, y el operador nunca lo ve. Dos tests, en
+`tests/test_plan289_contexto_por_tracker.py`:
+
+```python
+# ── F6.4 — contrato: enrich NO se come ninguna clave de stats ─────────────────
+
+def test_enrich_propaga_TODAS_las_claves_que_produce_el_armador(monkeypatch):
+    """Guard de CLASE: si manana alguien agrega una clave a stats y se olvida de la
+    whitelist de enrich (:389-394), este test se pone rojo NOMBRANDO la clave.
+
+    ANTI-FALSO-VERDE (obligatorio): el detector se calibra PRIMERO con una clave
+    inventada, para probar que de verdad detecta la perdida.
+    """
+    from services import ado_context
+
+    producidas = {
+        "comments_count": 3, "attachments_count": 0, "attachments_text_inlined": 0,
+        "errors": [], "comments_truncated": True, "comments_total_disponibles": 200,
+        "attachments_skipped_reason": "provider_sin_descarga_de_adjuntos",
+        "_clave_centinela_inventada": "x",
+    }
+    monkeypatch.setattr(
+        ado_context, "build_ado_context_blocks",
+        lambda *a, **k: ([], dict(producidas)),
+    )
+    _, stats = ado_context.enrich(
+        ticket_id=1, agent_type="technical", existing_blocks=[], ado_id=1,
+        return_stats=True,
+    )
+    # (a) calibracion: la centinela SI se pierde => el detector funciona.
+    assert "_clave_centinela_inventada" not in stats, (
+        "enrich dejo de filtrar: este test ya no prueba nada, reescribilo"
+    )
+    # (b) contrato: las 3 claves del camino por proveedor SI llegan.
+    perdidas = {k for k in (
+        "comments_truncated", "comments_total_disponibles", "attachments_skipped_reason",
+    ) if k not in stats}
+    assert not perdidas, (
+        f"enrich se comio {sorted(perdidas)}: agregalas al bucle de :395 (Plan 289 F6.3). "
+        f"El dato existe en build_stats y NUNCA llega a metadata['ado_context']."
+    )
+
+
+def test_enrich_no_inventa_esas_claves_en_el_camino_ADO(monkeypatch):
+    """P1: con un productor que NO las emite, el metadata queda byte-identico a hoy."""
+    from services import ado_context
+
+    monkeypatch.setattr(
+        ado_context, "build_ado_context_blocks",
+        lambda *a, **k: ([], {"comments_count": 2, "attachments_count": 0,
+                              "attachments_text_inlined": 0, "errors": []}),
+    )
+    _, stats = ado_context.enrich(
+        ticket_id=1, agent_type="technical", existing_blocks=[], ado_id=1,
+        return_stats=True,
+    )
+    assert set(stats) == {"comments_count", "attachments_count", "attachments_text_inlined",
+                          "skipped", "skipped_reason", "errors"}
+    assert stats["comments_count"] == 2
 ```
 
 **Casos borde:**
@@ -1800,19 +2297,28 @@ def _bloques_por_proveedor(
 **Criterio BINARIO:**
 
 ```bash
+./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py --collect-only -q | tail -3
+#   → 34 tests   (32 de F5 + los 2 de contrato de §6.4)
 ./.venv/Scripts/python.exe -m pytest tests/test_plan289_contexto_por_tracker.py -q
-#   → "31 passed"   (cero xfailed: la PATA A ya no lleva marcador)
+#   → "34 passed"   (cero xfailed y cero xpassed: la PATA A ya no lleva marcador)
 ./.venv/Scripts/python.exe -m pytest tests/test_ado_context.py -q            # → 17 passed
-./.venv/Scripts/python.exe -m pytest tests/test_harness_flags.py -q          # → 60 passed (59 + la key nueva no suma test; si sigue en 59, tambien vale: lo que NO puede haber es un failed)
+./.venv/Scripts/python.exe -m pytest tests/test_harness_flags.py -q          # → 0 failed (hoy 59 passed; agregar una key a un set no crea un test, asi que 59 o 60 valen igual)
 ./.venv/Scripts/python.exe -m pytest tests/test_harness_flags_help.py -q     # → 4 failed, 4 passed  (delta CERO)
 ./.venv/Scripts/python.exe -m pytest tests/test_plan286_tracker_efectivo.py -q   # → 16 passed
 ./.venv/Scripts/python.exe -m pytest tests/test_plan286_ruteo_de_escritura.py -q # → 13 passed
 ./.venv/Scripts/python.exe -m pytest tests/test_plan286_columna_no_rutea.py -q   # → 6 passed
 ./.venv/Scripts/python.exe -m pytest tests/test_context_enrichment.py -q         # → 8 passed
+./.venv/Scripts/python.exe -m pytest tests/test_plan281_ratchet_ado_only.py -q   # → 11 passed  (v2/C8: VERDE, no lo rompas)
+./.venv/Scripts/python.exe -m pytest tests/test_plan218_coupling_ratchet.py -q   # → 3 failed, 7 passed (v2/C8: delta CERO)
+./.venv/Scripts/python.exe -m pytest tests/test_flags_env_read_meta.py -q        # → su baseline (la flag se lee del OBJETO config, nunca con os.getenv)
 ```
 
 > El conteo de `test_harness_flags.py` puede quedar en 59 (agregar una key a un `set` no crea un
 > test). **El criterio duro es `0 failed`.** Si aparece un `failed`, es la pata 3 o la 4.
+>
+> **v2 — el criterio que la v1 no tenía y era el importante:** los **2 tests de §6.4** son los que
+> prueban que el dato **llega al operador**. Sin ellos, F6 puede salir "verde" con
+> `comments_truncated` y `attachments_skipped_reason` cayéndose en `enrich` y nadie se entera.
 
 **Impacto por runtime:** idéntico en los 3 (§4.4).
 **Fallback:** flag OFF → comportamiento previo; provider no disponible → `stats["errors"]` con el
@@ -1828,11 +2334,16 @@ y el barrido final de no-regresión corrido.
 
 **Archivos:**
 
-- **EDITA** `backend/services/README_ado_context.md` — la tabla de `:50` y el ejemplo de `:59`
-  siguen diciendo que `ado-comments` es sólo de ADO. Agregar: (a) el dispatcher por tracker,
-  (b) el título distinto por tracker con el mismo id y **por qué**, (c) el enmascarado, (d) el tope
-  y su env var, (e) que los adjuntos son ADO-only.
-- **EDITA** este mismo documento: sección `## 10. IMPLEMENTADO` con el resultado medido por fase.
+- **EDITA** `backend/services/README_ado_context.md` — la tabla de `:50`, el ejemplo de `:59` **y
+  la sección de idempotencia de `:92`** (v2/C12: la v1 no listaba `:92`, que es justo la que
+  explica por qué el id NO cambia) siguen diciendo que `ado-comments` es sólo de ADO. Agregar:
+  (a) el dispatcher por tracker, (b) el título distinto por tracker con el mismo id y **por qué**,
+  (c) el enmascarado, (d) el tope y su env var, (e) que los adjuntos son ADO-only, (f) **el sello
+  de procedencia y el orden invertido entre trackers (§4.12)**, (g) **la whitelist de `enrich` y su
+  test de contrato (§4.10 / F6.4)** — es la trampa que hizo rechazar la v1 y tiene que quedar
+  escrita donde el próximo la lea.
+- **EDITA** este mismo documento: sección `## 10. IMPLEMENTADO` con el resultado medido por fase,
+  **y el total de ejecuciones del día** (§4.11), porque el 223 de hoy no va a ser el de mañana.
 
 **Método de medición de la métrica de campo (K4).** Se corre **después** de un uso real, contra una
 **copia read-only** de la base:
@@ -1878,10 +2389,11 @@ seguir dando 0 legítimamente.
 3. En la ficha de la ejecución, `metadata.ado_context.comments_count` tiene que ser `N > 0`.
 4. Repetir con el runtime `codex_cli` y con `github_copilot` (paridad de los 3, §4.4).
 
-**Barrido final de no-regresión — las 20 suites de §4.6, una por una.** Cada una tiene que dar su
+**Barrido final de no-regresión — las 22 suites de §4.6, una por una** (v2: eran 20, se sumaron
+`test_plan281_ratchet_ado_only.py` y `test_plan218_coupling_ratchet.py`). Cada una tiene que dar su
 baseline, con las tres excepciones que este plan cambia a propósito:
 `test_ado_context.py` **9 failed, 8 passed → 17 passed**;
-`test_plan289_contexto_por_tracker.py` **31 passed**;
+`test_plan289_contexto_por_tracker.py` **34 passed**;
 `test_plan289_stat_de_contexto.py` **6 passed**.
 
 **Flag:** ninguna.
@@ -1897,7 +2409,7 @@ baseline, con las tres excepciones que este plan cambia a propósito:
 | R1 | **Reventar la ventana de contexto.** `GitLabTrackerProvider.fetch_comments` **no acepta `top`** (`gitlab_provider.py:472`) y `_request_paginated` trae hasta `page_cap` páginas | un issue de soporte con 200 notas entra entero al prompt | **F4**: tope de 30 (= el `top=30` de ADO, `ado_context.py:229`), se conservan las más recientes, y se **declara** en `stats["comments_truncated"]`. Tests: `test_el_tope_recorta_y_lo_DECLARA`, `test_el_tope_se_puede_bajar_por_env`, `test_tope_cero_devuelve_cero_comentarios_sin_error` |
 | R2 | **Credenciales pegadas en un comentario llegan al prompt del LLM.** `ado_context` **no** llama a `mask_token_values` hoy | los comentarios los escriben personas; `secret_masking.py:11` existe justamente porque pasa | **F5**: el enmascarado va en el armador **compartido**, así que endurece **también ADO**. Riesgo del endurecimiento: romper un test ADO ⇒ el criterio de F5 exige `test_ado_context.py` en `17 passed` y `test_ado_blocker_block.py` en su baseline |
 | R3 | **El bloque miente o se rompe la idempotencia.** El título dice "ADO" (`:273`) y el guard de idempotencia depende del id (`:372-373`) | renombrar el id cambia además la prioridad de 30 a 50 (`context_enrichment.py:431` vs `:434`) y rompe 2 `.agent.md` y 2 suites | **F5, Decisión 1, sin ambigüedad**: **id igual, título distinto**. Test: `test_el_titulo_es_el_que_se_le_pasa_y_el_id_NO_cambia` |
-| R4 | **La métrica no es medible.** 2 de 3 runtimes tiran el contador (`claude_code_cli_runner.py:677`, `codex_cli_runner.py:334`) | **173 de 222** ejecuciones de la BD viva son `claude_code_cli` y **0** tienen la clave | **F2 va ANTES que la fase que declara la métrica.** El KPI K4 dice explícitamente "sólo declarable con F2 hecha" |
+| R4 | **La métrica no es medible.** 2 de 3 runtimes tiran el contador (`claude_code_cli_runner.py:677`, `codex_cli_runner.py:334`) | **173 de 223** ejecuciones de la BD viva son `claude_code_cli` y **0** tienen la clave | **F2 va ANTES que la fase que declara la métrica.** El KPI K4 dice explícitamente "sólo declarable con F2 hecha" |
 | R5 | **Falsa paridad entre runtimes.** El seam es común pero el contador no | ver R4 | **F2** unifica por **una sola función** (`persistir_stats_de_contexto`) llamada por los tres; el censo de F0 (PATA B) lo vigila con **dos patas** (presencia + llamada) |
 | R6 | **Romper Azure DevOps.** 20+ call sites | el 100 % del trabajo productivo de RSPACIFICO pasa por ahí | Dispatcher **aditivo** y **arriba de todo**; con la flag OFF o proyecto ADO no se ejecuta ni un import nuevo. Gates: `test_ado_context.py`, `test_ado_blocker_block.py`, `test_block_priorities_contract.py`, `test_context_enrichment.py` |
 | R7 | **Rutear por la columna `tracker_type`.** Es el bug que el 281 y el 286 vinieron a cerrar | `models.py:50` declara `default="azure_devops"`: la columna es ruido | Dispatcher usa `tracker_efectivo_de_ticket` (286) o `tracker_is_azure_devops`. **Prohibido leer la columna**, escrito en el comentario del código |
@@ -1907,7 +2419,10 @@ baseline, con las tres excepciones que este plan cambia a propósito:
 | R11 | **Un centinela verde por ausencia.** Si una fase renombra la función vigilada, el censo de la PATA B pasaría sin probar nada | pasó antes en este repo | **Dos patas** en F0: presencia de la función **y** presencia de la llamada. La de presencia **no** lleva `xfail` |
 | R12 | **Colisión con la sesión paralela en los ratchets** | 287 y 288 editan los mismos dos archivos y commitean cada pocos minutos | §4.3: anclar por símbolo, releer la cola del array antes de editar, y `git commit -- "<rutas propias>"` con `git status --short` previo |
 | R13 | **El rojo de F0 deja el ratchet rojo 6 fases** | el archivo se registra en F0 | `xfail(strict=True)`: hoy sale `xfailed` (suite verde) y el día que pase sale `XPASS(strict)` = FAILED, forzando sacar el marcador |
-| R14 | **Latencia extra en el trayecto caliente.** El enriquecimiento agrega N llamadas HTTP a un GitLab self-hosted | `_request_paginated` puede hacer varias páginas | El tope de 30 acota el trabajo útil, pero **no acota las páginas que el provider ya pidió**. Declarado en §6.5 como límite conocido; la flag ON/OFF es el control real |
+| R14 | **Latencia extra en el trayecto caliente.** El enriquecimiento agrega N llamadas HTTP a un GitLab self-hosted | `_request_paginated` con `page_cap=40` × `per_page=100` = hasta **4.000 ítems** traídos del servidor (`gitlab_client.py:350-401`) | El tope de 30 acota el trabajo útil **entregado al prompt**, pero **no acota las páginas que el provider ya pidió**. Declarado en §7.6.5 como límite conocido; la flag ON/OFF es el control real |
+| **R15** | **v2 / C1 — Una clave nueva de `stats` se pierde entre `build_ado_context_blocks` y `metadata`** | `ado_context.py:389-394` copia `stats` con una **whitelist de 4 claves**. El fallo es INVISIBLE: la fase escribe el dato, su test unitario pasa y el operador ve un `0` sin motivo | **F6.3** agrega las 3 claves a la whitelist y **F6.4** las congela con un test de contrato **calibrado** (verifica primero que el detector detecta). §4.10 y §11.1 |
+| **R16** | **v2 / C11 — La conversación se lee en sentido inverso según el tracker** | `ado_client.py:439` pide `order=desc`; GitLab devuelve de más viejo a más nuevo y F4 conserva la cola | No se invierte ninguno (invertir ADO viola P1). **Se DECLARA en el sello del bloque** (§4.12 y §11.2), que es lo único que el agente ve |
+| **R17** | **v2 / C4 — La PATA B es un censo estático: se "cumple" con una llamada decorativa** | molde conocido: test estático sobre un defecto de ejecución | El censo exige por AST que `stats=` reciba **el mismo nombre** al que `enrich_blocks` desempaqueta su 2º valor, y que `execution_id=` esté. Lo que un censo estático no puede probar (que la función HAGA lo suyo) lo prueba `test_plan289_stat_de_contexto.py`, ejecutándola |
 
 ---
 
@@ -1983,16 +2498,30 @@ dos `.agent.md`, dos suites de test y el README. Sin capacidad nueva a cambio.
 
 ### 8.2 Orden de implementación (estricto)
 
-| Fase | Qué entrega | Commit | Pone verde |
-|---|---|---|---|
-| F0 | 2 centinelas rojos + registro en los 2 ratchets | `test(plan-289): F0 - los dos centinelas del contexto por tracker` | — |
-| F1 | `test_ado_context.py` determinista | `test(plan-289): F1 - el test del contexto deja de depender del proyecto activo` | K7 |
-| F2 | el contador en los 3 runtimes | `feat(plan-289): F2 - el contador de contexto sobrevive en los 3 runtimes` | F0 pata B, K2, K3 |
-| F3 | normalizador puro | `feat(plan-289): F3 - normalizador de notas de GitLab a la forma canonica` | — |
-| F4 | lector por proveedor + tope | `feat(plan-289): F4 - lector de comentarios por la costura de proveedor` | — |
-| F5 | armador compartido + enmascarado + título | `feat(plan-289): F5 - un solo armador de bloques, con enmascarado de secretos` | K6 |
-| F6 | flag + dispatcher | `feat(plan-289): F6 - el agente lee los comentarios del issue de GitLab` | F0 pata A, K1, K5 |
-| F7 | doc + métrica + barrido | `docs(plan-289): F7 - documentacion, metrica y barrido de no-regresion` | K4 |
+| Fase | Qué entrega | Commit | Pone verde | Conteo esperado de `test_plan289_contexto_por_tracker.py` |
+|---|---|---|---|---|
+| F0 | 2 centinelas rojos + registro en los 2 ratchets | `test(plan-289): F0 - los dos centinelas del contexto por tracker` | — | 10 coll. → `6 passed, 4 xfailed` |
+| F1 | `test_ado_context.py` determinista | `test(plan-289): F1 - el test del contexto deja de depender del proyecto activo` | K7 | 10 → sin cambio |
+| F2 | el contador en los 3 runtimes (**los TRES**, §4.4) + sacar el `xfail` de la PATA B | `feat(plan-289): F2 - el contador de contexto sobrevive en los 3 runtimes` | F0 pata B, K2, K3 | 10 → `9 passed, 1 xfailed` |
+| F3 | normalizador puro | `feat(plan-289): F3 - normalizador de notas de GitLab a la forma canonica` | — | 17 → `16 passed, 1 xfailed` |
+| F4 | lector por proveedor + tope + `comments_total_disponibles` | `feat(plan-289): F4 - lector de comentarios por la costura de proveedor` | — | 24 → `23 passed, 1 xfailed` |
+| F5 | armador compartido + enmascarado + título + **sello** | `feat(plan-289): F5 - un solo armador de bloques, con enmascarado de secretos` | K6 | 32 → `31 passed, 1 xfailed` |
+| F6 | flag + dispatcher + **whitelist de `enrich` (§6.3)** + **contrato (§6.4)** + sacar el `xfail` de la PATA A | `feat(plan-289): F6 - el agente lee los comentarios del issue de GitLab` | F0 pata A, K1, K5, **K8** | 34 → `34 passed` |
+| F7 | doc + métrica + barrido de **22** suites | `docs(plan-289): F7 - documentacion, metrica y barrido de no-regresion` | K4 | 34 → sin cambio |
+
+### 8.2.1 Matriz de criterios cruzados (v2 — E2 del juez)
+
+Los criterios binarios de **todas** las fases se pusieron uno al lado del otro buscando pares
+mutuamente insatisfacibles. **La aritmética cierra** (10 → 10 → 17 → 24 → 32 → 34, con
+7+7+8+2 tests agregados y 4 marcadores `xfail` retirados en 2 tandas) y **no quedó ningún criterio
+de Fk que dependa de algo construido en Fk+1**. Los tres cruces que sí estaban rotos en la v1 y
+quedan resueltos:
+
+| Cruce | Estaba roto porque | Resuelto en |
+|---|---|---|
+| §4.4 ("Copilot **no cambia**") **vs** F2 (edita `agent_runner.py:809`) **vs** F0 PATA B (exige la llamada en `agent_runner.py::_run_in_background`) | un implementador que le creyera a §4.4 dejaba 1 de 3 patas roja y el criterio de F2 era inalcanzable | §4.4 (C5) |
+| F2 criterio (`9 passed, 1 xfailed`) **vs** F2 lista de archivos (no incluía el archivo del `xfail`) | con `strict=True`, no editarlo da `XPASS(strict)` = FAILED | F2 Archivos (C6) |
+| F4/F6 asertan `comments_truncated` / `attachments_skipped_reason` **vs** `enrich` que los descarta | el criterio de F4 pasa (mide una capa más abajo) y la capacidad prometida no existe | F6.3 + F6.4 (C1) |
 
 **Regla de commits:** uno por fase, con `git commit -- "<rutas propias>"`, precedido de
 `git status --short`. **Nunca** `push`, `--no-verify`, `amend`, `reset`, `rebase`, `stash`,
@@ -2001,65 +2530,152 @@ dos `.agent.md`, dos suites de test y el README. Sin capacidad nueva a cambio.
 ### 8.3 Definición de Hecho (DoD) — binaria, sin interpretación
 
 1. **F0..F7 commiteadas**, una por commit, en ese orden.
-2. `tests/test_plan289_contexto_por_tracker.py` → **`31 passed`**, cero `xfailed`, cero `xpassed`.
-3. `tests/test_plan289_stat_de_contexto.py` → **`6 passed`**.
-4. `tests/test_ado_context.py` → **`17 passed`** (era `9 failed, 8 passed`).
-5. Las **20 suites de §4.6** dan su baseline exacto. Las dos rojas de fábrica
-   (`test_harness_flags_help.py` = `4 failed, 4 passed`) dan **delta cero**.
+2. `tests/test_plan289_contexto_por_tracker.py` → **`34 passed`**, cero `xfailed`, cero `xpassed`,
+   y `--collect-only` → **34 tests**.
+3. `tests/test_plan289_stat_de_contexto.py` → **`6 passed`** (y `--collect-only` → 6).
+4. `tests/test_ado_context.py` → **`17 passed`** (era `9 failed, 8 passed`) y `--collect-only` →
+   **17 tests** (si baja, borraste un test).
+5. Las **22 suites de §4.6** dan su baseline exacto. Las **dos** rojas de fábrica
+   (`test_harness_flags_help.py` = `4 failed, 4 passed` y `test_plan218_coupling_ratchet.py` =
+   `3 failed, 7 passed`) dan **delta cero**. `test_plan281_ratchet_ado_only.py` sigue en
+   **`11 passed`**.
 6. `tests/test_harness_ratchet_meta.py` = **`4 passed`** y
    `tests/test_plan259_ratchet_script_parity.py` = **`12 passed`** después de **cada** registro.
 7. Los **2 archivos nuevos de test** están en **los DOS** ratchets, y **ninguno** de ellos está
-   además en `tests/harness_ratchet_allowlist.txt`.
-8. La flag `STACKY_TRACKER_CONTEXT_ENABLED` tiene sus **5 patas**, nace **ON**, y
+   además en `tests/harness_ratchet_allowlist.txt`. **`test_ado_context.py` y
+   `test_context_enrichment.py` siguen en la allowlist y NO se registran** (§4.3, regla dura 2).
+8. La flag `STACKY_TRACKER_CONTEXT_ENABLED` tiene sus **5 patas**, nace **ON**
+   (`config.py` con `"true"` + `FlagSpec(default=True)` + key en `_CURATED_DEFAULTS_ON`), y
    `tests/test_harness_flags.py` sale con **`0 failed`**.
 9. `grep -rn "ticket.tracker_type" services/ado_context.py services/tracker_context.py` → **cero
    resultados** (el ruteo va por el helper del 286, R7).
 10. `grep -rn "GitLabTrackerProvider(" services/tracker_context.py` → **cero resultados** (un solo
     constructor, P4).
-11. `services/tracker_context.py` **no** importa `db`, `models` ni `app`; los 2 archivos de test
-    nuevos tampoco.
-12. `README_ado_context.md` actualizado con el dispatcher, el título por tracker, el enmascarado, el
-    tope y el hueco de adjuntos.
-13. Sección `## 10. IMPLEMENTADO` agregada a este documento con el resultado **medido** por fase.
-14. **Trabajo del operador: ninguno.** Sin migración, sin re-configurar proyectos, sin flags que
+11. **(v2 / C2 — reescrito; la redacción de la v1 era INSATISFACIBLE.)** Aislamiento de la BD:
+    a. `grep -nE "^\s*(import|from)\s+(db|models|app)\b" services/tracker_context.py tests/test_plan289_contexto_por_tracker.py tests/test_plan289_stat_de_contexto.py`
+       → **cero resultados**. Ése es el criterio, y es sobre **sentencias propias**.
+    b. **El import transitivo de `db` y `models` vía `services/context_enrichment.py:24-25` es
+       CONOCIDO, inevitable y NO se persigue.** No abre conexión: `create_engine` es perezoso y
+       los 6 tests de F2 inyectan `session_factory=`.
+    c. Todos los comandos se corrieron con `DATABASE_URL` redirigido a un temporal (§4.1).
+    d. `grep -n "session_scope" tests/test_plan289_stat_de_contexto.py` → **cero resultados**.
+12. **(v2 / C1 — nuevo, es el bloqueante de la v1.)** Ninguna clave de `stats` se pierde:
+    `tests/test_plan289_contexto_por_tracker.py::test_enrich_propaga_TODAS_las_claves_que_produce_el_armador`
+    y `::test_enrich_no_inventa_esas_claves_en_el_camino_ADO` **pasan**, y
+    `services/ado_context.py` tiene el bucle de propagación de §6.3.
+13. **(v2 / C4.)** El censo de la PATA B verifica **cableado**, no sólo presencia: el `assert` de
+    `stats=` contra el nombre desempaquetado de `enrich_blocks` está en el archivo.
+14. `README_ado_context.md` actualizado con el dispatcher, el título por tracker, el enmascarado, el
+    tope, el hueco de adjuntos, **el sello/orden (§4.12) y la whitelist de `enrich` (§4.10)**.
+15. Sección `## 10. IMPLEMENTADO` agregada a este documento con el resultado **medido** por fase y
+    el total de ejecuciones del día (§4.11).
+16. **Trabajo del operador: ninguno.** Sin migración, sin re-configurar proyectos, sin flags que
     tocar a mano.
 
 ---
 
-## 9. Tabla de anclajes — verificados el 2026-08-02 abriendo cada archivo
+## 9. Tabla de anclajes — E1 del juez: los 34 verificados ABRIENDO cada archivo (2026-08-02)
 
-| Anclaje declarado | Estado | Detalle |
+**Método:** se abrió cada archivo y se comprobó la línea. **Ningún anclaje quedó sin verificar.**
+Resultado: **26 OK · 8 DESFASADOS (corregidos abajo con la línea real) · 0 INEXISTENTES.**
+Los 8 desfasados son de ±5 líneas y **ninguno sostenía una decisión de alcance**, por eso
+ninguno subió a bloqueante — pero **la v2 los corrige, no los borra**.
+
+| Anclaje declarado (v1) | Estado | Línea real / detalle |
 |---|---|---|
 | `services/ado_context.py:212` `build_ado_client(` | **OK** | |
-| `services/ado_context.py:217-220` `except` que traga | **OK** | |
+| `services/ado_context.py:217-220` `except` que traga | **OK** | `:218` es el `logger.warning`, `:219` el `append`, `:220` el `return [], stats` |
 | `services/ado_context.py:229` `fetch_comments(ado_id, top=30)` | **OK** | |
-| `services/ado_context.py:272-273` id/título del bloque | **OK** | |
-| `services/ado_context.py:371-374` guard de idempotencia | **OK** — línea exacta **`:372-373`** | el `if` está en `:373` |
-| `services/ado_client.py:431` `fetch_comments(ado_id, top=20)` | **OK** | el default es `20`, no `30`; el `30` lo pasa `ado_context` |
-| `services/ado_client.py:455` normalización a `{author,date,text}` | **OK** | |
-| `services/gitlab_provider.py:472` `fetch_comments(item_id)` sin `top` | **OK** | |
-| `services/gitlab_provider.py:463-470` `_fetch_notes_raw` | **OK** | |
-| `services/gitlab_provider.py:526-544` `fetch_attachments` | **línea real distinta** | el cuerpo va de **`:526` a `:542`** |
-| `services/context_enrichment.py:60` `enrich_blocks` | **OK** | |
-| `agent_runner.py:809` llamada a `enrich_blocks` | **OK** | |
+| `services/ado_context.py:272-273` id/título del bloque | **OK** | `:272` `"id": "ado-comments"`, `:273` `"title": "Comentarios ADO del ticket"` |
+| `services/ado_context.py:371-374` guard de idempotencia | **OK** | `:372` arma `existing_ids`, `:373` es el `if` |
+| **`services/ado_context.py:389-394` whitelist de 4 claves en `enrich`** | **AUSENTE EN LA v1 — es el bloqueante C1** | agregado en §4.10 y F6.3 |
+| **`services/ado_context.py:355-362` `stats` propio de `enrich`** | **AUSENTE EN LA v1** | tiene además `skipped` y `skipped_reason` |
+| **`services/ado_context.py:202-207` init de `stats` en `build_ado_context_blocks`** | **AUSENTE EN LA v1 — es C9** | el dispatcher va después de esto |
+| `services/ado_client.py:431` `fetch_comments(ado_id, top=20)` | **OK** | |
+| `services/ado_client.py:439` `$top` + **`order=desc`** | **OK** | v2/C11: implica que **ADO viene del más nuevo al más viejo** |
+| `services/ado_client.py:452-455` `displayName→uniqueName→"?"`, `date[:10]`, `{author,date,text}` | **OK** | |
+| `services/ado_client.py:458` `fetch_attachments(max_text_bytes=65_536)` | **OK** | |
+| `services/gitlab_provider.py:472` `fetch_comments(item_id)` sin `top` | **OK** | `:477` `fetch_all_comments` es el gemelo |
+| `services/gitlab_provider.py:463-470` `_fetch_notes_raw` | **OK** | `:466` es la URL `/issues/{item_id}/notes` |
+| `services/gitlab_provider.py:526-544` `fetch_attachments` | **DESFASADO** | cuerpo real **`:526-542`** (ya corregido en la v1) |
+| `services/gitlab_provider.py:651-653` claves reales de la nota | **OK** | `:651` `created_at`, `:652` `body`, `:653` `author.username` |
+| `services/gitlab_client.py` `_request_paginated` / `page_cap` | **OK** | def `:350`, `page_cap: int = _DEFAULT_PAGE_CAP` `:355`, tope 40 páginas × 100 = 4.000 ítems |
+| `services/context_enrichment.py:60` `enrich_blocks` | **OK** | firma `-> tuple[list[dict], dict | None]` en `:67` |
+| **`services/context_enrichment.py:24-25` `from db …` / `from models …` a nivel módulo** | **AUSENTE EN LA v1 — es el bloqueante C2** | agregado en P6 |
+| `services/context_enrichment.py:1475-1476` `return blocks, None` sin `ado_id` | **OK** | |
+| `services/context_enrichment.py:1481-1502` caché de lecturas | **DESFASADO** | real **`:1482-1508`**; y `ticket=ticket_obj` viaja en `:1497` y `:1517` |
+| `services/context_enrichment.py:431` `"ado-comments": 30` y `:434` `_DEFAULT_PRIORITY = 50` | **OK** | `:429` `harness-patterns: 45`, `:430` `ado-similar-tickets: 40` |
+| `agent_runner.py:809` llamada a `enrich_blocks` | **OK** | dentro de `_run_in_background` (`:718-1231`) |
 | `agent_runner.py:871` y `:1051` persistencia de `md["ado_context"]` | **OK** | |
-| `services/claude_code_cli_runner.py:677` `_ado_stats` descartado | **OK** | |
-| `services/codex_cli_runner.py:334` `_ado_stats` descartado | **OK** | |
-| `services/acceptance_criteria.py:42` | **OK la línea, MATIZ en el fondo** | `:42` es exactamente el `if (` del guard (cuerpo `:42-46`, comentario `:38-41`), dentro de `resolve`, def en `:25`. **Pero NO es un `except` que traga: es un `return ""` deliberado del Plan 281 F7.** Ver §6.2 |
-| `services/self_review.py:56` | **OK la línea, mismo matiz** | `:56` es el `if (` del guard (cuerpo `:56-60`, comentario `:50-55`), dentro de `_resolve_criteria`, def en `:43`. Mismo carácter deliberado |
-| `services/secret_masking.py:20` `mask_token_values` | **OK** | |
-| `services/project_context.py:201` `tracker_efectivo_de_ticket` | **OK** | |
-| `services/project_context.py:521-524` el `raise AdoConfigError` | **OK** | |
-| `services/tracker_provider.py:125` `get_tracker_provider` | **OK** | |
-| `services/gitlab_sync.py:144-145` `external_id`=id, `ado_id`=**iid** | **OK** | |
+| `services/claude_code_cli_runner.py:677` `_ado_stats` descartado | **OK** | `execution_id` en scope desde `:665` |
+| `services/codex_cli_runner.py:334` `_ado_stats` descartado | **OK** | `execution_id` en scope desde `:326` |
+| `services/acceptance_criteria.py:42` | **OK, y la lectura de fondo también** | `:42` es el `if (` del guard (cuerpo `:42-46`, comentario `:38-41`), dentro de `resolve`, def `:25`. **`return ""` deliberado del Plan 281 F7, no un `except`.** §7.6.2 bien fundado |
+| `services/self_review.py:56` | **OK, ídem** | `:56` es el `if (` (cuerpo `:56-60`, comentario `:50-55`), en `_resolve_criteria`, def `:43` |
+| `services/secret_masking.py:20` `mask_token_values` | **OK** | prefijos en `:11`, `MASK_PLACEHOLDER` en `:12`, regex `prefijo + [A-Za-z0-9_./+-]{8,}` en `:15-17` |
+| `services/project_context.py:201` `tracker_efectivo_de_ticket` | **DESFASADO** | def real **`:206`**; el paso 1 (columna explícita) está en `:239-240` |
+| `services/project_context.py:521-524` el `raise AdoConfigError` | **DESFASADO** | real **`:526-529`**; `def build_ado_client` en `:517` |
+| `services/project_context.py:417-422` paso 4 (proyecto activo) | **DESFASADO** | real **`:422-427`** |
+| `services/project_context.py:505` (lo consume `build_ado_client`) | **DESFASADO** | `def require_project_context` en **`:504`**, la llamada a `resolve_project_context` en **`:510`** |
+| `services/project_context.py:63-65` fail-closed de `tracker_is_azure_devops` | **DESFASADO** | real **`:70-72`** (`if not raw: return True`); def en `:46` |
+| `services/project_context.py:78` `ruteo_estricto_por_tracker` y `:106/:109` el memo | **OK** | |
+| `services/tracker_provider.py:125` `get_tracker_provider` | **OK** | `TrackerConfigError` de GitLab en `:132-134`; `TrackerApiError(status, message, *, kind=)` en `:48-52` |
+| `services/gitlab_sync.py:144-145` `external_id`=id, `ado_id`=**iid** | **OK** | v2: en esta base los **63** tickets `gitlab` tienen `ado_id == external_id` (0 divergencias). La decisión `str(ticket.ado_id)` es correcta igual |
 | `models.py:68-77` índice único `(stacky_project_name, tracker_type, external_id)` | **OK** | |
-| `db.py:39` `expire_on_commit=False` | **OK** | |
-| `backend/scripts/run_harness_tests.ps1` / `.sh` | **OK** | última entrada de ambos: `tests/test_plan287_ficha_ticket.py` |
-| `tests/harness_ratchet_allowlist.txt:10` y `:55` | **OK** | `test_ado_context.py` y `test_context_enrichment.py`, `# pendiente-de-triage` |
-| `tests/test_harness_flags.py:467-1099` `_CURATED_DEFAULTS_ON` | **OK** | **335 keys** (el docstring que dice "las 12 keys curadas" está **stale**) |
-| `tests/test_harness_flags.py:1174-1183` `test_default_known_only_for_curated` | **OK** | |
+| `models.py:50` `tracker_type default="azure_devops"` (R7) | **DESFASADO** | real **`:49`** |
+| `db.py:39` `expire_on_commit=False` | **OK** | `session_scope` (def `:500`) **commitea al salir** (`:504`) |
+| `backend/scripts/run_harness_tests.ps1` / `.sh` | **OK** | `.ps1:982` última entrada `"tests/test_plan287_ficha_ticket.py"`, `:983` cierra `)`; `.sh:1066` / `:1067`. Arrays abren en `.ps1:13` y `.sh:20` |
+| `tests/harness_ratchet_allowlist.txt:10` y `:55` | **OK** | `test_ado_context.py` y `test_context_enrichment.py`, `# pendiente-de-triage`. **207 líneas**, no 208 |
+| `tests/test_harness_flags.py:467-1099` `_CURATED_DEFAULTS_ON` | **OK** | abre en `:467` |
+| `tests/test_harness_flags.py:1174-1183` `test_default_known_only_for_curated` | **OK** | el `assert ==` exacto está en `:1179` |
 | `tests/test_harness_flags.py:1102` `test_every_registry_flag_is_categorized` | **OK** | |
-| `services/harness_flags.py:20-41` dataclass `FlagSpec` (14 campos) | **OK** | |
-| `services/harness_flags.py:112` `CategorySpec("paridad_proveedores", …)` | **OK** | 20 categorías + `otros` |
-| `services/harness_flags_help.py:25` `PLAIN_HELP` | **OK** | |
-| `config.py:1291-1298` `STACKY_GITLAB_ENABLED` default **`false`** | **OK** | en esta máquina está en `true` por `backend/.env:7` |
+| `services/harness_flags.py:20-41` dataclass `FlagSpec` (14 campos) | **OK** | contados: key, type, label, description, group, pair, env_only, default, requires, min_value, max_value, restart_required, reserved, reserved_reason |
+| `services/harness_flags.py:112` `CategorySpec("paridad_proveedores", …)` | **OK como catálogo, INSUFICIENTE como anclaje de la pata 3** | el **punto de inserción** de la key es `_CATEGORY_KEYS["paridad_proveedores"]`, que abre en **`:582`** |
+| `services/harness_flags_help.py:25` `PLAIN_HELP` | **OK** | `class PlainHelp` en `:18`; `JARGON_DENYLIST` (en el test, `:17-20`) incluye *prompt, token, gate, runtime, backend* — **los 4 textos propuestos están limpios y empiezan con "Si "**, verificado |
+| `config.py:1291-1298` `STACKY_GITLAB_ENABLED` default **`false`** | **DESFASADO** | el comentario está en `:1291-1292`; el `os.getenv(..., "false")` real es **`:1297-1299`**. En esta máquina está en `true` por `backend/.env:7` |
+| `services/business_preflight.py` `BLOCKER_MARKER` | **OK** | `:15`, `"🚫 BLOQUEANTE TÉCNICO"`; `STACKY_ADO_BLOCKER_BLOCK_ENABLED` default **`"true"`** (`config.py:1077-1078`), o sea la rama del blocker **corre** en los tests de F5 |
+| `services/provider_coupling_audit.py:206 / :125-127 / :314-315` | **OK las líneas, MAL el gate que se les atribuía** | ver C13: quien las corre es `test_plan281_ratchet_ado_only.py`, no `test_plan282_censo_paridad.py`. `_ADO_ONLY_EXCLUDED_PREFIXES` en `:168` |
+| `Stacky/agents/Developer.agent.md:178` y `FunctionalAnalyst.agent.md:51`,`:312` | **OK, pero INCOMPLETO** | son relativos a `backend/`. **Falta un tercero: `backend/agents/Developer.agent.md:176`** (segundo árbol de agentes). Ver C12 |
+| `services/README_ado_context.md:50` y `:59` | **OK, pero INCOMPLETO** | `ado-comments` aparece también en **`:92`** (idempotencia) |
+
+---
+
+## 11. Las dos [ADICIÓN ARQUITECTO] de la v2
+
+### 11.1 El test de contrato que mata la CLASE de bug (F6.4)
+
+**Problema que ataca.** El bloqueante C1 no fue un descuido del autor: fue un **modo de fallo
+invisible por diseño**. `enrich` copia `stats` clave por clave. Cualquier fase futura que agregue
+un contador —de este plan o de otro— lo va a perder, su test unitario va a pasar, y el operador va
+a ver un `0` sin explicación. Ya pasó dos veces en este repo con otras formas ("función construida,
+testeada, verde y jamás cableada"). **Arreglar las 3 claves de hoy no impide la cuarta.**
+
+**Qué se agrega.** `test_enrich_propaga_TODAS_las_claves_que_produce_el_armador`, que parchea el
+productor con un `stats` que incluye una **clave centinela inventada**, verifica **primero** que la
+centinela SÍ se pierde (calibración: si no se perdiera, el detector estaría roto y el test no
+probaría nada) y **después** que las claves reales SÍ llegan. Más su gemelo negativo, que congela
+que en el camino ADO el `metadata` sale **byte-idéntico**.
+
+**Por qué es barato y por qué no se puede fingir.** Son 25 líneas, cero red, cero BD, corre en
+milisegundos, y el mensaje de fallo **nombra la clave perdida** y **dice dónde agregarla**. Un
+modelo menor que agregue una clave y se olvide de la whitelist recibe una instrucción, no un
+misterio.
+
+### 11.2 El sello de procedencia dentro del bloque (F5 + F6)
+
+**Problema que ataca.** Toda la "declaración" que este plan prometía (`comments_truncated`,
+`attachments_skipped_reason`) vive en `metadata`, y `metadata` **es un canal frágil**: lo filtra
+`enrich`, lo tiran 2 de 3 runtimes (por eso existe F2) y **el agente no lo ve nunca**. El agente ve
+**el bloque**. Un bloque que diga "Comentarios del ticket (GitLab)" con 30 comentarios de un issue
+que tiene 200 es exactamente el trabajo a ciegas que el título del plan promete cerrar, sólo que
+con menos ceguera.
+
+**Qué se agrega.** Un parámetro `sello: str | None = None` en el armador compartido —**ausente por
+defecto, así que el camino ADO queda byte-idéntico y P1 se respeta**— que antepone una línea al
+contenido: `_(GitLab · 30 de 200 comentarios (los mas recientes), del mas antiguo al mas reciente)_`.
+Tres datos que el agente necesita y hoy no tiene: **de dónde vienen**, **si están completos** y
+**en qué sentido se leen** (§4.12: ADO los trae al revés que GitLab y nadie lo había notado).
+
+**Por qué acá y no en un plan aparte.** Porque el armador compartido se escribe **una sola vez**,
+en F5, y agregarle un parámetro opcional cuesta 3 líneas. Hacerlo después significa volver a tocar
+el único armador de los dos trackers, que es justamente lo que P2 quiere evitar. **Trabajo del
+operador: ninguno.**

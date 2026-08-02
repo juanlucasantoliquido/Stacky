@@ -201,3 +201,60 @@ def test_f6_8_b_mitad_de_contraste_con_el_prefijo_parcheado(entorno, monkeypatch
 
     with pytest.raises(AssertionError):
         _aserta_k2(entorno)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# F7 — Paridad de los 3 runtimes, probada EJECUTANDO el chokepoint
+# ══════════════════════════════════════════════════════════════════════════════
+
+@pytest.fixture
+def chokepoint(monkeypatch):
+    """Registra el post-hook SIN llamar create_app().
+
+    `monkeypatch.setattr(_POST_HOOKS, [])` antes de registrar deja la lista
+    limpia y monkeypatch la restaura sola al terminar.
+
+    `set_status` se neutraliza a propósito: es lo único de `on_execution_end`
+    que toca la BASE. El chokepoint que esta fase prueba es `_run_post_hooks`,
+    que sigue siendo el real y se ejecuta entero.
+    """
+    from services import ticket_status
+    from services import incident_dev_autocommit as ida
+
+    monkeypatch.setattr(ticket_status, "_POST_HOOKS", [])
+    monkeypatch.setattr(ticket_status, "set_status", lambda *a, **k: None)
+    ida.register(ticket_status.register_post_hook)
+    return ticket_status
+
+
+def test_f7_1_el_post_hook_queda_registrado(chokepoint):
+    """F7.1 — DIAGNÓSTICO, casi vacuo por construcción (asserta que el fixture
+    hizo lo que hizo). Se conserva solo para que, si F7.2 falla, se sepa si el
+    problema es el registro o el disparo. EL GATE REAL ES F7.2."""
+    from services.incident_dev_autocommit import maybe_open_pr_for_incident_dev
+
+    assert maybe_open_pr_for_incident_dev in chokepoint._POST_HOOKS
+
+
+def test_f7_2_el_chokepoint_compartido_dispara_el_auto_pr(entorno, chokepoint):
+    """F7.2 — EL GATE. Se llama `on_execution_end` de verdad (keyword-only) y se
+    comprueba que el efecto llegó al final de la cadena.
+
+    Un test que grepeara los 3 runners buscando "on_execution_end" sería un test
+    estático sobre un defecto de ejecución.
+    """
+    chokepoint.on_execution_end(
+        ticket_id=12, execution_id=34, final_status="completed", agent_type="incident_dev",
+    )
+
+    assert len(entorno.writer.llamadas) == 1
+    assert entorno.writer.llamadas[0][2] == "stacky/incidencia-12-exec-34"
+
+
+def test_f7_3_otro_agente_no_dispara_el_auto_pr(entorno, chokepoint):
+    """F7.3 — guarda la PRESENCIA del filtro para que F7.2 no pase por accidente."""
+    chokepoint.on_execution_end(
+        ticket_id=12, execution_id=34, final_status="completed", agent_type="incident",
+    )
+
+    assert entorno.writer.llamadas == []

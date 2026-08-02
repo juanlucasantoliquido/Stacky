@@ -30,6 +30,12 @@ import config  # importado a nivel módulo para poder parchear en tests
 # desconocido) tienen que ser visibles o el defecto vuelve a ser silencioso.
 logger = logging.getLogger(__name__)
 
+# Plan 291 F2 — SENTINELA INTERNO. NO es una acción de la API de GitLab: la API
+# solo conoce "create"/"update"/"delete"/"move"/"chmod". Lo devuelve
+# _detect_commit_action cuando la rama destino no existe, y commit_file lo
+# traduce a "create" antes de armar el body del POST.
+_ACCION_RAMA_NUEVA = "create_new_branch"
+
 
 def _assignee_strict_enabled() -> bool:
     """Plan 282 F3 — STACKY_GITLAB_ASSIGNEE_STRICT_ENABLED (default True).
@@ -804,12 +810,25 @@ class GitLabTrackerProvider:
         except Exception:
             return raw
 
-    def _detect_commit_action(self, path: str, branch: str) -> tuple[str, str | None]:
+    def _detect_commit_action(
+        self, path: str, branch: str, *, rama_existe: bool | None = None,
+    ) -> tuple[str, str | None]:
         """Devuelve ("create", None) si el archivo no existe; ("update", contenido_actual) si existe.
         GET /projects/:id/repository/files/:path?ref=branch.
         Captura TrackerApiError(404) → create. Propaga cualquier otro error (C1).
+
+        Plan 291 F2:
+          rama_existe=False → devuelve (_ACCION_RAMA_NUEVA, None) SIN hacer el GET de
+            archivos: si la rama no existe, ningún archivo puede existir en ella, y un
+            404 de ese endpoint NO probaría nada sobre el archivo. Ese sentinela es
+            INTERNO: commit_file lo traduce a la acción real "create" de la API.
+          rama_existe=None (default) → comportamiento IDÉNTICO al de hoy. Retro-
+            compatible: cualquier caller viejo se comporta igual.
+          rama_existe=True → comportamiento IDÉNTICO al de hoy.
         """
         from services.tracker_provider import TrackerApiError  # lazy import — patrón del repo
+        if rama_existe is False:
+            return _ACCION_RAMA_NUEVA, None
         proj_path = self._client._project_path()
         encoded_path = urllib.parse.quote(path, safe="")
         try:

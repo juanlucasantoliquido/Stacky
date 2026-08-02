@@ -122,3 +122,54 @@ def test_f1_7_devops_production_preserva_el_fallback_historico_main():
     from api.devops_production import _default_branch
 
     assert _default_branch(_ProviderDoble(""), "P") == "main"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# F2 — _detect_commit_action deja de confundir "no hay rama" con "no hay archivo"
+# ══════════════════════════════════════════════════════════════════════════════
+
+def test_f2_1_rama_inexistente_devuelve_el_sentinela_no_create():
+    """F2.1 — rama_existe=False → (_ACCION_RAMA_NUEVA, None), explícitamente NO "create".
+
+    Un 404 del endpoint de ARCHIVOS cuando la rama no existe no prueba nada
+    sobre el archivo: traducirlo a "create" es el diagnóstico equivocado.
+    """
+    provider, _cliente = _provider_con_doble()
+
+    accion, contenido = provider._detect_commit_action("a.py", "stacky/x", rama_existe=False)
+
+    assert accion == "create_new_branch"
+    assert accion != "create"
+    assert contenido is None
+
+
+def test_f2_2_rama_inexistente_no_hace_el_get_inutil():
+    """F2.2 — con rama_existe=False no se llama a _request ni una vez."""
+    provider, cliente = _provider_con_doble()
+
+    provider._detect_commit_action("a.py", "stacky/x", rama_existe=False)
+
+    assert cliente._request.call_count == 0
+
+
+def test_f2_3_rama_existente_con_404_de_archivo_sigue_siendo_create():
+    """F2.3 — NO-REGRESIÓN: rama_existe=True y 404 del archivo → ("create", None).
+
+    Guarda la PRESENCIA del comportamiento de hoy.
+    """
+    provider, cliente = _provider_con_doble()
+    cliente._request.side_effect = TrackerApiError(404, "not found", kind="not_found")
+
+    assert provider._detect_commit_action("a.py", "main", rama_existe=True) == ("create", None)
+
+
+def test_f2_4_caller_viejo_sin_el_keyword_se_comporta_igual_que_hoy():
+    """F2.4 — NO-REGRESIÓN: sin pasar rama_existe (caller viejo) → ("update", contenido).
+
+    Retro-compatibilidad probada, no prometida.
+    """
+    provider, cliente = _provider_con_doble()
+    encoded = base64.b64encode("hola".encode()).decode()
+    cliente._request.return_value = ({"content": encoded}, {})
+
+    assert provider._detect_commit_action("a.py", "main") == ("update", "hola")

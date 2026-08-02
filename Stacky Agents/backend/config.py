@@ -2612,4 +2612,33 @@ class Config:
     STACKY_MEETINGS_GRAPH_TENANT: str = os.getenv("STACKY_MEETINGS_GRAPH_TENANT", "")
     STACKY_MEETINGS_GRAPH_CLIENT_ID: str = os.getenv("STACKY_MEETINGS_GRAPH_CLIENT_ID", "")
 
+    # ── Plan 35 — Aprendizaje del arnés: patrones reutilizables ──────────────
+    # Las 4 nacen ON. Ninguna cae en las excepciones del barrido: (A) no hay
+    # loop, daemon, barrido ni llamada a modelo — la cosecha es un post-hook
+    # pasivo que lee metadata YA persistida y la reinyección es una query
+    # acotada dentro de un run que el operador pidió; (B) no escriben en ningún
+    # sistema del operador (los patrones van a memory_store, la BD de Stacky)
+    # ni le sacan ninguna decisión: la pista inyectada es explícitamente "no
+    # obligatoria", podable y de prioridad 45.
+    # ESTAS 4 ENTRADAS SON LO QUE HACE QUE LAS FLAGS NO SEAN INERTES: los
+    # consumidores leen `getattr(config, "<KEY>", <default>)`
+    # (services/harness_learning.py:428 y services/context_enrichment.py:255-266);
+    # sin atributo acá, el getattr cae SIEMPRE al default hardcodeado y el panel
+    # del operador no apaga nada.
+    STACKY_HARNESS_LEARNING_HARVEST_ENABLED: bool = os.getenv(
+        "STACKY_HARNESS_LEARNING_HARVEST_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_HARNESS_LEARNING_INJECT_ENABLED: bool = os.getenv(
+        "STACKY_HARNESS_LEARNING_INJECT_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    # Los 2 knobs numéricos NO declaran `default=` en su FlagSpec (rompería
+    # test_default_known_only_for_curated, que compara por igualdad de
+    # conjuntos): su default EFECTIVO se fija acá.
+    STACKY_HARNESS_LEARNING_INJECT_MAX: int = int(
+        os.getenv("STACKY_HARNESS_LEARNING_INJECT_MAX", "5")
+    )
+    STACKY_HARNESS_LEARNING_INJECT_MIN_CONF: float = float(
+        os.getenv("STACKY_HARNESS_LEARNING_INJECT_MIN_CONF", "0.5")
+    )
+
 config = Config()

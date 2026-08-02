@@ -155,6 +155,13 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_DOCS_CITATION_GATE_MIN_RATIO",
         "STACKY_DOCS_TICKET_MINING_MAX",
         "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS",
+        # Plan 35 — aprendizaje del arnés (cosecha + reinyección + 2 knobs).
+        # Reusan esta categoría en vez de crear "harness_learning": un grupo
+        # nuevo sin entrada acá pone rojo test_every_registry_flag_is_categorized.
+        "STACKY_HARNESS_LEARNING_HARVEST_ENABLED",
+        "STACKY_HARNESS_LEARNING_INJECT_ENABLED",
+        "STACKY_HARNESS_LEARNING_INJECT_MAX",
+        "STACKY_HARNESS_LEARNING_INJECT_MIN_CONF",
     ),
     "calidad_verificacion": (
         "STACKY_ACCEPTANCE_CRITERIA_INJECTION_ENABLED", "STACKY_ACCEPTANCE_CRITERIA_PROJECTS",
@@ -6959,6 +6966,62 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         group="global",
         env_only=False,
         requires="STACKY_MEETINGS_ENABLED",
+    ),
+    # ── Plan 35 — Aprendizaje del arnés: patrones reutilizables ──────────────
+    # Grupo "contexto_memoria" (categoría EXISTENTE, decisión C6 del plan): un
+    # grupo nuevo sin entrada en _CATEGORY_KEYS pone rojo el CI a propósito.
+    # Las 4 tienen env_only=False y su atributo correspondiente en config.py:
+    # sin eso quedarían INERTES (el getattr del consumidor cae al default).
+    FlagSpec(
+        key="STACKY_HARNESS_LEARNING_HARVEST_ENABLED",
+        type="bool",
+        label="Aprendizaje del arnés: cosechar (F1)",
+        description=(
+            "35.F1 — Post-run cosecha fallos/remedios como patrones. Pasivo, sin LLM."
+        ),
+        group="contexto_memoria",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_HARNESS_LEARNING_INJECT_ENABLED",
+        type="bool",
+        label="Aprendizaje del arnés: reinyectar (F2)",
+        description=(
+            "35.F2 — Inyecta pistas de fallos conocidos (podables, prioridad 45)."
+        ),
+        group="contexto_memoria",
+        env_only=False,
+        default=True,
+    ),
+    FlagSpec(
+        key="STACKY_HARNESS_LEARNING_INJECT_MAX",
+        # SIN default= A PROPOSITO: default_is_known es `spec.default is not
+        # None` (type-agnóstico), así que declarar default=5 la metería en
+        # known_keys y rompería test_default_known_only_for_curated, que compara
+        # por IGUALDAD contra _CURATED_DEFAULTS_ON. El default EFECTIVO (5) lo
+        # fija backend/config.py.
+        type="int",
+        label="Máx. patrones por run",
+        description="35.F2 — Cuántas pistas como máximo inyectar (default 5).",
+        group="contexto_memoria",
+        env_only=False,
+        # SIN requires= : `test_requires_map_is_frozen` congela el mapa de
+        # dependencias y declararlo metería drift en un ratchet que este plan no
+        # toca. La referencia canónica de §F4 tampoco lo declara.
+    ),
+    FlagSpec(
+        key="STACKY_HARNESS_LEARNING_INJECT_MIN_CONF",
+        # SIN default= A PROPOSITO: misma razón que la anterior. El default
+        # EFECTIVO (0.5) lo fija backend/config.py.
+        type="float",
+        label="Confianza mínima de pista",
+        description=(
+            "35.F2/F3 — Solo inyecta patrones con confidence >= este valor (default 0.5)."
+        ),
+        group="contexto_memoria",
+        env_only=False,
+        # SIN requires= : misma razón que la anterior.
     ),
 )
 

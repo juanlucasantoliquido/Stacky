@@ -1056,6 +1056,18 @@ _CURATED_DEFAULTS_ON = {
     #    type-agnóstico, y un `default=""` las volvería "conocidas".
     "STACKY_MEETINGS_ENABLED",              # Plan 283 — base local, sin daemon: nada lo justifica OFF
     "STACKY_MEETINGS_GRAPH_ENABLED",        # Plan 283 — solo lectura y on-demand
+    # Plan 35 — aprendizaje del arnés. Entran SOLO las 2 bool que declaran
+    # `default=True`. Ninguna cae en las excepciones: (A) no hay loop, daemon,
+    # barrido ni llamada a modelo — la cosecha es un post-hook pasivo sobre
+    # metadata YA persistida y la reinyección es una query acotada dentro de un
+    # run que el operador pidió; (B) escriben en memory_store (la BD de Stacky),
+    # nunca en el tracker del operador, y la pista inyectada es explícitamente
+    # "no obligatoria", podable y de prioridad 45: no le saca ninguna decisión.
+    # Los 2 knobs numéricos (…_INJECT_MAX, …_INJECT_MIN_CONF) NO van acá y por
+    # eso NO declaran `default=`: este assert es de IGUALDAD de conjuntos y
+    # `default_is_known` es `spec.default is not None`, o sea type-agnóstico.
+    "STACKY_HARNESS_LEARNING_HARVEST_ENABLED",  # Plan 35 F1 — cosecha pasiva, sin LLM
+    "STACKY_HARNESS_LEARNING_INJECT_ENABLED",   # Plan 35 F2 — pista podable, prioridad 45
 }
 
 
@@ -1369,3 +1381,86 @@ def test_copy_export_flag_registered():
     assert by_key["STACKY_COPY_EXPORT_ENABLED"].default is True
     assert categorize("STACKY_COPY_EXPORT_ENABLED") == "interfaz_ui"
     assert "STACKY_COPY_EXPORT_ENABLED" in _CURATED_DEFAULTS_ON
+
+
+# ---------------------------------------------------------------------------
+# Plan 35 — Aprendizaje del arnés: las 4 flags llegan al panel del operador
+# ---------------------------------------------------------------------------
+# Las 4 se registran en la categoría EXISTENTE "contexto_memoria" (decisión C6
+# del plan): crear un grupo nuevo sin agregarlo a _CATEGORY_KEYS pone rojo a
+# test_every_registry_flag_is_categorized a propósito.
+
+
+def test_harness_learning_harvest_flag_registered():
+    """Plan 35 F1 — la cosecha es apagable desde la UI: registrada, categorizada, default ON curado."""
+    from services.harness_flags import FLAG_REGISTRY, categorize
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    # Guarda POSITIVA: el mecanismo del test funciona sobre una key que ya existe
+    # en esta misma categoría. Si esto fallara, el test sería inservible.
+    assert "STACKY_MEMORY_INJECTION_ENABLED" in by_key
+    assert categorize("STACKY_MEMORY_INJECTION_ENABLED") == "contexto_memoria"
+
+    key = "STACKY_HARNESS_LEARNING_HARVEST_ENABLED"
+    assert key in by_key, f"{key} no está en FLAG_REGISTRY: la cosecha corre pero no se puede apagar"
+    assert by_key[key].type == "bool"
+    assert by_key[key].default is True
+    assert categorize(key) == "contexto_memoria"
+    assert key in _CURATED_DEFAULTS_ON
+
+
+def test_harness_learning_inject_flags_registered():
+    """Plan 35 F2 — las 3 flags de reinyección (master + 2 knobs) con sus tipos exactos."""
+    from services.harness_flags import FLAG_REGISTRY, categorize, default_is_known
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    # Guarda POSITIVA: una key numérica YA registrada en esta categoría.
+    assert "STACKY_CONTEXT_BUDGET_TOKENS" in by_key
+    assert categorize("STACKY_CONTEXT_BUDGET_TOKENS") == "contexto_memoria"
+
+    expected = {
+        "STACKY_HARNESS_LEARNING_INJECT_ENABLED": "bool",
+        "STACKY_HARNESS_LEARNING_INJECT_MAX": "int",
+        "STACKY_HARNESS_LEARNING_INJECT_MIN_CONF": "float",
+    }
+    for key, flag_type in expected.items():
+        assert key in by_key, f"{key} no está en FLAG_REGISTRY"
+        assert by_key[key].type == flag_type, f"{key}: type esperado {flag_type}"
+        assert categorize(key) == "contexto_memoria", f"{key} sin categorizar"
+
+    assert by_key["STACKY_HARNESS_LEARNING_INJECT_ENABLED"].default is True
+    assert "STACKY_HARNESS_LEARNING_INJECT_ENABLED" in _CURATED_DEFAULTS_ON
+
+    # Las 2 numéricas NO declaran default= (default_is_known es
+    # `spec.default is not None`, type-agnóstico) ni entran al set curado:
+    # test_default_known_only_for_curated compara por IGUALDAD de conjuntos.
+    # Su default EFECTIVO (5 y 0.5) lo fija backend/config.py.
+    for key in ("STACKY_HARNESS_LEARNING_INJECT_MAX", "STACKY_HARNESS_LEARNING_INJECT_MIN_CONF"):
+        assert by_key[key].default is None, f"{key} no debe declarar default= en su FlagSpec"
+        assert default_is_known(by_key[key]) is False
+        assert key not in _CURATED_DEFAULTS_ON
+
+
+def test_harness_learning_group_complete():
+    """Plan 35 F4 — las 4 keys, con tipos bool/bool/int/float, en FLAG_REGISTRY Y en _CATEGORY_KEYS."""
+    from services.harness_flags import FLAG_REGISTRY, _CATEGORY_KEYS, categorize
+
+    by_key = {s.key: s for s in FLAG_REGISTRY}
+    # Guarda POSITIVA: _CATEGORY_KEYS["contexto_memoria"] existe y ya tiene contenido.
+    assert "contexto_memoria" in _CATEGORY_KEYS
+    assert "STACKY_SKILLS_ENABLED" in _CATEGORY_KEYS["contexto_memoria"]
+
+    quad = {
+        "STACKY_HARNESS_LEARNING_HARVEST_ENABLED": "bool",
+        "STACKY_HARNESS_LEARNING_INJECT_ENABLED": "bool",
+        "STACKY_HARNESS_LEARNING_INJECT_MAX": "int",
+        "STACKY_HARNESS_LEARNING_INJECT_MIN_CONF": "float",
+    }
+    for key, flag_type in quad.items():
+        assert key in by_key, f"{key} falta en FLAG_REGISTRY"
+        assert by_key[key].type == flag_type
+        assert key in _CATEGORY_KEYS["contexto_memoria"], f"{key} falta en _CATEGORY_KEYS"
+        assert categorize(key) == "contexto_memoria"
+        # env_only=True dejaría la flag INERTE: sin atributo en Config, el
+        # getattr() del consumidor cae siempre al default hardcodeado.
+        assert by_key[key].env_only is False, f"{key}: env_only=True la vuelve inerte"

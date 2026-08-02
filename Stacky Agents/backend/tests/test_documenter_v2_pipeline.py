@@ -1036,3 +1036,294 @@ def test_plan284_pipeline_off_es_backward_compatible(monkeypatch, tmp_path,
     for clave in ("state", "written", "skipped", "health_before", "health_after",
                   "branch", "degraded", "diff_stat", "modes_skipped", "files"):
         assert clave in report, f"falta la clave historica {clave}"
+
+
+# ===========================================================================
+# Plan 285 F0 — red-team del pipeline: el contexto que NO cruza la barrera
+# ===========================================================================
+
+import contextlib  # noqa: E402
+
+
+class _NoopSessionPlan285:
+    """Sesion inerte: ningun test del 285 puede tocar backend/data/stacky_agents.db.
+    El corpus vivo tiene 51 chunks basura JUSTAMENTE por un pytest suelto."""
+
+    def __init__(self, sink):
+        self._sink = sink
+
+    def query(self, *a, **k):
+        return self
+
+    def filter_by(self, *a, **k):
+        return self
+
+    def delete(self, *a, **k):
+        return 0
+
+    def add(self, obj):
+        self._sink.append(obj)
+
+    def all(self):
+        return []
+
+    def order_by(self, *a, **k):
+        return self
+
+    def count(self):
+        return 0
+
+    def limit(self, *a, **k):
+        return self
+
+
+@contextlib.contextmanager
+def _scope_aislado(sink):
+    yield _NoopSessionPlan285(sink)
+
+
+def _corpus_temporal(monkeypatch, tmp_path):
+    """Arma un workspace con 3 docs de proyecto y 2 planes, y aisla la DB.
+
+    Devuelve (workspace_root, sink) donde sink acumula los DocChunk que se
+    habrian persistido.
+    """
+    from config import config
+    from services import docs_rag
+
+    monkeypatch.setattr(config, "STACKY_DOCS_TAXONOMY_ENABLED", True)
+    docs = tmp_path / "docs"
+    docs.mkdir(parents=True)
+    (docs / "arquitectura.md").write_text(
+        "# Arquitectura\n\n## Modulos\n\nCENTINELA_CORPUS_285 describe los modulos.\n",
+        encoding="utf-8")
+    (docs / "flujo.md").write_text(
+        "# Flujo\n\n## Datos\n\nEl flujo de datos entre integraciones.\n", encoding="utf-8")
+    (docs / "decisiones.md").write_text(
+        "# Decisiones\n\n## Tecnicas\n\nDecisiones tecnicas del proyecto.\n", encoding="utf-8")
+    (docs / "101_PLAN_X.md").write_text("# Plan X\n\nUn plan, no es doc.\n", encoding="utf-8")
+    (docs / "102_PLAN_Y.md").write_text("# Plan Y\n\nOtro plan.\n", encoding="utf-8")
+
+    sink: list = []
+    monkeypatch.setattr(docs_rag, "session_scope", lambda: _scope_aislado(sink))
+    return str(tmp_path), sink
+
+
+def test_f0_corpus_rag_del_proyecto_activo_no_esta_vacio(monkeypatch, tmp_path):
+    """K1: hoy docs_index tiene 51 chunks y CERO documentos reales.
+    ensure_corpus_indexed no existe: ImportError/AttributeError."""
+    from config import config
+    from services import doc_documenter, doc_taxonomy
+
+    ws, sink = _corpus_temporal(monkeypatch, tmp_path)
+    monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED", True, raising=False)
+
+    out = doc_documenter.ensure_corpus_indexed("P285", ws)
+
+    assert out["enabled"] is True, f"la flag no llego al hook: {out}"
+    assert out["chunks_indexed"] >= 3, f"el corpus quedo vacio: {out}"
+    assert out["skipped_plans"] == 2, f"el filtro de planes no reporto: {out}"
+
+    rutas = [getattr(c, "file_path", "") for c in sink]
+    unidas = " | ".join(rutas)
+    # PRESENCIA: los 3 docs reales del proyecto SI estan.
+    for esperado in ("arquitectura.md", "flujo.md", "decisiones.md"):
+        assert esperado in unidas, f"falto {esperado}: {unidas}"
+    # AUSENCIA (con su gemelo de presencia ya asertado arriba): ningun plan entro.
+    for r in rutas:
+        assert not doc_taxonomy.is_plan_doc(r.split("docs/")[-1]), \
+            f"un documento de plan contamino el corpus: {r}"
+
+
+def test_f0_el_corpus_llega_al_prompt(monkeypatch, tmp_path):
+    """C1: `grep -rn docs_rag doc_documenter.py` daba 0 lineas.
+    El corpus se indexaba y NADIE lo leia desde el Documentador."""
+    from config import config
+    from services import doc_documenter, docs_rag
+
+    monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED", True, raising=False)
+
+    class _Hit:
+        def __init__(self, fp, sh, txt):
+            self.file_path, self.section_heading, self.chunk_text = fp, sh, txt
+            self.score = 1.0
+
+    monkeypatch.setattr(docs_rag, "search_hybrid",
+                        lambda *a, **k: [_Hit("docs/arquitectura.md", "## Modulos",
+                                              "CENTINELA_CORPUS_285 describe los modulos.")])
+
+    bloque = doc_documenter._corpus_block("P285")
+
+    assert bloque is not None, "el retrieval no produjo bloque"
+    assert bloque["id"] == "docs-corpus"
+    assert "docs/arquitectura.md" in bloque["content"]
+    # El renderizador CLI ignora `kind`: la senal tiene que estar en title+content.
+    assert bloque["title"].strip() != ""
+
+
+def test_f0_las_etapas_de_papel_reciben_el_contexto_rico(monkeypatch, tmp_path,
+                                                         clean_run_registry):
+    """C2: con los defaults (STAGES on, AUTOAPPLY off) run_documenter retorna en
+    :1335 y las 3 llamadas al LLM que el operador LEE reciben UN solo bloque
+    (:1287). Todo el contexto rico del 284 vive del otro lado de la barrera HITL."""
+    from config import config
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_AUTOAPPLY", False)
+    monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED", True, raising=False)
+    monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED", False, raising=False)
+
+    capturados: list[list[dict]] = []
+
+    def _raw(prompt, blocks, project, runtime, **k):
+        capturados.append(list(blocks or []))
+        return "PLAN: documentar services/doc_graph.py. " + "d" * 300
+
+    monkeypatch.setattr(doc_documenter, "invoke_raw_stage", _raw)
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    monkeypatch.setattr(doc_documenter, "_corpus_block",
+                        lambda p: {"id": "docs-corpus", "kind": "docs-corpus",
+                                   "title": "DOC YA ESCRITA", "content": "x"},
+                        raising=False)
+    monkeypatch.setattr(doc_documenter, "_tickets_block_safe",
+                        lambda p: {"id": "tickets-signal", "kind": "t",
+                                   "title": "TICKETS", "content": "y"},
+                        raising=False)
+    _stub_para_run(monkeypatch, tmp_path)
+
+    doc_documenter.run_documenter("P", "claude_code_cli")
+
+    assert capturados, "no se ejecuto ninguna etapa de papel"
+    primera = capturados[0]
+    ids = [b.get("id") for b in primera]
+    assert len(primera) >= 4, f"la etapa PROPONER recibio {len(primera)} bloques: {ids}"
+    assert "docs-corpus" in ids, f"falta el corpus en la etapa de papel: {ids}"
+    assert "doc-subgraph" in ids, f"falta el subgrafo en la etapa de papel: {ids}"
+
+
+def test_f0_ticket_mining_queda_en_el_run_record(monkeypatch, tmp_path,
+                                                 clean_run_registry):
+    """K4: api/docs.py:363 expone `ticket_mining` y NADIE de produccion la
+    escribe => devuelve {} siempre.
+
+    autoapply_override=True es OBLIGATORIO: con los defaults run_documenter
+    retorna en :1335 sin llegar nunca al loop de modos (C11)."""
+    from config import config
+    from services import doc_documenter, doc_ticket_mining
+    from services.doc_ticket_mining import TicketVerdict
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
+    monkeypatch.setattr(config, "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED", True,
+                        raising=False)
+
+    ruidosos = [TicketVerdict(ticket_id=i, external_id=-i, tracker_type="demo",
+                              title=f"test {i}", verdict="noise",
+                              reasons=["sin_descripcion", "titulo_ruido"], score=-4)
+                for i in range(1, 6)]
+    bueno = TicketVerdict(ticket_id=99, external_id=99, tracker_type="gitlab",
+                          title="Refactor del motor de cobranzas", verdict="signal",
+                          reasons=["descripcion_extensa:900"], score=3)
+    monkeypatch.setattr(doc_ticket_mining, "mine_project_tickets",
+                        lambda *a, **k: {"enabled": True, "scope": "project",
+                                         "total": 6, "signal": 1, "noise": 5,
+                                         "by_tracker": {"demo": 5, "gitlab": 1},
+                                         "verdicts": ruidosos + [bueno],
+                                         "truncated": False})
+
+    guardado: dict = {}
+    monkeypatch.setattr(doc_documenter, "_persist_run_report",
+                        lambda pid, rep: guardado.update(rep))
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    _stub_para_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(doc_documenter, "_persist_run_report",
+                        lambda pid, rep: guardado.update(rep))
+    from services.doc_documenter import DocumenterMode, DocumenterPlan
+    monkeypatch.setattr(doc_documenter, "plan_documenter_run",
+                        lambda *a, **k: DocumenterPlan(
+                            status="SANA", modes=[DocumenterMode.RECONSTRUIR],
+                            notes_to_normalize=[], notes_to_update=[], reason="t"))
+
+    doc_documenter.run_documenter("P", "claude_code_cli", autoapply_override=True)
+
+    tm = guardado.get("ticket_mining") or {}
+    assert "reason_counts" in tm, f"la clave sigue muerta: {sorted(tm)}"
+    assert tm.get("noise_sample"), "no hay muestra de descartados"
+    for fila in tm["noise_sample"]:
+        assert fila.get("reasons"), f"un descartado sin motivo: {fila}"
+
+
+def test_f0_truncamiento_se_declara_en_el_prompt():
+    """El bloque afirma 'Se barrieron N tickets' con N YA RECORTADO por el cap
+    SQL (doc_ticket_mining.py:201). El modelo cree que vio todo."""
+    from services.doc_ticket_mining import TicketVerdict, build_tickets_context_block
+
+    signal = [TicketVerdict(ticket_id=1, external_id=1, tracker_type="gitlab",
+                            title="Historia documentable del modulo", verdict="signal",
+                            reasons=["descripcion_extensa:900"], score=3)]
+
+    truncado = build_tickets_context_block(
+        {"total": 500, "total_rows": 900, "truncated": True,
+         "signal": 1, "noise": 499, "verdicts": signal})
+    assert "TRUNCADO" in truncado["content"], \
+        f"el truncamiento SQL no se declara: {truncado['content'][:200]}"
+
+    # GEMELO: sin truncamiento de ningun eje, el bloque afirma COMPLETO.
+    completo = build_tickets_context_block(
+        {"total": 6, "total_rows": 6, "truncated": False,
+         "signal": 1, "noise": 5, "verdicts": signal})
+    assert "COMPLETO" in completo["content"], \
+        f"el barrido completo no se declara: {completo['content'][:200]}"
+    assert "TRUNCADO" not in completo["content"]
+
+
+def test_f0_subgrafo_llega_a_reconstruir_y_completar(monkeypatch):
+    """K5: el subgrafo se inyecta SOLO en ENRIQUECER (doc_documenter.py:339),
+    de CINCO modos (:56-61)."""
+    from services import doc_documenter
+    from services.doc_documenter import (DocumenterMode, DocumenterPlan,
+                                         build_context_for_mode)
+
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "doc-subgraph", "kind": "sg",
+                                   "title": "SG", "content": "x"})
+    monkeypatch.setattr(doc_documenter, "_read_note_content", lambda *a, **k: "cuerpo")
+    plan = DocumenterPlan(status="SANA", modes=[], notes_to_normalize=["a.md"],
+                          notes_to_update=["b.md"])
+
+    def _ids(mode):
+        return [b.get("id") for b in build_context_for_mode(mode, plan, "P")]
+
+    # PRESENCIA en los tres que documentan de cero o enriquecen.
+    for mode in (DocumenterMode.RECONSTRUIR, DocumenterMode.COMPLETAR,
+                 DocumenterMode.ENRIQUECER):
+        assert "doc-subgraph" in _ids(mode), f"{mode.value} no ve el grafo"
+    # AUSENCIA GEMELA en los dos que no lo necesitan.
+    for mode in (DocumenterMode.NORMALIZAR, DocumenterMode.ACTUALIZAR):
+        assert "doc-subgraph" not in _ids(mode), f"{mode.value} no deberia verlo"
+
+
+def test_f0_fallo_del_barrido_no_es_mudo(monkeypatch):
+    """El except de doc_documenter.py:336 traga con logger.warning: el modelo
+    documenta sin historia y nadie se entera."""
+    from services import doc_documenter, doc_ticket_mining
+    from services.doc_documenter import (DocumenterMode, DocumenterPlan,
+                                         build_context_for_mode)
+
+    def _boom(*a, **k):
+        raise RuntimeError("la base no responde")
+
+    monkeypatch.setattr(doc_ticket_mining, "mine_project_tickets", _boom)
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "doc-subgraph", "kind": "sg",
+                                   "title": "SG", "content": "x"})
+    plan = DocumenterPlan(status="SANA", modes=[], notes_to_normalize=[],
+                          notes_to_update=[])
+
+    blocks = build_context_for_mode(DocumenterMode.RECONSTRUIR, plan, "P")
+    titulos = " | ".join(str(b.get("title", "")) for b in blocks)
+
+    assert "NO disponible" in titulos, \
+        f"el fallo del barrido quedo mudo para el modelo: {titulos}"
+    # PRESENCIA de control: el resto del contexto sigue armandose.
+    assert any(b.get("id") == "sistema-readonly" for b in blocks)

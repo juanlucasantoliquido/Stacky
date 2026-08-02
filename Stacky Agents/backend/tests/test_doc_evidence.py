@@ -380,3 +380,124 @@ def test_plan284_coverage_delta_tabla():
 
     # Nunca lanza.
     assert compute_coverage_delta(None, None)["has_previous"] is False
+
+
+# ---------------------------------------------------------------------------
+# Plan 285 F0 — red-team: los defectos MEDIDOS, probados antes de arreglarlos
+#
+# Regla anti-falso-verde de este bloque: todo assert de AUSENCIA lleva su
+# GEMELO de PRESENCIA en el MISMO test. Un `not dest.exists()` pasa por
+# accidente si el path esta mal escrito o si apply_proposals rechazo por otro
+# motivo; el gemelo prueba que el mecanismo de escritura si funciona.
+# ---------------------------------------------------------------------------
+
+def _cuerpo_alucinado(n_lineas: int = 60) -> str:
+    """Un documento largo con UNA sola marca y CERO citas archivo:linea.
+
+    Es exactamente el documento que hoy pasa los dos gates y se escribe:
+    `marks_ok = any(...)` (doc_documenter.py:190) se conforma con la primera
+    linea, y evaluate_citation_gate devuelve passed=True con total==0 (:865).
+    """
+    lineas = ["[V] Este proyecto tiene una arquitectura modular."]
+    lineas += [f"Afirmacion sin respaldo numero {i} sobre el sistema."
+               for i in range(n_lineas - 1)]
+    return "\n".join(lineas)
+
+
+def _cuerpo_sano(rel_citada: str) -> str:
+    """Documento corto, densamente marcado y con una cita REAL verificable."""
+    return "\n".join([
+        f"[V] El modulo vive en {rel_citada}:1 y expone su contrato ahi.",
+        "[INF] Se infiere que el resto del sistema lo consume por ese contrato.",
+        "[NV] No se pudo verificar el historial de cambios.",
+    ])
+
+
+def _props_alucinada_y_sana(rel_citada: str):
+    from services.doc_documenter import DocProposal
+    mala = DocProposal(path="alucinado.md", action="create",
+                       content=_cuerpo_alucinado(), marks_ok=True, sources=[])
+    buena = DocProposal(path="sano.md", action="create",
+                        content=_cuerpo_sano(rel_citada), marks_ok=True,
+                        sources=[rel_citada])
+    return mala, buena
+
+
+def test_f0_documento_sin_citas_y_una_sola_marca_es_rechazado(monkeypatch, tmp_path):
+    """K3: hoy un doc de 60 lineas con 1 marca decorativa y 0 citas SE ESCRIBE."""
+    from config import config
+    from services.doc_documenter import apply_proposals
+
+    ws = tmp_path / "ws"
+    (ws / "services").mkdir(parents=True)
+    (ws / "services" / "real.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+    destino = tmp_path / "out"
+    destino.mkdir()
+
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED", True, raising=False)
+    mala, buena = _props_alucinada_y_sana("services/real.py")
+    apply_proposals([mala, buena], str(destino), None, workspace_root=str(ws))
+
+    # AUSENCIA: el alucinado no llega al disco.
+    assert not (destino / "alucinado.md").exists(), \
+        "el documento alucinado se escribio: el gate de rigor no existe o no corre"
+    # GEMELO DE PRESENCIA: el sano SI, en la MISMA llamada.
+    assert (destino / "sano.md").exists(), \
+        "el documento sano tampoco se escribio: el gate sobre-endurecio"
+
+
+def test_f0_rigor_rechaza_tambien_sin_workspace_root(monkeypatch, tmp_path):
+    """C4: con V2 OFF + citas OFF, run_documenter pasa workspace_root=None
+    (doc_documenter.py:1391) y `citations` queda None en todo el loop (:918).
+    Un gate colgado de `citations is not None` nace INERTE en produccion
+    mientras su test, que fuerza un workspace_root valido, da verde.
+    La densidad de marcas NO necesita citas para calcularse."""
+    from config import config
+    from services.doc_documenter import DocProposal, apply_proposals
+
+    destino = tmp_path / "out"
+    destino.mkdir()
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED", True, raising=False)
+
+    mala = DocProposal(path="alucinado.md", action="create",
+                       content=_cuerpo_alucinado(), marks_ok=True, sources=[])
+    # El gemelo NO puede pedir citas verificadas: sin workspace_root nadie las
+    # cuenta. Lo que prueba es que un doc DENSO en marcas si se escribe.
+    denso = DocProposal(
+        path="denso.md", action="create",
+        content="\n".join(["[V] Primera afirmacion verificada.",
+                           "[INF] Segunda afirmacion inferida.",
+                           "[NV] Tercera no verificable."]),
+        marks_ok=True, sources=[])
+    apply_proposals([mala, denso], str(destino), None, workspace_root=None)
+
+    assert not (destino / "alucinado.md").exists(), \
+        "sin workspace_root el gate de rigor quedo inerte (defecto C4)"
+    assert (destino / "denso.md").exists(), \
+        "el doc denso no se escribio: el gate rechaza por falta de citas que no pudo contar"
+
+
+def test_f0_densidad_de_marcas_por_afirmacion():
+    """La funcion nueva del 285. Hoy: ImportError."""
+    from services.doc_documenter import evaluate_rigor_gate
+
+    flojo = evaluate_rigor_gate(_cuerpo_alucinado(60), None)
+    assert flojo["passed"] is False
+    assert flojo["claims"] == 60 and flojo["marked"] == 1
+
+    denso = "\n".join([f"[V] Afirmacion verificada numero {i}." for i in range(6)] +
+                      [f"Afirmacion sin marca numero {i}." for i in range(4)])
+    fuerte = evaluate_rigor_gate(denso, {"total": 1, "ok": 1, "bad": []})
+    assert fuerte["passed"] is True
+    assert fuerte["marked"] == 6 and fuerte["claims"] == 10
+
+
+def test_f0_gate_conserva_el_caso_legitimo_todo_NV():
+    """Anti-sobre-endurecimiento: un doc corto e integramente [NV] sigue pasando."""
+    from services.doc_documenter import evaluate_rigor_gate
+
+    corto = "\n".join([f"[NV] No se pudo verificar el punto {i}." for i in range(5)])
+    out = evaluate_rigor_gate(corto, None)
+    assert out["passed"] is True and out["reason"] == ""
+    # PRESENCIA: el documento trivial se reconoce como tal, no pasa por casualidad.
+    assert out["claims"] == 5

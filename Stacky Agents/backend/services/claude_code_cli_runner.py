@@ -680,6 +680,8 @@ def _run_in_background(
             raw_blocks=raw_blocks,
             project_ctx=project_ctx,
             log=log,
+            # Plan 290 F2.4 — paridad de los 3 runtimes: el destino donde declarar.
+            execution_id=execution_id,
         )
         # Plan 289 F2 — el contador se persiste ACA, no al cerrar: antes se tiraba.
         context_enrichment.persistir_stats_de_contexto(

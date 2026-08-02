@@ -812,6 +812,9 @@ def _run_in_background(
             raw_blocks=raw_blocks,
             project_ctx=project_ctx,
             log=log,
+            # Plan 290 F2.4 — el destino donde el guard del preflight declara su
+            # degradación. El valor ya está en la mano: se usa una línea más abajo.
+            execution_id=execution_id,
         )
         # Plan 289 F2 — paridad: los 3 runtimes escriben por la MISMA funcion. Las
         # escrituras de :871 y :1051 se conservan (no se tocan): son idempotentes y

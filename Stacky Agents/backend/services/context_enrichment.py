@@ -64,6 +64,7 @@ def enrich_blocks(
     raw_blocks: list[dict] | None,
     project_ctx: Any = None,
     log: LogFn | None = None,
+    execution_id: int | None = None,
 ) -> tuple[list[dict], dict | None]:
     """Aplica el pipeline de enriquecimiento y devuelve (blocks, ado_stats).
 
@@ -131,7 +132,8 @@ def enrich_blocks(
     # de ado-epic-structured para que ambos estén disponibles cuando F5 valide
     # stacky_required_blocks.
     blocks = _inject_run_directive(
-        ticket_id=ticket_id, agent_type=agent_type, blocks=blocks, log=log
+        ticket_id=ticket_id, agent_type=agent_type, blocks=blocks, log=log,
+        execution_id=execution_id,
     )
     # Plan 213 F6 — lo que el operador confirmó o corrigió sobre los supuestos
     # del análisis anterior vuelve como bloque de máxima prioridad.
@@ -1259,7 +1261,8 @@ def _inject_assumption_corrections(ticket_id: int, agent_type: str, blocks: list
 
 
 def _inject_run_directive(
-    *, ticket_id: int | None, agent_type: str, blocks: list[dict], log: LogFn
+    *, ticket_id: int | None, agent_type: str, blocks: list[dict], log: LogFn,
+    execution_id: int | None = None,
 ) -> list[dict]:
     """Plan 133 F4 — Inyecta la directiva de ejecución (modo A/B) calculada
     server-side por business_preflight, como bloque de máxima prioridad
@@ -1285,7 +1288,13 @@ def _inject_run_directive(
     from services import business_preflight, run_ticket_refresh
 
     try:
-        _bp = business_preflight.evaluate(ticket_id=ticket_id, agent_type=agent_type)
+        # Plan 290 F2.4 — el `execution_id` viaja hasta acá desde los 3 runtimes para
+        # que el guard del sitio 5 tenga DÓNDE declarar su degradación. Sin esta
+        # cadena, `declarar()` nunca recibiría un id no nulo desde ningún camino de
+        # producción y F2 quedaría construida, verde y muerta.
+        _bp = business_preflight.evaluate(
+            ticket_id=ticket_id, agent_type=agent_type, execution_id=execution_id
+        )
     except Exception as exc:  # noqa: BLE001 — nunca bloquea el enrich
         log("warn", f"run-directive: business_preflight falló (continuando): {exc}")
         return blocks
@@ -1316,7 +1325,10 @@ def _inject_run_directive(
             "content": content,
         }
     else:
-        _reason = _bp.reason or (_bp.warnings[0] if _bp.warnings else "preflight_off")
+        # Plan 290 F2.3 — `warnings[0]` tiraba del segundo en adelante. Hoy hay uno
+        # solo, así que esto es un no-op observable; se cambia igual porque el día
+        # que un sitio agregue el segundo, se perdía sin aviso.
+        _reason = _bp.reason or ("; ".join(_bp.warnings) if _bp.warnings else "preflight_off")
         content = "\n".join([
             "modo: indeterminado",
             f"razon: {_reason}",

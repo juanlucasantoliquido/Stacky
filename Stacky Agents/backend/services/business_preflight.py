@@ -41,7 +41,13 @@ def _evaluate_functional(
     ado_state: str,
     stacky_project_name: str | None,
     tracker_project: str | None,
+    execution_id: int | None = None,
 ) -> BusinessPreflightResult:
+    # Plan 290 F2 — `execution_id` llega hasta acá para que el guard del sitio 5
+    # (:94) pueda DECLARAR su degradación. El `default=None` no es cosmético:
+    # `_PREDICATES` está tipado `Callable[..., BusinessPreflightResult]`, así que un
+    # segundo predicado que no lo acepte reventaría el despacho para TODOS los
+    # agent_types. Con el default, un predicado que lo ignore sigue andando.
     from config import config
     from services.project_context import (
         ruteo_estricto_por_tracker,
@@ -92,10 +98,28 @@ def _evaluate_functional(
     # degradar algo que hoy funciona. El censo mide igual: lo que exige es que la
     # función pregunte por el tracker ANTES de construir el cliente.
     if not tracker_is_azure_devops(project_name) and ruteo_estricto_por_tracker():
+        _motivo = "tracker no-ADO: sin cross-check de comentarios"
+        # Plan 290 F2 — la degradación deja rastro. NO cambia el retorno: el valor
+        # neutro de abajo es byte-idéntico al de antes de este plan. Import LOCAL,
+        # mismo idioma que :46-49, para evitar ciclos y seguir siendo parcheable.
+        # El provider sale de `tracker_declarado_del_proyecto(project_name)` y NO de
+        # `tracker_efectivo_de_ticket`: en este scope no hay ningún objeto `Ticket`
+        # (evaluate lo suelta al cerrar su sesión, :189), así que el hermano que
+        # resuelve por NOMBRE es el único aplicable.
+        from services import capability_degradation
+        from services.project_context import tracker_declarado_del_proyecto
+
+        capability_degradation.declarar(
+            execution_id=execution_id,
+            capability="tracker.comments.list",
+            reason=_motivo,
+            provider=tracker_declarado_del_proyecto(project_name) or "desconocido",
+            site="business_preflight._evaluate_functional",
+        )
         return BusinessPreflightResult(
             ok=True,
             mode=None,
-            warnings=["tracker no-ADO: sin cross-check de comentarios"],
+            warnings=[_motivo],
         )
 
     # Modo B — comentario bloqueante en el ÚLTIMO comentario (por fecha).
@@ -158,7 +182,9 @@ _PREDICATES: dict[str, Callable[..., BusinessPreflightResult]] = {
 }
 
 
-def evaluate(*, ticket_id: int, agent_type: str) -> BusinessPreflightResult:
+def evaluate(
+    *, ticket_id: int, agent_type: str, execution_id: int | None = None
+) -> BusinessPreflightResult:
     """Evalúa predicados de negocio para agent_type. NUNCA levanta excepción.
 
     Sin predicados registrados para ese agent_type, flag OFF, ticket
@@ -194,6 +220,7 @@ def evaluate(*, ticket_id: int, agent_type: str) -> BusinessPreflightResult:
             ado_state=ado_state,
             stacky_project_name=stacky_project_name,
             tracker_project=tracker_project,
+            execution_id=execution_id,  # Plan 290 F2 — destino donde declarar
         )
     except Exception as exc:  # noqa: BLE001 — el preflight nunca bloquea por su propio error
         logger.warning("business_preflight.evaluate falló (fail-open): %s", exc)

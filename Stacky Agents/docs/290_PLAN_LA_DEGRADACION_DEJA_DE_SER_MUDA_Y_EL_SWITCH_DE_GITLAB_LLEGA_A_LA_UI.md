@@ -14,7 +14,7 @@
 |---|---|---|
 | **F0** — centinelas en ROJO | **IMPLEMENTADA** | `2 failed`: `TypeError: enrich_blocks() got an unexpected keyword argument 'execution_id'` + `AssertionError` sobre `metadata['capability_degraded'] is None`. Cero `ImportError`. Ratchets 820→821 / 756→757. |
 | **F1** — registro de degradación | **IMPLEMENTADA** | `9 passed`. El caso de C7 se probó **contra el defecto**: sacando `log = log or _noop_log` el archivo da `1 failed, 8 passed` con `TypeError: 'NoneType' object is not callable` — y es el único que cae. Ratchets 821→822 / 757→758. |
-| **F2** — `business_preflight` declara | pendiente | |
+| **F2** — `business_preflight` declara | **IMPLEMENTADA** | `6 passed`. Cadena completa construida (3 firmas de `business_preflight` + 4 ediciones de `context_enrichment` + **los 3** runtimes). F0 caso 1 pasó a VERDE **por el camino de producción**, no por el test. Gate de paridad probado contra el defecto: sacando el kwarg de `codex_cli_runner` da `AssertionError: runtimes que NO pasan execution_id: ['Codex CLI (codex_cli_runner.py:334)']`. Delta cero en `test_business_preflight` (12), `test_context_enrichment` (8), `test_run_directive_block` (7), `test_plan289_contexto_por_tracker` (34), `test_plan281_sitios_ado_only` (18). Ratchets 822→823 / 758→759. |
 | **F3** — `self_review` declara | pendiente | |
 | **F4** — el aviso llega a la interfaz | pendiente | |
 | **F5** — switch de GitLab en la UI | pendiente | |

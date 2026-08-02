@@ -464,6 +464,9 @@ $HarnessTestFiles = @(
   # Plan 291 - el auto-PR avisa si el arreglo trae un secreto
   "tests/test_plan291_autocommit_redaccion.py"
   "tests/test_plan291_guardia_repo.py"
+  # 2026-08-02 - chequeo previo de repo git + resultado visible del auto-PR
+  "tests/test_incident_dev_pr_preflight.py"
+  "tests/test_incident_dev_pr_deteccion_git.py"
   # ===== Plan 154 F1 - reclasificacion de tests sin gatear (verdes aislados) =====
   # Plan 102 - Publicar en un paso
   "tests/test_plan102_one_click_flag.py"
@@ -1003,7 +1006,9 @@ $HarnessTestFiles = @(
   "tests/test_plan292_sync_incremental.py",
   "tests/test_plan292_watermark_store.py",
   "tests/test_plan292_flags.py",
-  "tests/test_plan292_paridad_runtimes.py"
+  "tests/test_plan292_paridad_runtimes.py",
+  # Plan 293 - tablero de trabajo: git guiado para no tecnicos
+  "tests/test_plan293_catalogo.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

@@ -517,6 +517,9 @@ HARNESS_TEST_FILES=(
   # — Plan 291 — el auto-PR avisa si el arreglo trae un secreto —
   tests/test_plan291_autocommit_redaccion.py
   tests/test_plan291_guardia_repo.py
+  # — 2026-08-02 — chequeo previo de repo git + resultado visible del auto-PR —
+  tests/test_incident_dev_pr_preflight.py
+  tests/test_incident_dev_pr_deteccion_git.py
   # — Fix deploy: index.html sin cache-control servia UI vieja tras rebuild —
   tests/test_spa_index_no_cache.py
   # ===== Plan 154 F1 · reclasificacion de tests sin gatear (verdes aislados) =====
@@ -1088,6 +1091,8 @@ HARNESS_TEST_FILES=(
   tests/test_plan292_watermark_store.py
   tests/test_plan292_flags.py
   tests/test_plan292_paridad_runtimes.py
+  # Plan 293 - tablero de trabajo: git guiado para no tecnicos
+  tests/test_plan293_catalogo.py
 )
 
 pass=0

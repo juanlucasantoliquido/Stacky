@@ -1071,6 +1071,7 @@ HARNESS_TEST_FILES=(
   tests/test_plan289_stat_de_contexto.py
   # Plan 290 - La degradacion deja de ser muda
   tests/test_plan290_degradacion_declarada.py
+  tests/test_plan290_registro_degradacion.py
 )
 
 pass=0

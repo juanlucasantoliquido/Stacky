@@ -13,7 +13,7 @@
 | Fase | Estado | Evidencia |
 |---|---|---|
 | **F0** — centinelas en ROJO | **IMPLEMENTADA** | `2 failed`: `TypeError: enrich_blocks() got an unexpected keyword argument 'execution_id'` + `AssertionError` sobre `metadata['capability_degraded'] is None`. Cero `ImportError`. Ratchets 820→821 / 756→757. |
-| **F1** — registro de degradación | pendiente | |
+| **F1** — registro de degradación | **IMPLEMENTADA** | `9 passed`. El caso de C7 se probó **contra el defecto**: sacando `log = log or _noop_log` el archivo da `1 failed, 8 passed` con `TypeError: 'NoneType' object is not callable` — y es el único que cae. Ratchets 821→822 / 757→758. |
 | **F2** — `business_preflight` declara | pendiente | |
 | **F3** — `self_review` declara | pendiente | |
 | **F4** — el aviso llega a la interfaz | pendiente | |

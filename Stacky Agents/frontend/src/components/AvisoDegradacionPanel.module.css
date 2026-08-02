@@ -1,0 +1,84 @@
+/* Plan 290 F4 — aviso de capacidades degradadas en el detalle de la ejecución.
+   SOLO tokens del tema: el ratchet de UI prohíbe hex crudos, y `--color-*` no
+   existe en theme.css. Los tokens usados acá están todos definidos (theme.css
+   :6-38) y tienen contraparte en el tema claro (:181-197). */
+.block {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  border-radius: var(--radius);
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.intro {
+  margin: 0 0 10px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.grupo {
+  margin: 0 0 8px;
+}
+
+.proveedor {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.items {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border-muted);
+}
+
+/* La marca acompaña al color: el color solo no puede ser el único portador de
+   información (mismo criterio de accesibilidad que statusMark). */
+.marca {
+  flex: 0 0 auto;
+  color: var(--warn);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.texto {
+  min-width: 0;
+}
+
+.capacidad {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.motivo {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.sitio {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}

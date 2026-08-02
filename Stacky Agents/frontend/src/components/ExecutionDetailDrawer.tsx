@@ -7,6 +7,7 @@ import ExecutionInsightBlock from "./ExecutionInsightBlock";
 import RunTraceBlock from "./RunTraceBlock";
 import EgressSentinelBlock from "./EgressSentinelBlock";
 import type { EgressSentinelData } from "./EgressSentinelBlock";
+import AvisoDegradacionPanel from "./AvisoDegradacionPanel";
 import ExecutionErrorAnalysisBlock from "./ExecutionErrorAnalysisBlock";
 import ContractBadge from "./ContractBadge";
 import StructuredOutput from "./StructuredOutput";
@@ -197,6 +198,11 @@ export default function ExecutionDetailDrawer({ executionId, onClose }: Props) {
             <EgressSentinelBlock
               sentinel={(metadata.egress_sentinel ?? null) as EgressSentinelData | null}
             />
+
+            {/* Plan 290 F4 — qué capacidades salteó Stacky por el tracker del
+                proyecto. Sin degradaciones el componente devuelve null y no se
+                monta: cero ruido en toda ejecución que no degradó. */}
+            <AvisoDegradacionPanel metadata={metadata} />
 
             {/* Plan 127 C1 — análisis de error con IA local (forense, HITL) */}
             <ExecutionErrorAnalysisBlock

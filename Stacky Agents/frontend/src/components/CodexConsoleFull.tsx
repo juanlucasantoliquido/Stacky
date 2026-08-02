@@ -417,10 +417,17 @@ function RepoPanel({
   }
 
   const grouped = groupFilesByStatus(statusBody.files);
+  // Plan 293 F5 — las SIETE claves de GroupedRepoFiles, enumeradas a mano.
+  // "En conflicto" va PRIMERO porque es lo urgente. Si se agrega una clave a
+  // GroupedRepoFiles y no se agrega acá, esos archivos DESAPARECEN de la
+  // pantalla sin que `tsc` ni ningún test lo noten: por eso hay un caso de
+  // texto que vigila que las siete estén (plan293Consumidor.test.ts).
   const groups: Array<[string, typeof statusBody.files]> = [
+    ["En conflicto", grouped.conflictos],
     ["Modificados", grouped.modified],
     ["Nuevos", grouped.new],
     ["Borrados", grouped.deleted],
+    ["Renombrados", grouped.renombrados],
     ["Sin seguimiento", grouped.untracked],
     ["Otros", grouped.otros],
   ];

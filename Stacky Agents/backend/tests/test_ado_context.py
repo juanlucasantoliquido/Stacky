@@ -74,6 +74,27 @@ def _clean_env(monkeypatch):
     monkeypatch.delenv("ADO_CONTEXT_ATTACH_MAX_TEXT_FILES", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _proyecto_ado_determinista(monkeypatch):
+    """Plan 289 F1 — Estos tests llamaban a build_ado_context_blocks() SIN project_name,
+    asi que resolve_project_context caia al PROYECTO ACTIVO del operador
+    (project_context.py:422-427). En una maquina con proyecto activo GitLab, 9 de los 17
+    fallaban con 'no usa Azure DevOps'. El rojo no era del modulo: era del entorno.
+    Esta fixture fija un contexto ADO sintetico y no cambia ningun assert.
+    """
+    import types
+
+    import services.project_context as pc
+
+    ctx = types.SimpleNamespace(
+        stacky_project_name="ADOTEST", tracker_type="azure_devops",
+        tracker_project="ProyectoADO", organization="orgtest",
+        base_url=None, tracker_group=None, workspace_root=None,
+        auth_path=None, vscode_port=None,
+    )
+    monkeypatch.setattr(pc, "resolve_project_context", lambda *a, **k: ctx)
+
+
 # ── is_enrichment_enabled ────────────────────────────────────────────────────
 
 def test_default_enriches_all_known_agents():

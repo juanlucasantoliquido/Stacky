@@ -1,6 +1,6 @@
 # Plan 293 — El trabajo se publica sin terminal: tablero de Git guiado para quien no sabe Git
 
-**Estado:** **v3 — IMPLEMENTADO.** F1..F13 completas y cableadas de punta a punta; falta sólo la subida de evidencias y la doc de sistema (§Pendientes). 2026-08-02, rama `docs/plan-279`, **sin push**.
+**Estado:** **v3 — IMPLEMENTADO Y CERRADO.** Las **14 fases** completas y cableadas de punta a punta. **241 tests de backend + 103 de frontend, todos verdes.** 2026-08-02, rama `docs/plan-279`, **sin push**. 2026-08-02, rama `docs/plan-279`, **sin push**.
 
 ## Estado de implementación por fase (2026-08-02)
 
@@ -21,7 +21,7 @@
 | **F11b** — **evidencias** (guardar, previsualizar, adjuntar) | ✅ **IMPL** | `871658e0` | **26 passed**. Validación por **bytes reales**, no por extensión. ADO **declara** la degradación |
 | **F12** — diccionario de errores | ✅ **IMPL** | `fed80e7c` | **9 passed**. Contraste con inyección verificada: 3 rojos |
 | **F13** — la pantalla, 13 patas | ✅ **IMPL** | `4c5ca572` (API) + `b12f8da4` (pantalla) | **103 passed** en 9 archivos, `tsc` limpio. Contraste: sacar el tab del grupo y romper `isGateOn` ⇒ 2 patas rojas |
-| **F14** — cierre | ⚠️ **PARCIAL** | — | Ratchets y no-regresión hechos; `docs/sistema/17-*.md` **no** escrita |
+| **F14** — cierre | ✅ **IMPL** | `2ab5f9ad` | `docs/sistema/17-tablero-de-trabajo.md` + enlace en `INDEX.md` (mapa **y** staleness_check) + huella `git_partial_commit_during_merge` (63 → **64**). Ratchets y no-regresión verificados |
 
 **Total propio: 241 tests de backend + 103 de frontend, todos verdes.**
 
@@ -43,7 +43,7 @@
 
 ### Pendientes reales, con nombre y apellido
 
-1. **F14** — `docs/sistema/17-tablero-de-trabajo.md` y la huella de regresión en `error_fingerprints.json`. **Es lo único del MVP que queda sin hacer.**
+1. **Nada del MVP queda sin hacer.** Las 14 fases están implementadas y verificadas.
 2. **Humo con credenciales reales** (§11.3): trabajo del operador, **no** es criterio de ninguna fase.
 3. **Basura a limpiar:** quedaron sin commitear `frontend/src/components/ReposGitPanel.tsx` y su `.module.css`, de un intento anterior **abandonado y sin test**. La pantalla buena es `pages/WorkbenchPage.tsx`. Son archivos muertos: borrarlos es decisión del operador.
 

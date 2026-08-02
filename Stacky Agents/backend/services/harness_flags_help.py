@@ -2367,6 +2367,37 @@ PLAIN_HELP: dict[str, PlainHelp] = {
         off_effect="Si lo bajás a cero: no se reintenta ningún paso y cualquier demora se convierte en una falla.",
         example="Como cuántas veces volvés a apretar un botón que tarda antes de asumir que no anda.",
     ),
+    # ── Plan 283 — Reuniones: de la transcripción a los pendientes ──────────
+    "STACKY_MEETINGS_ENABLED": PlainHelp(
+        what="Activa la sección Reuniones: pegás lo que se dijo en una reunión y Stacky arma el resumen, los compromisos y sus fechas.",
+        on_effect="Si la activás (viene así de fábrica): aparece la sección Reuniones y podés cargar reuniones, ver su resumen y los compromisos que salieron.",
+        off_effect="Si la apagás: la sección Reuniones desaparece del menú y sus pantallas dejan de responder. Lo que ya habías guardado queda intacto.",
+        example="Salís de una reunión de una hora, pegás el archivo de subtítulos que deja Teams, y te quedan el resumen y los cinco compromisos con fecha.",
+    ),
+    "STACKY_MEETINGS_GRAPH_ENABLED": PlainHelp(
+        what="Deja que Stacky lea tu calendario de Microsoft y baje lo que se dijo en una reunión sin que lo copies a mano.",
+        on_effect="Si la activás (viene así de fábrica): aparece el botón para traer las reuniones próximas de tu calendario y bajar su contenido con un click.",
+        off_effect="Si la apagás: queda solo el camino manual, que sigue funcionando entero: pegás o subís el archivo de la reunión y todo lo demás es igual.",
+        example="En vez de abrir Teams, descargar el archivo y pegarlo, apretás Actualizar y las reuniones de la semana aparecen listas para trabajar.",
+    ),
+    "STACKY_MEETINGS_PUBLISH_ENABLED": PlainHelp(
+        what="Permite convertir un compromiso de la reunión en una tarea real de tu sistema de tickets.",
+        on_effect="Si la activás: cada compromiso muestra un botón para crear la tarea, y aun así Stacky te pide confirmar antes de escribir nada afuera.",
+        off_effect="Si la apagás (viene así de fábrica): los compromisos se ven y se editan dentro de Stacky, pero no se puede crear ninguna tarea afuera.",
+        example="De la reunión sale 'Ana revisa el informe el viernes': con esto activado y tu confirmación, queda creada la tarea con la frase textual que la respalda.",
+    ),
+    "STACKY_MEETINGS_GRAPH_TENANT": PlainHelp(
+        what="Nombre o identificador de la organización de Microsoft contra la que Stacky pide permiso para leer tu calendario.",
+        on_effect="Si lo completás: el pedido de permiso va directo a tu organización, que es lo que suelen exigir las cuentas de empresa.",
+        off_effect="Si lo dejás vacío: se usa el valor genérico, que sirve para cuentas personales y para la mayoría de las organizaciones.",
+        example="Tu empresa te da una dirección como contoso.onmicrosoft.com: la pegás acá una sola vez y no la volvés a tocar.",
+    ),
+    "STACKY_MEETINGS_GRAPH_CLIENT_ID": PlainHelp(
+        what="Identificador de la aplicación que tu organización dio de alta para que Stacky pueda pedirte permiso de lectura del calendario.",
+        on_effect="Si lo completás: al entrar a Reuniones hacés el ingreso una sola vez, y Stacky guarda cifrada en tu equipo la credencial que le devuelven.",
+        off_effect="Si lo dejás vacío: la conexión con el calendario queda apagada con un aviso que dice qué falta, y el camino manual sigue disponible.",
+        example="Es una cadena larga con guiones que te pasa quien administra el Microsoft de tu empresa: se pega una vez y queda guardada.",
+    ),
 }
 
 

@@ -496,6 +496,14 @@ _CATEGORY_KEYS: dict[str, tuple[str, ...]] = {
         "STACKY_NIGHT_FOUNDRY_TOKEN_BUDGET",
         # Costura OLA 1 (P0, 2026-07-28)
         "STACKY_DOCS_GRAPH_EXPLORER_ENABLED",   # Plan 268 — explorador read-only del grafo de docs
+        # Plan 283 — calendario de reuniones, minutas y pendientes accionables.
+        # Capacidad opt-in que el operador usa a demanda desde su propio tab:
+        # no dispara trabajo ni costo dentro de otro flujo (D7: cero daemons).
+        "STACKY_MEETINGS_ENABLED",              # Plan 283 — master del modulo de reuniones
+        "STACKY_MEETINGS_GRAPH_ENABLED",        # Plan 283 — conector de calendario, solo lectura
+        "STACKY_MEETINGS_PUBLISH_ENABLED",      # Plan 283 — publicar un pendiente al tracker (OFF)
+        "STACKY_MEETINGS_GRAPH_TENANT",         # Plan 283 — organizacion de Microsoft
+        "STACKY_MEETINGS_GRAPH_CLIENT_ID",      # Plan 283 — identificador de la aplicacion
     ),
     "comparador_bd": (
         "STACKY_DB_COMPARE_CONNECT_TIMEOUT_SEC",  # Plan 122
@@ -6841,6 +6849,116 @@ FLAG_REGISTRY: tuple[FlagSpec, ...] = (
         ),
         group="global",
         requires="STACKY_CONSOLE_FULLSCREEN_ENABLED",
+    ),
+    # =====================================================================
+    # Plan 283 — El calendario de reuniones: de la transcripcion a los
+    # pendientes accionables. Cinco entradas: un master, dos de conexion con
+    # el calendario de Microsoft (valores, no interruptores) y la de
+    # publicacion, que es la unica que escribe afuera.
+    # REGLA R4 (profundidad 1): las 4 hijas cuelgan del master, y el master NO
+    # declara `requires`.
+    # =====================================================================
+    FlagSpec(
+        key="STACKY_MEETINGS_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON de tests/test_harness_flags.py.
+                        # Nace ON: ninguna excepcion aplica. Lee y escribe SOLO en
+                        # la base local de Stacky, y no gasta nada en reposo (D7
+                        # prohibe hilos, temporizadores y barridos; hay un gate por
+                        # AST que lo verifica).
+        label="Reuniones: minutas y pendientes a partir de una transcripcion",
+        description=(
+            "Plan 283 - Habilita la seccion Reuniones: el operador pega o sube la "
+            "transcripcion de una reunion y Stacky devuelve minuta, decisiones, "
+            "riesgos y pendientes con su fecha. Cada pendiente exige una cita "
+            "textual verificada contra la transcripcion. OFF: la seccion no se "
+            "pinta y sus rutas devuelven 404."
+        ),
+        group="global",
+        env_only=False,  # editable por UI (regla dura operator-config-always-via-ui)
+    ),
+    FlagSpec(
+        key="STACKY_MEETINGS_GRAPH_ENABLED",
+        type="bool",
+        default=True,   # Curada en _CURATED_DEFAULTS_ON de tests/test_harness_flags.py.
+                        # Nace ON: conector de SOLO LECTURA y ON-DEMAND (se dispara
+                        # por request del operador, nunca solo). "Prerequisito no
+                        # garantizado en una instalacion default" NO es excepcion
+                        # valida: sin credenciales degrada con un aviso accionable
+                        # y el camino manual sigue entero.
+        label="Traer las reuniones y sus transcripciones del calendario de Microsoft",
+        description=(
+            "Plan 283 - Permite listar las reuniones proximas del calendario del "
+            "operador y descargar la transcripcion de una reunion sin copiarla a "
+            "mano. Solo lectura y solo cuando el operador lo pide: no hay ningun "
+            "proceso que sincronice por su cuenta. OFF: queda el camino manual, "
+            "que cubre el ciclo completo."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_MEETINGS_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_MEETINGS_PUBLISH_ENABLED",
+        # SIN default= A PROPOSITO (regla dura): una flag default OFF NO declara
+        # default=False, porque `default_is_known(spec)` es literalmente
+        # `spec.default is not None` y eso la meteria en el conjunto que
+        # test_default_known_only_for_curated exige que sea EXACTAMENTE
+        # _CURATED_DEFAULTS_ON. El OFF vive SOLO en config.py.
+        # Nace OFF por EXCEPCION (B): es lo unico de este plan que ESCRIBE en un
+        # sistema real del operador — crea work items en su Azure DevOps o
+        # GitLab via create_item(). Mismo precedente que
+        # STACKY_PIPELINE_NL_EDIT_COMMIT_ENABLED: ver y proponer va ON, escribir
+        # de verdad va OFF. Aun encendida exige una confirmacion de un solo uso.
+        type="bool",
+        label="Convertir un pendiente de la reunion en una tarea del sistema de tickets",
+        description=(
+            "Plan 283 - Decide si Stacky puede crear tareas reales a partir de los "
+            "pendientes de una reunion. Nace APAGADA: aun encendida exige una "
+            "confirmacion explicita por cada publicacion, y nunca asigna un "
+            "responsable que no se haya podido verificar contra los que hablaron "
+            "en la reunion. OFF: el pendiente se ve y se edita solo dentro de Stacky."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_MEETINGS_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_MEETINGS_GRAPH_TENANT",
+        # SIN default= A PROPOSITO: es `str` y `default_is_known` es
+        # type-agnostico (`spec.default is not None`), asi que declarar cualquier
+        # valor rompe la biyeccion con _CURATED_DEFAULTS_ON. El default efectivo
+        # es "" en config.py, y "common" se resuelve en services/graph_client.py
+        # cuando el valor esta vacio: asi el panel no miente sobre lo que hay.
+        type="str",
+        label="Organizacion de Microsoft del calendario",
+        description=(
+            "Plan 283 - Nombre o identificador de la organizacion de Microsoft "
+            "contra la que se pide el permiso de lectura del calendario. Vacio "
+            "usa el valor generico, que sirve para cuentas personales y para la "
+            "mayoria de las organizaciones."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_MEETINGS_ENABLED",
+    ),
+    FlagSpec(
+        key="STACKY_MEETINGS_GRAPH_CLIENT_ID",
+        # SIN default= A PROPOSITO: misma razon que la anterior.
+        # El SECRETO no vive aca: el refresco de la sesion se guarda cifrado con
+        # DPAPI en backend/projects/<PROYECTO>/auth/graph_auth.json.
+        type="str",
+        label="Identificador de la aplicacion registrada en Microsoft",
+        description=(
+            "Plan 283 - Identificador publico de la aplicacion que la organizacion "
+            "dio de alta para que Stacky pueda pedir permiso de lectura del "
+            "calendario. No es un secreto y no se guarda cifrado; la credencial "
+            "de sesion si se cifra en el equipo del operador. Vacio deshabilita "
+            "la conexion con un aviso, sin romper el camino manual."
+        ),
+        group="global",
+        env_only=False,
+        requires="STACKY_MEETINGS_ENABLED",
     ),
 )
 

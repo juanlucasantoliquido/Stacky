@@ -261,6 +261,7 @@ def init_db() -> None:
         StackyMemorySyncOutbox,
     )
     import services.ci_inference_cache  # noqa: F401  (Plan 71 — caché CI agnóstico)
+    from services.meetings_store import Meeting, MeetingActionItem  # noqa: F401  (Plan 283)
 
     Base.metadata.create_all(engine)
     _migrate_add_columns()

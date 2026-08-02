@@ -89,6 +89,8 @@ from .parity import parity_bp  # Plan 218 F8 — matriz de paridad ADO ↔ GitLa
 from .setup_guide import bp as setup_guide_bp  # Plan 259 — guía de configuración verificable
 from .devops_actions import bp as devops_actions_bp  # Plan 267 — catálogo de acciones DevOps
 from .pipeline_copilot import bp as pipeline_copilot_bp  # Plan 279 — sesión del copiloto de pipelines
+from .meetings import bp as meetings_bp  # Plan 283 — reuniones, minutas y pendientes
+from .meetings_publish import bp as meetings_publish_bp  # Plan 283 — publicar un pendiente
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 api_bp.register_blueprint(ado_manager_bp)
@@ -127,6 +129,12 @@ api_bp.register_blueprint(harness_flags_bp)
 api_bp.register_blueprint(setup_guide_bp)  # Plan 259 (paquete P2)
 api_bp.register_blueprint(devops_actions_bp)  # Plan 267 (paquete P3)
 api_bp.register_blueprint(pipeline_copilot_bp)  # Plan 279 — url_prefix="/pipeline-copilot" → /api/pipeline-copilot/...
+# Plan 283 — reuniones. url_prefix="/meetings" y "/meetings-publish" (R6: NUNCA
+# declarar /api acá). El apagado por flag vive DENTRO de cada ruta (404), no en
+# el registro: el registro se evalúa una sola vez al importar, así que gatearlo
+# acá obligaría a reiniciar el backend para que el operador viera el efecto.
+api_bp.register_blueprint(meetings_bp)  # Plan 283 — /api/meetings/...
+api_bp.register_blueprint(meetings_publish_bp)  # Plan 283 — /api/meetings-publish/...
 api_bp.register_blueprint(metrics_bp)
 api_bp.register_blueprint(reports_bp)
 api_bp.register_blueprint(diag_bp)

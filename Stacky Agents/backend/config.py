@@ -2584,4 +2584,32 @@ class Config:
         "STACKY_CONSOLE_AUDIT_LOG_ENABLED", "true"
     ).strip().lower() in ("1", "true", "yes")
 
+    # ── Plan 283 — Calendario de reuniones: minutas y pendientes accionables ──
+    # Estos 5 `os.getenv` son el default EFECTIVO (el `default=` de la FlagSpec
+    # es solo hint de la UI). Ademas satisfacen la pata 7 (consumidor real en
+    # codigo productivo): `tests/test_flag_wiring.py::_production_corpus`
+    # declara textualmente que config.py SI cuenta.
+    #
+    # Las 3 bool: las dos primeras nacen ON (leen y escriben SOLO en la base
+    # local de Stacky, sin daemon ni barrido: D7 prohibe cualquier hilo, asi que
+    # no gastan nada en reposo). La de publicacion nace OFF por EXCEPCION (B):
+    # crea work items en el Azure DevOps o GitLab REAL del operador.
+    STACKY_MEETINGS_ENABLED: bool = os.getenv(
+        "STACKY_MEETINGS_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_MEETINGS_GRAPH_ENABLED: bool = os.getenv(
+        "STACKY_MEETINGS_GRAPH_ENABLED", "true"
+    ).strip().lower() in ("1", "true", "yes")
+    STACKY_MEETINGS_PUBLISH_ENABLED: bool = os.getenv(
+        "STACKY_MEETINGS_PUBLISH_ENABLED", "false"
+    ).strip().lower() in ("1", "true", "yes")
+    # Las 2 `str` defaultean a "" A PROPOSITO. El default real del tenant
+    # ("common") vive como DEFAULT_TENANT en services/graph_client.py y se
+    # aplica cuando este valor esta vacio: una flag `str` no puede declarar
+    # `default=` en su FlagSpec sin romper `test_default_known_only_for_curated`
+    # (el predicado es `spec.default is not None`), asi que si config.py
+    # resolviera "common" el panel mostraria "" y estaria mintiendo.
+    STACKY_MEETINGS_GRAPH_TENANT: str = os.getenv("STACKY_MEETINGS_GRAPH_TENANT", "")
+    STACKY_MEETINGS_GRAPH_CLIENT_ID: str = os.getenv("STACKY_MEETINGS_GRAPH_CLIENT_ID", "")
+
 config = Config()

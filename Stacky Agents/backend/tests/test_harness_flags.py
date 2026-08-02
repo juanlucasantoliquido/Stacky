@@ -1046,6 +1046,16 @@ _CURATED_DEFAULTS_ON = {
     "STACKY_DOCS_TICKET_MINING_ENABLED",    # Plan 284 — barrido de sólo lectura, on-demand
     "STACKY_DOCS_PIPELINE_STAGES_ENABLED",  # Plan 284 — planear/criticar/verificar es lectura
     "STACKY_DOCS_RADIOGRAPHY_ENABLED",      # Plan 284 — lectura derivada del grafo
+    # Plan 283 — reuniones. Entran SOLO las 2 bool que declaran `default=True`.
+    # Las otras 3 keys del plan NO van acá y este assert es de IGUALDAD de
+    # conjuntos, así que agregarlas lo pondría en rojo con un "Faltantes":
+    #  - STACKY_MEETINGS_PUBLISH_ENABLED nace OFF (excepción B: escribe en el
+    #    Azure DevOps o GitLab REAL del operador) y por eso no declara `default=`.
+    #  - las 2 `str` (…_GRAPH_TENANT, …_GRAPH_CLIENT_ID) tampoco declaran
+    #    `default=`: `default_is_known` es `spec.default is not None`, o sea
+    #    type-agnóstico, y un `default=""` las volvería "conocidas".
+    "STACKY_MEETINGS_ENABLED",              # Plan 283 — base local, sin daemon: nada lo justifica OFF
+    "STACKY_MEETINGS_GRAPH_ENABLED",        # Plan 283 — solo lectura y on-demand
 }
 
 

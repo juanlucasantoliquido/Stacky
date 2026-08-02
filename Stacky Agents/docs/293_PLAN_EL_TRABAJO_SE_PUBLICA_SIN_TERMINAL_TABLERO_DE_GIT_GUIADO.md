@@ -1,6 +1,6 @@
 # Plan 293 — El trabajo se publica sin terminal: tablero de Git guiado para quien no sabe Git
 
-**Estado:** **v3 — PARCIALMENTE IMPLEMENTADO.** Backend **COMPLETO y cableado**; frontend **a medias**. 2026-08-02, rama `docs/plan-279`, **sin push**.
+**Estado:** **v3 — IMPLEMENTADO.** F1..F13 completas y cableadas de punta a punta; falta sólo la subida de evidencias y la doc de sistema (§Pendientes). 2026-08-02, rama `docs/plan-279`, **sin push**.
 
 ## Estado de implementación por fase (2026-08-02)
 
@@ -17,19 +17,26 @@
 | **F8** — enviar | ✅ **IMPL** | `49b09eac` | **9 passed** contra un remoto `--bare` real |
 | **F9** — ramas | ✅ **IMPL** | `d0916e99` | **22 passed** (junto con F10) |
 | **F10** — historial | ✅ **IMPL** | `d0916e99` | idem |
-| **F11** — propuesta REST + evidencias | ❌ **NO IMPLEMENTADA** | — | Ver §Pendientes |
+| **F11** — propuesta REST | ✅ **IMPL (sin evidencias)** | `c0b871ec` | **20 passed**. Los **2 casos negativos**: `link_attachment` nunca se llama, `redact_secrets` nunca se importa |
 | **F12** — diccionario de errores | ✅ **IMPL** | `fed80e7c` | **9 passed**. Contraste con inyección verificada: 3 rojos |
-| **F13** — la pantalla (13 patas) | ⚠️ **PARCIAL: sólo el backend** | `4c5ca572` | **15 passed**. Las 9 rutas `/api/workbench/...` existen y responden. **Las 13 patas del tab NO están hechas** |
-| **F14** — cierre | ⚠️ **PARCIAL** | — | Ratchets y no-regresión hechos; docs de sistema **no** escritas |
+| **F13** — la pantalla, 13 patas | ✅ **IMPL** | `4c5ca572` (API) + `b12f8da4` (pantalla) | **103 passed** en 9 archivos, `tsc` limpio. Contraste: sacar el tab del grupo y romper `isGateOn` ⇒ 2 patas rojas |
+| **F14** — cierre | ⚠️ **PARCIAL** | — | Ratchets y no-regresión hechos; `docs/sistema/17-*.md` **no** escrita |
 
-**Total propio: 195 tests de backend + 30 de frontend, todos verdes.**
+**Total propio: 215 tests de backend + 103 de frontend, todos verdes.**
+
+### Cómo lo abre el operador
+
+1. Panel de opciones → categoría **Capacidades opt-in**. `STACKY_WORKBENCH_ENABLED` ya viene **encendida**.
+2. En la barra lateral, grupo **Trabajo** → **"Publicar mi trabajo"**. También por URL directa `/publicar` o con `Ctrl+K` → *"Ir a Publicar mi trabajo"*.
+3. Con las dos opciones de escritura apagadas (el valor de fábrica) el tablero **muestra todo y no puede tocar nada**: los botones aparecen deshabilitados y el aviso dice cuál encender.
+4. Para guardar y traer: encender **"Dejar que el tablero guarde cambios en tu carpeta"**. Para enviar y proponer: **"Dejar que el tablero envíe tu trabajo al servidor"**.
 
 ### Pendientes reales, con nombre y apellido
 
-1. **F11 completa** — `change_proposal.py` (descripción + `create_merge_request`) y `work_evidence.py` (subida de capturas). **Nada de esto existe todavía.**
-2. **F13 frontend** — las **13 patas** del tab `publicar`, `WorkbenchPage.tsx` y el asistente de 5 pasos. Quedaron sin commitear `ReposGitPanel.tsx` y su `.module.css`, **incompletos y sin test**.
-3. **F14** — `docs/sistema/17-tablero-de-trabajo.md` y el registro de la huella de regresión.
-4. **Humo con credenciales reales** (§11.3): sigue siendo trabajo del operador y **no** es criterio de ninguna fase.
+1. **Evidencias (`work_evidence.py`)** — subir capturas y embeberlas en la propuesta. **No existe.** El renderizador de la descripción ya acepta el parámetro `evidencias` y lo pinta; lo que falta es el almacenamiento y el `upload_attachment`.
+2. **F14** — `docs/sistema/17-tablero-de-trabajo.md` y la huella de regresión en `error_fingerprints.json`.
+3. **Humo con credenciales reales** (§11.3): trabajo del operador, **no** es criterio de ninguna fase.
+4. **Basura a limpiar:** quedaron sin commitear `frontend/src/components/ReposGitPanel.tsx` y su `.module.css`, de un intento anterior **abandonado y sin test**. La pantalla buena es `pages/WorkbenchPage.tsx`. Son archivos muertos: borrarlos es decisión del operador.
 
 ### Desvíos respecto del plan, medidos al implementar
 

@@ -166,7 +166,8 @@ def mine_project_tickets(project_name: str, *, max_tickets: int | None = None,
     """
     from config import config as _cfg
     empty = {"enabled": False, "scope": scope, "total": 0, "signal": 0,
-             "noise": 0, "by_tracker": {}, "verdicts": [], "truncated": False}
+             "noise": 0, "by_tracker": {}, "verdicts": [], "total_rows": 0,
+             "truncated": False}
     if not bool(getattr(_cfg, "STACKY_DOCS_TICKET_MINING_ENABLED", False)):
         return empty
     cap = int(max_tickets if max_tickets is not None
@@ -201,6 +202,10 @@ def mine_project_tickets(project_name: str, *, max_tickets: int | None = None,
         return {"enabled": True, "scope": scope, "total": len(verdicts),
                 "signal": signal, "noise": len(verdicts) - signal,
                 "by_tracker": by_tracker, "verdicts": verdicts,
+                # Plan 285 F3.1 — `total_rows` se calculaba, se usaba solo para
+                # el booleano de abajo y se tiraba. Sin el, el bloque no puede
+                # decir CUANTOS tickets faltaron.
+                "total_rows": total_rows,
                 "truncated": total_rows > cap}
     except Exception as exc:
         logger.warning("doc_ticket_mining: barrido fallo para %s: %s", project_name, exc)
@@ -235,16 +240,106 @@ def build_tickets_context_block(mining: dict, *, max_chars: int = 12000
         cuerpo += "\n[...corpus truncado]"
     total = int(mining.get("total", 0) or 0)
     ruido = int(mining.get("noise", 0) or 0)
+
+    # ── Plan 285 F3.1 — el truncamiento deja de ser silencioso ───────────────
+    # Son DOS ejes independientes, no uno:
+    #   1) el cap SQL: `total` YA viene recortado a max_tickets, asi que decir
+    #      "se barrieron N" con N recortado es una afirmacion falsa;
+    #   2) el cap de caracteres de ESTE bloque: el cuerpo lista menos 'signal'
+    #      de los que hay.
+    # Declarar "COMPLETO" con cualquiera de los dos activo cambia una afirmacion
+    # falsa por otra mas enfatica. Ademas `total` cuenta signal+noise mientras
+    # el cuerpo lista SOLO signal: la asimetria tambien se declara.
+    truncado_sql = bool(mining.get("truncated", False))
+    total_rows = int(mining.get("total_rows", total) or total)
+    if not truncado_sql and not truncado:
+        encabezado = (
+            f"Se barrieron los {total} tickets del proyecto (barrido COMPLETO). "
+            f"{len(signal)} aportan historia documentable y {ruido} se "
+            f"descartaron por ruido/obsolescencia. Abajo se listan los "
+            f"{len(lineas)} 'signal'."
+        )
+    else:
+        encabezado = (
+            f"Se leyeron {total} tickets; {len(signal)} aportan historia "
+            f"documentable y {ruido} se descartaron por ruido/obsolescencia."
+        )
+        if truncado_sql:
+            encabezado += (
+                f" ATENCION: barrido TRUNCADO — se leyeron {total} de "
+                f"{total_rows} tickets, faltan {max(0, total_rows - total)}. NO "
+                f"afirmes cobertura total de la historia del proyecto."
+            )
+        if truncado:
+            encabezado += (
+                f" ATENCION: la lista de abajo se corto por tamano (TRUNCADO): "
+                f"se muestran {len(lineas)} de {len(signal)} tickets 'signal'."
+            )
     return {
         "id": "tickets-signal",
         "kind": "tickets-signal",
         "title": "HISTORIA DEL PROYECTO SEGÚN SUS TICKETS (triage determinista)",
         "content": (
-            f"Se barrieron {total} tickets; {len(signal)} aportan historia "
-            f"documentable y {ruido} se descartaron por ruido/obsolescencia.\n"
+            encabezado + "\n"
             f"Usá estos tickets como CONTEXTO HISTÓRICO. No los cites como "
             f"archivo:línea: no son código, y una cita inventada te va a hacer "
             f"rechazar el archivo por el gate de citas.\n\n" + cuerpo
         ),
         "source": {"type": "tickets", "readonly": True},
     }
+
+
+def build_triage_report(mining: dict, *, max_noise: int = 50) -> dict:
+    """Plan 285 F3 — resumen AUDITABLE del triage, para el operador.
+
+    Devuelve SIEMPRE las mismas keys:
+      {"total", "total_rows", "truncated", "signal", "noise", "by_tracker",
+       "noise_sample": [{"external_id","tracker_type","title","score","reasons"}],
+       "reason_counts": {"<motivo>": int}}
+
+    `mining["verdicts"]` son dataclasses TicketVerdict, NO dicts: se leen con
+    getattr. noise_sample lleva los PEORES primero (score ascendente) hasta
+    max_noise. reason_counts cuenta sobre TODO el barrido, no sobre la muestra:
+    si contara sobre la muestra, el operador leeria un histograma sesgado.
+    Nunca lanza: ante basura devuelve la forma vacia.
+    """
+    vacio = {"total": 0, "total_rows": 0, "truncated": False, "signal": 0,
+             "noise": 0, "by_tracker": {}, "noise_sample": [],
+             "reason_counts": {}}
+    try:
+        m = mining or {}
+        verdicts = m.get("verdicts") or []
+        total = int(m.get("total", 0) or 0)
+        reason_counts: dict[str, int] = {}
+        noise: list = []
+        for v in verdicts:
+            for r in (getattr(v, "reasons", None) or []):
+                # Los motivos con dato pegado ("descripcion_extensa:900") se
+                # agrupan por su prefijo: un histograma con 200 claves de una
+                # sola ocurrencia no le sirve a nadie.
+                clave = str(r).split(":", 1)[0]
+                reason_counts[clave] = reason_counts.get(clave, 0) + 1
+            if getattr(v, "verdict", "") == "noise":
+                noise.append(v)
+        noise.sort(key=lambda v: int(getattr(v, "score", 0) or 0))
+        muestra = [{
+            "external_id": getattr(v, "external_id", None),
+            "ticket_id": getattr(v, "ticket_id", None),
+            "tracker_type": getattr(v, "tracker_type", "") or "desconocido",
+            "title": getattr(v, "title", "") or "(sin titulo)",
+            "score": int(getattr(v, "score", 0) or 0),
+            "reasons": list(getattr(v, "reasons", None) or []),
+        } for v in noise[:max(0, int(max_noise))]]
+        return {
+            "total": total,
+            "total_rows": int(m.get("total_rows", total) or total),
+            "truncated": bool(m.get("truncated", False)),
+            "signal": int(m.get("signal", 0) or 0),
+            "noise": int(m.get("noise", len(noise)) or 0),
+            "by_tracker": dict(m.get("by_tracker") or {}),
+            "noise_sample": muestra,
+            "reason_counts": reason_counts,
+        }
+    except Exception as exc:
+        logger.warning("doc_ticket_mining: build_triage_report fallo: %s", exc)
+        return vacio

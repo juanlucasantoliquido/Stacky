@@ -150,14 +150,22 @@ def index_project(
     """Indexa todos los .md bajo workspace_root/docs_subpath/ para el proyecto.
 
     Elimina el índice previo del proyecto antes de re-indexar.
-    Retorna {"chunks_indexed": N, "files_scanned": F}.
+    Retorna {"chunks_indexed": N, "files_scanned": F, "skipped_plans": P}.
+
+    Plan 285 F1.1 — `skipped_plans` es ADITIVO: cuántos .md descartó el filtro
+    de taxonomía por ser documentos de plan. Ningún llamador existente se rompe
+    (los dos que hay leen sólo "chunks_indexed"/"files_scanned"/"warning"), y
+    el panel del corpus necesita el número para poder decir "N documentos
+    indexados, M planes excluidos" sin hardcodear nada.
     """
     root = Path(workspace_root) / docs_subpath
     if not root.exists():
         logger.warning("docs_rag: docs dir not found: %s", root)
-        return {"chunks_indexed": 0, "files_scanned": 0, "warning": f"Directorio no encontrado: {root}"}
+        return {"chunks_indexed": 0, "files_scanned": 0, "skipped_plans": 0,
+                "warning": f"Directorio no encontrado: {root}"}
 
     md_files = sorted(root.rglob("*.md"))
+    total_antes = len(md_files)
     # Plan 284 — los documentos de plan no son documentación del proyecto:
     # con 240 planes contra 15 notas de sistema, el retrieval devolvía planes.
     from config import config as _cfg
@@ -167,6 +175,7 @@ def index_project(
             f for f in md_files
             if not doc_taxonomy.is_plan_doc(f.relative_to(root).as_posix())
         ]
+    skipped_plans = total_antes - len(md_files)
     logger.info("docs_rag: indexing %d .md files for project %s", len(md_files), project_name)
 
     all_chunks: list[DocChunk] = []
@@ -205,6 +214,7 @@ def index_project(
     return {
         "chunks_indexed": len(all_chunks),
         "files_scanned": len(md_files),
+        "skipped_plans": skipped_plans,   # Plan 285 F1.1 — aditivo
     }
 
 

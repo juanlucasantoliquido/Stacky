@@ -709,7 +709,15 @@ def test_plan284_es_sintetico_cubre_los_103():
 
 
 def test_plan284_mine_project_tickets_forma_garantizada(monkeypatch):
-    """Con la flag OFF: las 8 claves presentes, enabled=False y ceros."""
+    """Con la flag OFF: las 9 claves presentes, enabled=False y ceros.
+
+    Plan 285 F3.1 — eran 8. Se suma `total_rows` porque el bloque de contexto
+    no puede declarar el truncamiento sin saber CUANTOS tickets faltaron: hoy
+    total_rows se calculaba (doc_ticket_mining.py:190), se usaba solo para el
+    booleano `truncated` y se descartaba, y el prompt afirmaba "Se barrieron N
+    tickets" con N YA recortado por el cap. La forma sigue siendo GARANTIZADA
+    (misma clave en el camino OFF, en el OK y en el except).
+    """
     from config import config
     from services.doc_ticket_mining import mine_project_tickets
 
@@ -717,7 +725,7 @@ def test_plan284_mine_project_tickets_forma_garantizada(monkeypatch):
     out = mine_project_tickets("P")
 
     esperadas = {"enabled", "scope", "total", "signal", "noise",
-                 "by_tracker", "verdicts", "truncated"}
+                 "by_tracker", "verdicts", "total_rows", "truncated"}
     assert set(out.keys()) == esperadas          # PRESENCIA de la forma
     assert out["enabled"] is False               # AUSENCIA de datos
     assert out["total"] == 0 and out["verdicts"] == []
@@ -1191,6 +1199,12 @@ def test_f0_las_etapas_de_papel_reciben_el_contexto_rico(monkeypatch, tmp_path,
                                    "title": "TICKETS", "content": "y"},
                         raising=False)
     _stub_para_run(monkeypatch, tmp_path)
+    # DESPUES de _stub_para_run: ese helper compartido pisa _subgraph_block con
+    # un bloque de id "sg". Este test asserta el id REAL del contrato, asi que
+    # lo restituye — relajar el assert a "sg" seria aflojar el gate.
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "doc-subgraph", "kind": "doc-subgraph",
+                                   "title": "Subgrafo documental", "content": "x"})
 
     doc_documenter.run_documenter("P", "claude_code_cli")
 

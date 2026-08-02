@@ -234,6 +234,87 @@ def _subgraph_block(project_name: str) -> dict:
             "title": "Subgrafo documental", "content": content}
 
 
+_CORPUS_QUERY = ("arquitectura modulos componentes flujo datos integraciones "
+                 "decisiones tecnicas del proyecto")
+
+
+def _corpus_block(project_name: str) -> dict | None:
+    """Plan 285 F1.4 — la documentacion YA ESCRITA del proyecto, via retrieval.
+
+    Medido 2026-08-01: `grep -rn "docs_rag" doc_documenter.py` daba 0 lineas.
+    El corpus se indexaba (un endpoint HTTP manual) y NADIE lo leia desde el
+    Documentador: los unicos lectores de produccion eran api/docs_rag.py:192,195
+    y validation_playbook.py:429. Indexar sin este bloque es construir y no
+    cablear — exactamente el defecto que este plan viene a matar.
+
+    None si la flag esta OFF o si el retrieval no devuelve nada. Nunca lanza.
+    """
+    from config import config as _cfg
+    if not bool(getattr(_cfg, "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED", False)):
+        return None
+    try:
+        from services import docs_rag
+        hits = docs_rag.search_hybrid(project_name, _CORPUS_QUERY, top_k=8) or []
+    except Exception as exc:
+        logger.warning("doc_documenter: retrieval del corpus fallo: %s", exc)
+        return None
+    if not hits:
+        return None
+    lineas = []
+    for h in hits[:8]:
+        ruta = getattr(h, "file_path", "")
+        titulo = getattr(h, "section_heading", "") or "(sin seccion)"
+        lineas.append(f"- {ruta} :: {titulo}")
+    return {
+        "id": "docs-corpus",
+        "kind": "docs-corpus",
+        "title": "DOCUMENTACION YA ESCRITA DE ESTE PROYECTO (no la dupliques)",
+        # El renderizador CLI (context_enrichment._render_blocks:1433) ignora
+        # `kind`: solo lee title/content/items. Toda la senal va aca.
+        "content": ("Estas notas ya existen. Ampliá o corregí, NO reescribas "
+                    "desde cero ni dupliques su contenido:\n" + "\n".join(lineas)),
+        "source": {"type": "corpus", "readonly": True},
+    }
+
+
+def _tickets_block_safe(project_name: str) -> dict | None:
+    """Plan 285 F1.0/F2.4 — el barrido de tickets, DEVOLVIENDO el bloque.
+
+    Hace lo mismo que hacia doc_documenter.py:330-337 en linea, pero: (a)
+    devuelve en vez de mutar una lista, para que build_base_blocks y
+    build_context_for_mode compartan el mismo constructor sin duplicar logica;
+    y (b) cuando el barrido FALLA ya no queda mudo — devuelve un bloque de
+    aviso. Antes el except tragaba con logger.warning y el modelo documentaba
+    sin historia sin que nadie se enterara.
+    """
+    blocks, _ = _tickets_block_and_triage(project_name)
+    return blocks
+
+
+def _tickets_block_and_triage(project_name: str) -> tuple[dict | None, dict]:
+    """Igual que _tickets_block_safe pero devuelve tambien el triage auditable.
+
+    Se separa porque build_context_for_mode NO debe escribir en el run record
+    (es un constructor de contexto): quien persiste es run_documenter, via
+    build_context_and_triage_for_mode.
+    """
+    try:
+        from services import doc_ticket_mining
+        mining = doc_ticket_mining.mine_project_tickets(project_name)
+        bloque = doc_ticket_mining.build_tickets_context_block(mining)
+        triage = doc_ticket_mining.build_triage_report(mining)
+        return bloque, triage
+    except Exception as exc:  # nunca tumba el run por el barrido
+        logger.warning("doc_documenter: mineria de tickets fallo: %s", exc)
+        return ({
+            "id": "tickets-unavailable", "kind": "warning",
+            "title": "Historia de tickets NO disponible",
+            "content": ("El barrido de tickets fallo en este run. NO afirmes "
+                        "nada sobre la historia del proyecto derivada de "
+                        "tickets: marcalo [NV]."),
+        }, {"error": str(exc)[:200]})
+
+
 def _module_context_block(project_name: str, module: str) -> dict:
     """Bloque de contexto para RECONSTRUIR/COMPLETAR un módulo (árbol + símbolos)."""
     from config import config as _cfg
@@ -310,8 +391,29 @@ def build_context_for_mode(mode: DocumenterMode, plan: DocumenterPlan,
 
     Plan 284 — `operator_note` (default "" ⇒ todos los llamadores existentes
     siguen compilando y produciendo el mismo prompt de hoy).
+
+    Plan 285 F3.2 — FIRMA CONGELADA. La lógica vive en la hermana
+    build_context_and_triage_for_mode; esta delega y devuelve sólo los bloques,
+    para que ningún llamador ni test existente se rompa.
+    """
+    blocks, _ = build_context_and_triage_for_mode(mode, plan, project_name,
+                                                  operator_note)
+    return blocks
+
+
+def build_context_and_triage_for_mode(
+    mode: DocumenterMode, plan: DocumenterPlan, project_name: str,
+    operator_note: str = "",
+) -> tuple[list[dict], dict]:
+    """Plan 285 F3.2 — igual que build_context_for_mode + el triage auditable.
+
+    Existe porque un constructor de contexto NO debe escribir en el run record,
+    pero el triage de tickets tiene que llegar ahí: hoy `mining` se calculaba,
+    se consumía una vez y salía de scope, y por eso api/docs.py:363 devolvía
+    siempre {}.
     """
     blocks: list[dict] = []
+    triage: dict = {}
     if mode == DocumenterMode.NORMALIZAR:
         for path in plan.notes_to_normalize:
             blocks.append({
@@ -327,22 +429,22 @@ def build_context_for_mode(mode: DocumenterMode, plan: DocumenterPlan,
             blocks.append(_module_context_block(project_name, module))
         # Plan 284 F4 — la historia real del proyecto según sus tickets, con
         # triage determinista (sin LLM). Sólo entran los 'signal'.
-        try:
-            from services import doc_ticket_mining
-            mining = doc_ticket_mining.mine_project_tickets(project_name)
-            tickets_block = doc_ticket_mining.build_tickets_context_block(mining)
-            if tickets_block is not None:
-                blocks.append(tickets_block)
-        except Exception as exc:  # nunca tumba el run por el barrido
-            logger.warning("doc_documenter: minería de tickets falló: %s", exc)
-    elif mode == DocumenterMode.ENRIQUECER:
+        # Plan 285 F2.4 — y si el barrido falla, el modelo se entera.
+        tickets_block, triage = _tickets_block_and_triage(project_name)
+        if tickets_block is not None:
+            blocks.append(tickets_block)
+    # Plan 285 F2.3 — el subgrafo llega a los TRES modos que documentan de cero
+    # o enriquecen, no sólo a ENRIQUECER. NORMALIZAR y ACTUALIZAR quedan
+    # explícitamente afuera (trabajan sobre una nota concreta que ya existe).
+    if mode in (DocumenterMode.RECONSTRUIR, DocumenterMode.COMPLETAR,
+                DocumenterMode.ENRIQUECER):
         blocks.append(_subgraph_block(project_name))
     # ACTUALIZAR (plan 114): tolerado, sin contexto especial acá.
     note_block = _operator_note_block(operator_note)
     if note_block is not None:
         blocks.insert(0, note_block)   # primero: el modelo lo lee antes que el resto
     blocks.append(_sistema_readonly_block(project_name))
-    return blocks
+    return blocks, triage
 
 
 _CONVERSATION_ADO_ID = -7  # discriminador de identidad de tickets del Documentador
@@ -879,6 +981,93 @@ def _citation_gate_enabled() -> bool:
     return bool(getattr(_cfg, "STACKY_DOCS_CITATION_GATE_ENABLED", False))
 
 
+def _rigor_gate_enabled() -> bool:
+    from config import config as _cfg
+    return bool(getattr(_cfg, "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED", False))
+
+
+_SEPARADORES = ("---", "===", "***", "___")
+
+
+def _contar_afirmaciones(body: str) -> tuple[int, int]:
+    """(claims, marked) segun la definicion EXACTA del plan 285.
+
+    "afirmacion" = linea no vacia que NO sea encabezado markdown (no empieza
+    con '#'), NO sea separador ('---', '===') y NO sea delimitador de bloque de
+    codigo ('```'). Las lineas DENTRO de un bloque de codigo NO cuentan: sin
+    esto, un documento con 40 lineas de codigo pegado se rechazaria por
+    "densidad baja" cuando en realidad esta bien.
+    """
+    claims = 0
+    marked = 0
+    en_codigo = False
+    for raw in (body or "").splitlines():
+        linea = raw.strip()
+        if linea.startswith("```") or linea.startswith("~~~"):
+            en_codigo = not en_codigo
+            continue
+        if en_codigo or not linea:
+            continue
+        if linea.startswith("#"):
+            continue
+        if linea in _SEPARADORES or (len(linea) >= 3 and set(linea) <= set("-=_*")):
+            continue
+        claims += 1
+        if any(tok in linea for tok in _MARKS):
+            marked += 1
+    return claims, marked
+
+
+def evaluate_rigor_gate(body: str, citations: dict | None, *,
+                        min_density: float | None = None,
+                        min_citations: int | None = None,
+                        trivial_lines: int = 8) -> dict:
+    """Plan 285 F2 — rigor POR AFIRMACION. Sin filesystem, sin red. Nunca lanza.
+
+    Lee sus umbrales de config cuando llegan en None (mismo idioma que
+    evaluate_citation_gate). NO consulta la flag maestra: eso lo hace el
+    llamador (_rigor_gate_enabled). Si resolviera los umbrales a literales, las
+    dos flags numericas quedarian registradas y MUERTAS.
+
+    Definiciones EXACTAS: ver _contar_afirmaciones.
+      - densidad = afirmaciones marcadas / afirmaciones totales
+      - documento trivial = afirmaciones totales <= trivial_lines
+
+    Salida: {"passed", "density", "claims", "marked", "citations_ok", "reason"}
+    Razones: "" | "rigor_density_below:{marked}/{claims}" | "rigor_no_citations"
+    """
+    try:
+        from config import config as _cfg
+        if min_density is None:
+            min_density = float(getattr(_cfg, "STACKY_DOCS_RIGOR_MIN_DENSITY", 0.5))
+        if min_citations is None:
+            min_citations = int(getattr(_cfg, "STACKY_DOCS_RIGOR_MIN_CITATIONS", 1))
+        claims, marked = _contar_afirmaciones(body)
+        density = (marked / claims) if claims else 1.0
+        cit_ok = int((citations or {}).get("ok", 0) or 0)
+        base = {"density": density, "claims": claims, "marked": marked,
+                "citations_ok": cit_ok}
+        # (2) documento trivial: caso legitimo protegido (un doc corto todo [NV]).
+        if claims <= trivial_lines:
+            return {**base, "passed": True, "reason": ""}
+        # (3) la comparacion es `<`: justo en el umbral PASA.
+        if density < min_density:
+            return {**base, "passed": False,
+                    "reason": f"rigor_density_below:{marked}/{claims}"}
+        # (4) citations None => se OMITE el sub-chequeo. Nunca rechaza por citas
+        # que no pudo contar (con V2 OFF + citas OFF, workspace_root es None y
+        # `citations` es None en todo el loop de apply_proposals).
+        if citations is None:
+            return {**base, "passed": True, "reason": ""}
+        if cit_ok < min_citations:
+            return {**base, "passed": False, "reason": "rigor_no_citations"}
+        return {**base, "passed": True, "reason": ""}
+    except Exception:
+        # Degradacion: ante basura, no bloquea la escritura.
+        return {"passed": True, "density": 1.0, "claims": 0, "marked": 0,
+                "citations_ok": 0, "reason": ""}
+
+
 def apply_proposals(proposals: list[DocProposal], target_root: str,
                     branch_name: str | None, *, degraded: bool = False,
                     workspace_root: str | None = None) -> ApplyResult:
@@ -931,6 +1120,24 @@ def apply_proposals(proposals: list[DocProposal], target_root: str,
                     })
                     continue
         # ---------------------------------------------------------------------
+
+        # ---- Plan 285 F2: GATE DE RIGOR POR AFIRMACION ----
+        # NO se cuelga de `citations`: la densidad de marcas se calcula sobre el
+        # cuerpo y es independiente del workspace_root. Colgarlo de
+        # `citations is not None` lo dejaba MUERTO con V2 OFF + citas OFF,
+        # mientras su test —escrito con un workspace_root valido— daba verde.
+        if _rigor_gate_enabled():
+            rigor = evaluate_rigor_gate(prop.content, citations)
+            if not rigor["passed"]:
+                result.skipped.append((prop.path, rigor["reason"]))
+                result.files.append({
+                    "path": norm, "action": prop.action, "citations": citations or {},
+                    "rigor": rigor,
+                    "content_preview": prop.content[:_PREVIEW_MAX_CHARS],
+                    "rejected": True, "reject_reason": rigor["reason"],
+                })
+                continue
+        # ---------------------------------------------------
         try:
             dest = (root / norm)
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -1226,6 +1433,68 @@ def _run_documenter_thread(run_id: str, project_name: str, runtime: str, *,
         _update_run(run_id, state="failed", error=str(exc))
 
 
+def ensure_corpus_indexed(project_name: str, workspace_root: str | None) -> dict:
+    """Plan 285 F1.1 — Reindexa el corpus documental del proyecto antes de documentar.
+
+    Medido 2026-08-01: docs_index tenia 51 chunks y CERO documentos reales
+    (todos fixtures de test de 8 proyectos que no existen). El unico escritor de
+    produccion era un endpoint HTTP manual que nadie llamaba desde el
+    Documentador.
+
+    Devuelve SIEMPRE un dict con las mismas keys (nunca lanza):
+      {"enabled": bool, "chunks_indexed": int, "files_scanned": int,
+       "skipped_plans": int, "error": str}
+    """
+    out = {"enabled": False, "chunks_indexed": 0, "files_scanned": 0,
+           "skipped_plans": 0, "error": ""}
+    try:
+        from config import config as _cfg
+        if not bool(getattr(_cfg, "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED", False)):
+            return out
+        out["enabled"] = True
+        if not workspace_root:
+            out["error"] = "sin_workspace_root"
+            return out
+        from services import docs_rag
+        res = docs_rag.index_project(project_name, workspace_root, "docs")
+        out["chunks_indexed"] = int(res.get("chunks_indexed", 0) or 0)
+        out["files_scanned"] = int(res.get("files_scanned", 0) or 0)
+        out["skipped_plans"] = int(res.get("skipped_plans", 0) or 0)
+        if res.get("warning"):
+            out["error"] = str(res["warning"])[:200]
+    except Exception as exc:                     # nunca tumba el run
+        out["error"] = str(exc)[:200]
+        logger.warning("doc_documenter: auto-index del corpus fallo: %s", exc)
+    return out
+
+
+def build_base_blocks(project_name: str) -> list[dict]:
+    """Plan 285 F1.0 — contexto de las ETAPAS DE PAPEL (camino DEFAULT).
+
+    Medido 2026-08-01: con STACKY_DOCS_PIPELINE_STAGES_ENABLED=true (default)
+    y STACKY_DOCS_PIPELINE_AUTOAPPLY=false (default, categoria B), run_documenter
+    RETORNA esperando aprobacion ANTES del loop de modos. Las 3 llamadas al LLM
+    que el operador realmente lee recibian UN solo bloque. Todo el contexto rico
+    del 284 quedaba del otro lado de la barrera HITL, y el operador aprobaba a
+    ciegas un artefacto escrito sin contexto.
+
+    Esto NO saltea el human-in-the-loop: lo MEJORA. El operador sigue decidiendo,
+    pero ahora decide sobre algo escrito CON la documentacion ya existente, el
+    subgrafo y la historia de tickets a la vista.
+
+    Devuelve SIEMPRE una lista con al menos el bloque canonico. Nunca lanza.
+    """
+    blocks: list[dict] = [_sistema_readonly_block(project_name)]
+    for builder in (_corpus_block, _subgraph_block, _tickets_block_safe):
+        try:
+            b = builder(project_name)
+            if b is not None:
+                blocks.append(b)
+        except Exception as exc:            # nunca tumba el run
+            logger.warning("doc_documenter: bloque base no disponible: %s", exc)
+    return blocks
+
+
 def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None,
                    only_note: str | None = None,
                    forced_modes: list[DocumenterMode] | None = None,
@@ -1247,6 +1516,10 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
     if only_note:
         plan.notes_to_update = [only_note]
     target_root, docs_root, workspace_root = _resolve_target_paths(project_name)
+    # Plan 285 F1.1 — ARRIBA DE TODO, no "antes del loop de modos": con los
+    # defaults el run retorna esperando aprobacion ANTES de ese loop, asi que
+    # indexar ahi abajo no se habria ejecutado nunca en la primera pasada.
+    corpus = ensure_corpus_indexed(project_name, workspace_root)
     if run_id:
         _update_run(run_id, target_root=target_root, reason=plan.reason)
 
@@ -1284,7 +1557,9 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
     llm_calls = 0
     budget = int(getattr(_cfg284_budget(), "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS", 12))
     if _stages_enabled() and not _prior_stages:
-        base_blocks = [_sistema_readonly_block(project_name)]
+        # Plan 285 F1.0 — el contexto rico cruza la barrera HITL. Antes: un
+        # solo bloque, y el operador aprobaba prosa escrita a ciegas.
+        base_blocks = build_base_blocks(project_name)
         prior = ""
         for stage in (DocumenterStage.PROPONER, DocumenterStage.CRITICAR,
                       DocumenterStage.MEJORAR):
@@ -1328,6 +1603,9 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
             "modes_skipped": [], "files": [],
             "operator_note": operator_note,
             "llm_calls": llm_calls, "llm_calls_budget": budget,
+            # Plan 285 F1.1 — el estado del corpus viaja en el reporte PENDIENTE:
+            # el operador tiene que verlo ANTES de aprobar, no despues.
+            "corpus": corpus,
         }
         if run_id:
             _update_run(run_id, **pending)
@@ -1345,6 +1623,7 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
     all_props: list[DocProposal] = []
     mode_diagnostics: list[str] = []
     modes_skipped: list[dict] = []
+    ticket_triage: dict = {}   # Plan 285 F3.2 — deja de perderse fuera de scope
     budget_hit = False
     for mode in plan.modes:
         # Plan 284 A1 — tope duro: al agotarse el run NO falla, se detiene
@@ -1360,7 +1639,12 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
                 continue
         if run_id:
             _update_run(run_id, current_mode=str(mode.value))
-        ctx = build_context_for_mode(mode, plan, project_name, operator_note)
+        # Plan 285 F3.2 — la hermana devuelve tambien el triage, que hasta hoy
+        # se calculaba y se tiraba (api/docs.py:363 devolvia {} siempre).
+        ctx, mode_triage = build_context_and_triage_for_mode(
+            mode, plan, project_name, operator_note)
+        if mode_triage:
+            ticket_triage = mode_triage
         # Tarea 2 (consola en vivo) — capturamos el execution_id apenas se crea
         # para engancharlo al run record; el frontend lo usa para abrir el
         # CodexConsoleDock mientras el modo está corriendo.
@@ -1388,7 +1672,12 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         all_props, write_root, branch, degraded=degraded,
         # Plan 284 F3 — el gate de citas necesita workspace_root aunque la V2
         # esté OFF: sin él ni siquiera se cuentan las citas y el gate sería inerte.
-        workspace_root=(workspace_root if (_v2_enabled() or _citation_gate_enabled()) else None),
+        # Plan 285 F2.2 — y el sub-chequeo de citas del gate de rigor también.
+        # (La densidad de marcas NO depende de esto: se calcula sobre el cuerpo.)
+        workspace_root=(workspace_root
+                        if (_v2_enabled() or _citation_gate_enabled()
+                            or _rigor_gate_enabled())
+                        else None),
     )
 
     diff_stat = ""
@@ -1432,7 +1721,14 @@ def run_documenter(project_name: str, runtime: str, *, run_id: str | None = None
         "modes_skipped": modes_skipped,
         "files": result.files,
         "operator_note": operator_note,  # Plan 284 F2.4
+        "corpus": corpus,                # Plan 285 F1.1
     }
+
+    # ── Plan 285 F3.2 — el triage de tickets deja de ser una clave muerta ────
+    # api/docs.py:363 ya exponia rec.get("ticket_mining", {}) y NADIE de
+    # produccion la escribia: el endpoint devolvia {} siempre.
+    if bool(getattr(_cfg284_budget(), "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED", False)):
+        report["ticket_mining"] = ticket_triage
 
     # ── Plan 284 F6 + F5.4 — radiografía y veredicto determinista (sin LLM) ──
     radiography: dict = {}

@@ -10,6 +10,9 @@ import {
   buildStagesView,
   buildVerdictView,
   buildRadiographyView,
+  buildCorpusView,
+  buildTriageView,
+  formatTriageReason,
 } from "./documenterModel";
 import type { DocumenterStatusResponse } from "../api/endpoints";
 
@@ -295,5 +298,108 @@ describe("Plan 284 - awaiting_approval es un estado de UI de primera clase", () 
     // PRESENCIA DE CONTROL: un estado desconocido de verdad SIGUE siendo unknown.
     const u = summarizeDocumenterStatus({ state: "vaya_a_saber" } as DocumenterStatusResponse);
     expect(u.uiState).toBe("unknown");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 285 F1.2 — estado del corpus
+// ---------------------------------------------------------------------------
+
+describe("Plan 285 F1.2 — buildCorpusView", () => {
+  it("corpus undefined: no se renderiza nada (backend viejo)", () => {
+    expect(buildCorpusView(undefined).visible).toBe(false);
+    expect(buildCorpusView(null).visible).toBe(false);
+  });
+
+  it("corpus vacio: avisa que el Documentador no tiene que consultar", () => {
+    const v = buildCorpusView({ enabled: true, chunks_indexed: 0, files_scanned: 0 });
+    expect(v.visible).toBe(true);
+    expect(v.tone).toBe("warn");
+    expect(v.label).toContain("Corpus vacío");
+  });
+
+  it("corpus con error: muestra el motivo en llano", () => {
+    const v = buildCorpusView({ enabled: true, error: "sin_workspace_root" });
+    expect(v.tone).toBe("warn");
+    expect(v.label).toContain("carpeta de trabajo");
+    // El error crudo desconocido NUNCA se oculta.
+    const otro = buildCorpusView({ enabled: true, error: "disco lleno" });
+    expect(otro.label).toContain("disco lleno");
+  });
+
+  it("corpus sano: los numeros salen del DATO, no de un literal", () => {
+    const v = buildCorpusView({
+      enabled: true, chunks_indexed: 94, files_scanned: 15, skipped_plans: 241,
+    });
+    expect(v.tone).toBe("ok");
+    expect(v.label).toContain("94");
+    expect(v.label).toContain("15");
+    expect(v.label).toContain("241");
+    // GEMELO: con otros numeros el texto cambia (si estuviera hardcodeado, no).
+    const w = buildCorpusView({
+      enabled: true, chunks_indexed: 7, files_scanned: 2, skipped_plans: 0,
+    });
+    expect(w.label).toContain("7");
+    expect(w.label).not.toContain("94");
+  });
+
+  it("flag apagada: se ve el aviso, no se finge que esta sano", () => {
+    const v = buildCorpusView({ enabled: false, chunks_indexed: 0 });
+    expect(v.visible).toBe(true);
+    expect(v.tone).toBe("warn");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Plan 285 F3.3 — descarte de tickets trazable
+// ---------------------------------------------------------------------------
+
+describe("Plan 285 F3.3 — buildTriageView", () => {
+  const conMuestra = {
+    enabled: true, total: 228, signal: 30, noise: 198, total_rows: 228,
+    truncated: false,
+    reason_counts: { sin_descripcion: 112, titulo_ruido: 8, motivo_nuevo_del_futuro: 3 },
+    noise_sample: [
+      { external_id: -7, tracker_type: "demo", title: "test", score: -8,
+        reasons: ["sin_descripcion", "ticket_interno_de_stacky"] },
+    ],
+  };
+
+  it("undefined o vacio: no se renderiza", () => {
+    expect(buildTriageView(undefined).visible).toBe(false);
+    expect(buildTriageView(null).visible).toBe(false);
+    expect(buildTriageView({ enabled: true, total: 0 }).visible).toBe(false);
+  });
+
+  it("con datos: titular, motivos ordenados por frecuencia y filas", () => {
+    const v = buildTriageView(conMuestra);
+    expect(v.visible).toBe(true);
+    expect(v.headline).toContain("198");
+    expect(v.headline).toContain("228");
+    // Ordenado por cantidad descendente.
+    expect(v.reasonRows[0].reason).toBe("sin_descripcion");
+    expect(v.reasonRows[0].count).toBe(112);
+    expect(v.reasonRows[0].human).toBe("Sin descripción");
+    expect(v.noiseRows[0].id).toBe("-7");
+    expect(v.noiseRows[0].reasons).toContain("Ticket interno de Stacky (id negativo)");
+    // AUSENCIA con GEMELO: sin truncar no hay aviso, pero si hay titular.
+    expect(v.truncatedWarning).toBe("");
+    expect(v.headline).not.toBe("");
+  });
+
+  it("truncado: el aviso dice cuantos faltaron", () => {
+    const v = buildTriageView({ ...conMuestra, truncated: true, total: 500, total_rows: 900 });
+    expect(v.truncatedWarning).toContain("500");
+    expect(v.truncatedWarning).toContain("900");
+    expect(v.truncatedWarning).toContain("NO es total");
+  });
+
+  it("motivo desconocido: nunca se pierde, se muestra el string crudo", () => {
+    const v = buildTriageView(conMuestra);
+    const desconocido = v.reasonRows.find((r) => r.reason === "motivo_nuevo_del_futuro");
+    expect(desconocido).toBeDefined();
+    expect(desconocido!.human).toBe("motivo_nuevo_del_futuro");
+    // Y el mapeo por PREFIJO funciona con el dato pegado.
+    expect(formatTriageReason("descripcion_extensa:900")).toBe("Descripción extensa");
   });
 });

@@ -1573,3 +1573,248 @@ def test_f1_orphans_solo_lista_los_no_configurados(monkeypatch, corpus_db):
     # una lectura de configuracion convierte todo el corpus en basura borrable).
     monkeypatch.setattr(docs_rag, "_proyectos_configurados", lambda: set())
     assert docs_rag.list_orphan_corpus_projects() == []
+
+
+# ===========================================================================
+# Plan 285 F5 — ratchets: que estos defectos no vuelvan.
+#
+# Se congela por ALCANZABILIDAD, no por orden de lineas. Un ratchet que compara
+# lineno(gate) < lineno(escritura) se cumple IGUAL si el gate esta dentro de un
+# `if` que nunca es verdadero: habria congelado el bug de C4 como si fuera la
+# solucion. Un test de ORDEN no puede ver ALCANZABILIDAD.
+# ===========================================================================
+
+_FLAGS_285 = (
+    # Lista LITERAL, no derivada: si se derivara del registro filtrando por
+    # prefijo, borrar una flag del plan haria que el test siguiera verde.
+    "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED",
+    "STACKY_DOCS_CORPUS_RETRIEVAL_ENABLED",
+    "STACKY_DOCS_CORPUS_ORPHANS_ENABLED",
+    "STACKY_DOCS_CORPUS_PURGE_ENABLED",
+    "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED",
+    "STACKY_DOCS_RIGOR_MIN_DENSITY",
+    "STACKY_DOCS_RIGOR_MIN_CITATIONS",
+    "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED",
+    "STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED",
+)
+
+
+def test_r285_el_documentador_indexa_antes_de_las_etapas_de_papel():
+    """Censo por AST: dentro de run_documenter, la llamada a
+    ensure_corpus_indexed va ANTES del `return` del bloque HITL.
+
+    Por AST y por REFERENCIA de simbolo, no por regex de texto: un grep de
+    texto premia el bug (matchea el comentario que lo describe).
+    """
+    import ast
+    import pathlib as _pl
+
+    ruta = _pl.Path(__file__).resolve().parent.parent / "services" / "doc_documenter.py"
+    arbol = ast.parse(ruta.read_text(encoding="utf-8"))
+    fn = next((n for n in ast.walk(arbol)
+               if isinstance(n, ast.FunctionDef) and n.name == "run_documenter"), None)
+    assert fn is not None, "run_documenter desaparecio"
+
+    llamadas = [n.lineno for n in ast.walk(fn)
+                if isinstance(n, ast.Call)
+                and isinstance(n.func, ast.Name)
+                and n.func.id == "ensure_corpus_indexed"]
+    assert llamadas, "run_documenter dejo de indexar el corpus"
+
+    returns = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Return)]
+    assert returns, "run_documenter no tiene returns (imposible)"
+    assert min(llamadas) < min(returns), (
+        f"el indexado ({min(llamadas)}) quedo DESPUES del primer return "
+        f"({min(returns)}): con los defaults nunca se ejecutaria")
+
+
+def test_r285_el_gate_de_rigor_es_ALCANZABLE_en_las_4_combinaciones(monkeypatch,
+                                                                    tmp_path):
+    """Reemplaza al ratchet de numeros de linea de la v1."""
+    from config import config
+    from services.doc_documenter import DocProposal, apply_proposals
+
+    ws = tmp_path / "ws"
+    (ws / "services").mkdir(parents=True)
+    (ws / "services" / "real.py").write_text("x = 1\ny = 2\n", encoding="utf-8")
+    monkeypatch.setattr(config, "STACKY_DOCS_RIGOR_PER_CLAIM_ENABLED", True,
+                        raising=False)
+
+    alucinado = "\n".join(
+        ["[V] Este proyecto tiene una arquitectura modular."] +
+        [f"Afirmacion sin respaldo {i}." for i in range(59)])
+    sano = "\n".join([
+        "[V] El modulo vive en services/real.py:1 y expone su contrato ahi.",
+        "[INF] El resto del sistema lo consume por ese contrato.",
+        "[NV] No se pudo verificar el historial.",
+    ])
+
+    for v2 in (True, False):
+        for citas in (True, False):
+            monkeypatch.setattr(config, "STACKY_DOCS_DOCUMENTER_V2_ENABLED", v2)
+            monkeypatch.setattr(config, "STACKY_DOCS_CITATION_GATE_ENABLED", citas)
+            destino = tmp_path / f"r285_{v2}_{citas}"
+            destino.mkdir()
+            apply_proposals(
+                [DocProposal(path="malo.md", action="create", content=alucinado,
+                             marks_ok=True, sources=[]),
+                 DocProposal(path="bueno.md", action="create", content=sano,
+                             marks_ok=True, sources=["services/real.py"])],
+                str(destino), None, workspace_root=str(ws))
+            assert not (destino / "malo.md").exists(), \
+                f"el gate quedo INALCANZABLE con V2={v2} CITAS={citas}"
+            # GEMELO: el sano se escribe en las 4 (si no, el gate rechaza todo
+            # y el assert de arriba pasaria por el motivo equivocado).
+            assert (destino / "bueno.md").exists(), \
+                f"el doc sano se rechazo con V2={v2} CITAS={citas}"
+
+
+def test_r285_las_etapas_de_papel_no_vuelven_a_recibir_un_solo_bloque(
+        monkeypatch, tmp_path, clean_run_registry):
+    """Congela F1.0, que es la fase raiz: sin esto, todo lo demas mejora un
+    camino que en la configuracion default no se ejecuta antes de aprobar."""
+    from config import config
+    from services import doc_documenter
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", True)
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_AUTOAPPLY", False)
+    monkeypatch.setattr(config, "STACKY_DOCS_CORPUS_AUTOINDEX_ENABLED", False,
+                        raising=False)
+
+    capturados: list[list[dict]] = []
+
+    def _raw(prompt, blocks, project, runtime, **k):
+        capturados.append(list(blocks or []))
+        return "PLAN: documentar services/doc_graph.py. " + "d" * 300
+
+    monkeypatch.setattr(doc_documenter, "invoke_raw_stage", _raw)
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    monkeypatch.setattr(doc_documenter, "_corpus_block",
+                        lambda p: {"id": "docs-corpus", "kind": "docs-corpus",
+                                   "title": "DOC", "content": "x"})
+    monkeypatch.setattr(doc_documenter, "_tickets_block_safe",
+                        lambda p: {"id": "tickets-signal", "kind": "t",
+                                   "title": "T", "content": "y"})
+    _stub_para_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "doc-subgraph", "kind": "doc-subgraph",
+                                   "title": "SG", "content": "x"})
+
+    doc_documenter.run_documenter("P", "claude_code_cli")
+
+    assert capturados, "no corrio ninguna etapa de papel"
+    ids = [b.get("id") for b in capturados[0]]
+    assert len(capturados[0]) >= 4, f"volvio a 1 bloque: {ids}"
+    assert "docs-corpus" in ids and "doc-subgraph" in ids, ids
+
+
+def test_r285_ticket_mining_no_es_una_clave_muerta(monkeypatch, tmp_path,
+                                                   clean_run_registry):
+    """Assert de PRESENCIA de una key concreta, nunca `!= {}`: un assert de
+    'no vacio' pasa por accidente."""
+    from config import config
+    from services import doc_documenter, doc_ticket_mining
+    from services.doc_documenter import DocumenterMode, DocumenterPlan
+
+    monkeypatch.setattr(config, "STACKY_DOCS_PIPELINE_STAGES_ENABLED", False)
+    monkeypatch.setattr(config, "STACKY_DOCS_TICKET_TRIAGE_VISIBLE_ENABLED", True,
+                        raising=False)
+    monkeypatch.setattr(doc_ticket_mining, "mine_project_tickets",
+                        lambda *a, **k: {"enabled": True, "scope": "project",
+                                         "total": 12, "signal": 2, "noise": 10,
+                                         "total_rows": 12, "truncated": False,
+                                         "by_tracker": {"demo": 10, "gitlab": 2},
+                                         "verdicts": _verdicts_285()})
+    guardado: dict = {}
+    monkeypatch.setattr(doc_documenter, "invoke_documenter", lambda *a, **k: [])
+    _stub_para_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(doc_documenter, "_persist_run_report",
+                        lambda pid, rep: guardado.update(rep))
+    monkeypatch.setattr(doc_documenter, "plan_documenter_run",
+                        lambda *a, **k: DocumenterPlan(
+                            status="SANA", modes=[DocumenterMode.RECONSTRUIR],
+                            notes_to_normalize=[], notes_to_update=[], reason="t"))
+
+    doc_documenter.run_documenter("P", "claude_code_cli", autoapply_override=True)
+
+    tm = guardado.get("ticket_mining")
+    assert isinstance(tm, dict), f"la clave volvio a morir: {type(tm)}"
+    assert "reason_counts" in tm, f"falta la key concreta: {sorted(tm)}"
+    assert tm["reason_counts"].get("sin_descripcion", 0) >= 10
+
+
+def test_r285_todos_los_modos_de_documentacion_ven_el_grafo(monkeypatch):
+    """Congela LOS DOS lados y LOS CINCO modos."""
+    from services import doc_documenter
+    from services.doc_documenter import (DocumenterMode, DocumenterPlan,
+                                         build_context_for_mode)
+
+    monkeypatch.setattr(doc_documenter, "_subgraph_block",
+                        lambda p: {"id": "doc-subgraph", "kind": "sg",
+                                   "title": "SG", "content": "x"})
+    monkeypatch.setattr(doc_documenter, "_read_note_content", lambda *a, **k: "c")
+    plan = DocumenterPlan(status="SANA", modes=[], notes_to_normalize=["a.md"],
+                          notes_to_update=["b.md"])
+
+    def _tiene_grafo(mode):
+        return any(b.get("id") == "doc-subgraph"
+                   for b in build_context_for_mode(mode, plan, "P"))
+
+    for mode in (DocumenterMode.RECONSTRUIR, DocumenterMode.COMPLETAR,
+                 DocumenterMode.ENRIQUECER):
+        assert _tiene_grafo(mode), f"{mode.value} perdio el grafo"
+    for mode in (DocumenterMode.NORMALIZAR, DocumenterMode.ACTUALIZAR):
+        assert not _tiene_grafo(mode), f"{mode.value} no deberia verlo"
+    # Los CINCO modos siguen existiendo (si se borrara uno, los bucles de arriba
+    # mirarian menos casos sin que nada se ponga rojo).
+    assert len(list(DocumenterMode)) == 5
+
+
+def test_r285_las_flags_del_285_tienen_consumidor_de_produccion():
+    """Distingue una flag VIVA de una registrada y muerta. Cuenta referencias
+    fuera de tests/ y __tests__/."""
+    import pathlib as _pl
+
+    raiz = _pl.Path(__file__).resolve().parent.parent          # backend/
+    front = raiz.parent / "frontend" / "src"
+    fuentes: list[_pl.Path] = []
+    for base, patron in ((raiz, "**/*.py"), (front, "**/*.ts"), (front, "**/*.tsx")):
+        for f in base.glob(patron):
+            partes = set(f.parts)
+            if "tests" in partes or "__tests__" in partes or "node_modules" in partes:
+                continue
+            if f.name.endswith(".test.ts") or f.name.endswith(".test.tsx"):
+                continue
+            fuentes.append(f)
+    textos = {f: f.read_text(encoding="utf-8", errors="ignore") for f in fuentes}
+
+    sin_consumidor = []
+    for key in _FLAGS_285:
+        # El registro y el help NO cuentan como consumidor: son declaracion.
+        hits = [f for f, t in textos.items()
+                if key in t
+                and f.name not in ("harness_flags.py", "harness_flags_help.py",
+                                   "config.py")]
+        if not hits:
+            sin_consumidor.append(key)
+    assert sin_consumidor == [], \
+        f"flags registradas y MUERTAS (sin consumidor de produccion): {sin_consumidor}"
+
+
+def test_r285_el_mapa_requires_incluye_las_flags_del_285():
+    """Cierra la trampa de COMMIT de C3: el archivo esta registrado en los DOS
+    ratchets, asi que una key faltante rompe el commit, no la edicion."""
+    import importlib.util
+    import pathlib as _pl
+
+    ruta = _pl.Path(__file__).resolve().parent / "test_harness_flags_requires.py"
+    spec = importlib.util.spec_from_file_location("_req285", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mapa = mod._REQUIRES_MAP_FROZEN
+
+    faltantes = [k for k in _FLAGS_285 if k not in mapa]
+    assert faltantes == [], f"faltan en _REQUIRES_MAP_FROZEN: {faltantes}"
+    # PRESENCIA: y el valor es el correcto, no cualquiera.
+    for k in _FLAGS_285:
+        assert mapa[k] == "STACKY_DOCS_DOCUMENTER_ENABLED", (k, mapa[k])

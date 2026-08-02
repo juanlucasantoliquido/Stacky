@@ -470,11 +470,19 @@ export const Tickets = {
     brief: string;
     project_name?: string;
     confirm: true;
+    /** Clave de idempotencia del servidor. Sin esto el backend NO puede dedupe:
+     *  publica una épica por cada llamada (api/tickets.py:7958). */
+    execution_id?: number;
   }) =>
-    api.post<{ ok: boolean; ado_id: number; work_item_type: string; title: string; url: string }>(
-      "/api/tickets/epics/from-brief",
-      payload
-    ),
+    api.post<{
+      ok: boolean;
+      ado_id: number;
+      work_item_type: string;
+      title: string;
+      url: string;
+      /** true (200) cuando esa run YA había publicado: no se creó nada nuevo. */
+      already_published?: boolean;
+    }>("/api/tickets/epics/from-brief", payload),
   // Plan 55 F1 — Preview solo-lectura del payload que se publicaría en ADO.
   epicPreview: (executionId: number, workItemType: "Epic" | "Issue" = "Epic") =>
     api.get<{
@@ -3475,6 +3483,12 @@ export interface DocNode {
   size_bytes: number;
   headings: DocHeading[];
   children?: DocNode[];
+  /** Plan 285 F4 — clase del documento según doc_taxonomy.classify_doc_path.
+   *  El backend la manda desde el Plan 284 (doc_indexer.py:172) y el árbol la
+   *  ignoraba: el operador veía 241 planes revueltos con su documentación.
+   *  Ausente o "" (backend viejo, o taxonomía OFF ⇒ doc_indexer devuelve "")
+   *  se trata como "other" y SIEMPRE queda visible: backward-compatible. */
+  doc_class?: string;
   /** Presente solo en la sección "agents" cuando _absolute_path está disponible en el servidor. */
   _absolute_path?: string;
 }
@@ -3526,6 +3540,10 @@ export interface DocsSourcesResponse {
   /** Plan 284 — tope de caracteres de la nota. Viaja desde el backend (C18): el
    *  maxLength del textarea no se hardcodea contra una flag configurable. */
   operator_note_max_chars?: number;
+  /** Plan 285 F4 — true si STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED está ON
+   *  (gatea los chips de filtro por clase del árbol). Con OFF el árbol se
+   *  comporta como hoy: todo mezclado. */
+  tree_group_by_class_enabled?: boolean;
 }
 
 /** Plan 113 — salud documental recomputada (subset de doc_health). */
@@ -3591,13 +3609,27 @@ export interface DocumenterStatusResponse {
     has_previous?: boolean; ratio_delta?: number;
     modules_closed?: string[]; modules_opened?: string[];
   };
-  /** Plan 284 — resumen del triage de tickets (F4), sin los veredictos individuales. */
+  /** Plan 284 — resumen del triage de tickets (F4), sin los veredictos individuales.
+   *  Plan 285 F3.2 — se suma el descarte AUDITABLE: hasta hoy esta clave
+   *  llegaba siempre vacía porque nadie de producción la escribía. */
   ticket_mining?: {
     enabled?: boolean; scope?: string; total?: number; signal?: number;
     noise?: number; by_tracker?: Record<string, number>; truncated?: boolean;
+    total_rows?: number;
+    reason_counts?: Record<string, number>;
+    noise_sample?: Array<{
+      external_id?: number | null; ticket_id?: number | null;
+      tracker_type?: string; title?: string; score?: number; reasons?: string[];
+    }>;
   };
   /** Plan 284 — la nota que el operador escribió al lanzar el run. */
   operator_note?: string;
+  /** Plan 285 F1.1 — estado del corpus documental indexado antes de escribir.
+   *  Viaja también en el reporte PENDIENTE: el operador lo ve ANTES de aprobar. */
+  corpus?: {
+    enabled?: boolean; chunks_indexed?: number; files_scanned?: number;
+    skipped_plans?: number; error?: string;
+  };
 }
 
 /** Plan 137 F4 — una corrida del historial persistido (GET /documenter/runs). */

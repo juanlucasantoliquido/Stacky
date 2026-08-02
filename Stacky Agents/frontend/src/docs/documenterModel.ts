@@ -336,3 +336,152 @@ export function buildRadiographyView(
 
   return { coverageLabel, uncovered: r.uncovered ?? [], classLabel, ticketsLabel, deltaLabel };
 }
+
+// ---------------------------------------------------------------------------
+// Plan 285 F1.2 — el operador ve el estado del corpus en vez de adivinarlo.
+//
+// La lógica vive acá y no en el .tsx porque RTL/jsdom NO están instalados: un
+// .test.tsx con RTL reporta "no tests" y sale con código 0, o sea un falso
+// verde perfecto. Toda la lógica de UI va en .ts puro y se testea de verdad.
+// ---------------------------------------------------------------------------
+
+export interface CorpusView {
+  visible: boolean;
+  label: string;
+  tone: "ok" | "warn";
+}
+
+/** Estado del corpus documental del proyecto, en texto llano.
+ *  Los números salen SIEMPRE del dato, nunca de un literal: un conteo
+ *  hardcodeado envejece solo (el árbol pasó de 240 a 241 planes en un día). */
+export function buildCorpusView(
+  corpus: DocumenterStatusResponse["corpus"] | null | undefined
+): CorpusView {
+  if (corpus === undefined || corpus === null) {
+    return { visible: false, label: "", tone: "ok" };
+  }
+  if (corpus.enabled === false) {
+    return {
+      visible: true,
+      tone: "warn",
+      label: "Indexado del corpus desactivado: el Documentador no consulta la documentación ya escrita",
+    };
+  }
+  const err = (corpus.error ?? "").trim();
+  if (err) {
+    const humano =
+      err === "sin_workspace_root"
+        ? "el proyecto no tiene carpeta de trabajo configurada"
+        : err;
+    return {
+      visible: true,
+      tone: "warn",
+      label: `No se pudo indexar la documentación del proyecto: ${humano}`,
+    };
+  }
+  const chunks = corpus.chunks_indexed ?? 0;
+  if (chunks === 0) {
+    return {
+      visible: true,
+      tone: "warn",
+      label: "Corpus vacío: el Documentador no tiene documentación del proyecto que consultar",
+    };
+  }
+  const archivos = corpus.files_scanned ?? 0;
+  const planes = corpus.skipped_plans ?? 0;
+  return {
+    visible: true,
+    tone: "ok",
+    label: `Corpus: ${chunks} fragmentos de ${archivos} documentos indexados (${planes} planes excluidos)`,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Plan 285 F3.3 — el descarte de tickets deja de ser invisible.
+// ---------------------------------------------------------------------------
+
+export interface TriageReasonRow {
+  reason: string;
+  count: number;
+  human: string;
+}
+
+export interface TriageNoiseRow {
+  id: string;
+  tracker: string;
+  title: string;
+  score: number;
+  reasons: string[];
+}
+
+export interface TriageView {
+  visible: boolean;
+  headline: string;
+  truncatedWarning: string;
+  reasonRows: TriageReasonRow[];
+  noiseRows: TriageNoiseRow[];
+}
+
+/** Traduce un motivo interno del triage a texto llano.
+ *  Todo motivo desconocido cae en un default legible que muestra el string
+ *  crudo: nunca se pierde información por un mapeo incompleto. */
+export function formatTriageReason(reason: string): string {
+  const clave = (reason ?? "").split(":")[0];
+  const map: Record<string, string> = {
+    sin_descripcion: "Sin descripción",
+    titulo_ruido: "Título de prueba o descartable",
+    ticket_interno_de_stacky: "Ticket interno de Stacky (id negativo)",
+    tracker_sintetico: "Tracker de demostración",
+    cerrado_sin_contenido: "Cerrado sin descripción",
+    descripcion_suficiente: "Descripción mínima",
+    descripcion_extensa: "Descripción extensa",
+    titulo_descriptivo: "Título descriptivo",
+    tipo_jerarquico: "Épica o funcionalidad",
+    cerrado_y_documentado: "Cerrado y bien descrito",
+  };
+  return map[clave] ?? clave ?? reason;
+}
+
+/** Resumen del descarte de tickets, para el panel. */
+export function buildTriageView(
+  ticketMining: DocumenterStatusResponse["ticket_mining"] | null | undefined
+): TriageView {
+  const vacio: TriageView = {
+    visible: false, headline: "", truncatedWarning: "",
+    reasonRows: [], noiseRows: [],
+  };
+  const m = ticketMining;
+  if (m === undefined || m === null) return vacio;
+  const muestra = m.noise_sample ?? [];
+  const conteos = m.reason_counts ?? {};
+  if (muestra.length === 0 && Object.keys(conteos).length === 0) return vacio;
+
+  const total = m.total ?? 0;
+  const signal = m.signal ?? 0;
+  const noise = m.noise ?? 0;
+  const headline = `${noise} de ${total} tickets descartados — ${signal} aportaron historia`;
+
+  const totalRows = m.total_rows ?? total;
+  const truncatedWarning =
+    m.truncated === true
+      ? `Barrido incompleto: se leyeron ${total} de ${totalRows} tickets. La cobertura de la historia NO es total.`
+      : "";
+
+  const reasonRows: TriageReasonRow[] = Object.entries(conteos)
+    .map(([reason, count]) => ({
+      reason,
+      count: count ?? 0,
+      human: formatTriageReason(reason),
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  const noiseRows: TriageNoiseRow[] = muestra.map((t) => ({
+    id: String(t.external_id ?? t.ticket_id ?? "?"),
+    tracker: t.tracker_type || "desconocido",
+    title: t.title || "(sin título)",
+    score: t.score ?? 0,
+    reasons: (t.reasons ?? []).map(formatTriageReason),
+  }));
+
+  return { visible: true, headline, truncatedWarning, reasonRows, noiseRows };
+}

@@ -63,6 +63,10 @@ def get_doc_sources():
     # el maxLength del textarea NO se hardcodea contra una flag configurable.
     payload["operator_note_enabled"] = bool(getattr(config, "STACKY_DOCS_OPERATOR_NOTE_ENABLED", False))
     payload["operator_note_max_chars"] = int(getattr(config, "STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS", 4000))
+    # Plan 285 F4 — el árbol agrupa y filtra por clase de documento. Con la
+    # flag OFF el frontend muestra todo mezclado, exactamente como hoy.
+    payload["tree_group_by_class_enabled"] = bool(
+        getattr(config, "STACKY_DOCS_TREE_GROUP_BY_CLASS_ENABLED", False))
     return jsonify(payload)
 
 

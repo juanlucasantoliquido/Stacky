@@ -16,6 +16,13 @@ import DocumenterButton from "../components/docs/DocumenterButton";
 import { Docs } from "../api/endpoints";
 import type { DocNode, DocRoot, DocHeading } from "../api/endpoints";
 import { buildNameIndex, type DocGraphResponse } from "../docs/docGraphModel";
+import {
+  partitionTreeByClass,
+  defaultActiveClasses,
+  DOC_CLASSES,
+  DOC_CLASS_LABELS,
+  type DocClass,
+} from "../docs/docTreeModel";
 import { useWorkbench } from "../store/workbench";
 import EmptyState from "../components/EmptyState";
 import SkeletonList from "../components/SkeletonList";
@@ -72,6 +79,19 @@ export default function DocsPage() {
   const projectName = activeProject?.name;
   const [selectedNode, setSelectedNode] = useState<DocNode | null>(null);
   const [filterText, setFilterText] = useState("");
+  // Plan 285 F4 — default: todo activo MENOS los planes. No se oculta
+  // información, se reordena: el chip "Planes" queda visible con su conteo.
+  const [activeClasses, setActiveClasses] = useState<Set<DocClass>>(
+    () => defaultActiveClasses()
+  );
+  const toggleClass = useCallback((c: DocClass) => {
+    setActiveClasses((prev) => {
+      const next = new Set(prev);
+      if (next.has(c)) next.delete(c);
+      else next.add(c);
+      return next;
+    });
+  }, []);
   const [selectedSourceId, setSelectedSourceId] = useState("");
   const [docsView, setDocsView] = useState<"reader" | "coverage" | "graph">("reader");
   const [pendingOpenPath, setPendingOpenPath] = useState<string | null>(null);
@@ -157,6 +177,8 @@ export default function DocsPage() {
   // -- Grafo documental (Plan 109, gateado por flag) --------------------------
   const graphEnabled = sourcesData?.graph_enabled === true;
   const documenterEnabled = sourcesData?.documenter_enabled === true;
+  // Plan 285 F4 — con la flag OFF el árbol se comporta como hoy (todo mezclado).
+  const treeGroupByClassEnabled = sourcesData?.tree_group_by_class_enabled === true;
   const stalenessEnabled = sourcesData?.staleness_enabled === true;  // Plan 114
   const explorerEnabled = sourcesData?.graph_explorer_enabled === true;  // Plan 268
   const {
@@ -281,8 +303,25 @@ export default function DocsPage() {
     );
   }
 
-  const roots = indexData?.roots ?? [];
-  const totalDocs = roots.reduce((acc, root) => acc + countDocFiles(root.children), 0);
+  const rawRoots = indexData?.roots ?? [];
+  const totalDocs = rawRoots.reduce((acc, root) => acc + countDocFiles(root.children), 0);
+
+  // ── Plan 285 F4 — el árbol deja de mezclar ─────────────────────────────────
+  // El backend clasifica desde el 284 y el árbol lo ignoraba: el operador veía
+  // los planes revueltos con su documentación. Los conteos se COMPUTAN del dato:
+  // un literal envejece solo (el árbol pasó de 240 a 241 planes en un día).
+  const classCounts: Record<DocClass, number> = {
+    plan: 0, system: 0, project: 0, agent: 0, other: 0,
+  };
+  let hiddenDocs = 0;
+  const roots = rawRoots.map((root) => {
+    if (!treeGroupByClassEnabled) return root;
+    const r = partitionTreeByClass(root.children ?? [], activeClasses);
+    for (const c of DOC_CLASSES) classCounts[c] += r.counts[c];
+    hiddenDocs += r.hidden;
+    return { ...root, children: r.visible };
+  });
+
   const selectedProjectLabel =
     sourcesData?.project_display_name || sourcesData?.active_project || activeProject?.display_name || "Proyecto";
 
@@ -338,6 +377,50 @@ export default function DocsPage() {
             </button>
           )}
         </div>
+
+        {/* Plan 285 F4 — chips de filtro por clase. Los conteos salen de
+            `classCounts`, computado del árbol completo: hardcodearlos era el
+            defecto C12 (la v1 escribía "Planes 240" y hoy son 241). */}
+        {treeGroupByClassEnabled && totalDocs > 0 ? (
+          <div
+            style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "4px 8px" }}
+            role="group"
+            aria-label="Filtrar documentación por clase"
+          >
+            {DOC_CLASSES.filter((c) => classCounts[c] > 0).map((c) => {
+              const activo = activeClasses.has(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  aria-pressed={activo}
+                  onClick={() => toggleClass(c)}
+                  title={
+                    activo
+                      ? `Ocultar ${DOC_CLASS_LABELS[c]}`
+                      : `Mostrar ${DOC_CLASS_LABELS[c]}`
+                  }
+                  style={{
+                    fontSize: "0.8em",
+                    padding: "2px 8px",
+                    borderRadius: 10,
+                    cursor: "pointer",
+                    border: `1px solid var(--border)`,
+                    background: activo ? "var(--accent)" : "transparent",
+                    color: activo ? "var(--bg-panel)" : "var(--text-primary)",
+                  }}
+                >
+                  {DOC_CLASS_LABELS[c]} {classCounts[c]}
+                </button>
+              );
+            })}
+            {hiddenDocs > 0 ? (
+              <span style={{ fontSize: "0.8em", alignSelf: "center" }}>
+                {hiddenDocs} oculto{hiddenDocs !== 1 ? "s" : ""}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className={styles.treeContainer}>
           {totalDocs === 0 ? (

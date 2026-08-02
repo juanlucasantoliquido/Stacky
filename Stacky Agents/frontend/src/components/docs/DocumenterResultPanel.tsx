@@ -19,6 +19,8 @@ import {
   buildStagesView,
   buildVerdictView,
   buildRadiographyView,
+  buildCorpusView,
+  buildTriageView,
   formatSkipReason,
   type DocumenterRunRow,
 } from "../../docs/documenterModel";
@@ -54,6 +56,9 @@ export function DocumenterResultPanel({
   const stagesView = buildStagesView(status);
   const verdictView = buildVerdictView(status);
   const radiography = buildRadiographyView(status);
+  // Plan 285 F1.2 / F3.3 — vistas puras (testeadas en documenterModel.test.ts).
+  const corpus = buildCorpusView(status.corpus);
+  const triage = buildTriageView(status.ticket_mining);
   const awaitingApproval = status.state === "awaiting_approval";
   const paperStages = (status.stages ?? []).filter(
     (st) => st.artifact && st.artifact.trim().length > 0
@@ -92,6 +97,16 @@ export function DocumenterResultPanel({
               {verdictView.detail}
             </div>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Plan 285 F1.2 — estado del corpus documental. Va FUERA del bloque de
+          radiografía a propósito: el reporte pendiente no trae radiografía, y
+          el operador tiene que ver con qué documentación trabajó el agente
+          ANTES de aprobar, no después. */}
+      {corpus.visible ? (
+        <div style={{ marginBottom: 10, fontSize: "0.92em", color: TONE_COLOR[corpus.tone] }}>
+          {corpus.label}
         </div>
       ) : null}
 
@@ -147,6 +162,39 @@ export function DocumenterResultPanel({
               <ul>{radiography.uncovered.map((m) => <li key={m}>{m}</li>)}</ul>
             </details>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* Plan 285 F3.3 — los tickets descartados y POR QUÉ. Hasta hoy el triage
+          se calculaba, se consumía una vez y se tiraba: el endpoint devolvía
+          {} siempre y el operador nunca supo qué quedó afuera. */}
+      {triage.visible ? (
+        <div style={{ marginBottom: 10, fontSize: "0.92em" }}>
+          <div>{triage.headline}</div>
+          {triage.truncatedWarning ? (
+            <div style={{ color: TONE_COLOR.warn }}>{triage.truncatedWarning}</div>
+          ) : null}
+          <details>
+            <summary>Tickets descartados ({triage.noiseRows.length} de muestra)</summary>
+            <ul style={{ margin: "4px 0", paddingLeft: 18 }}>
+              {triage.reasonRows.map((r) => (
+                <li key={r.reason}>
+                  {r.human}: <strong>{r.count}</strong>
+                </li>
+              ))}
+            </ul>
+            <ul style={{ margin: "4px 0", paddingLeft: 18 }}>
+              {triage.noiseRows.map((t) => (
+                <li key={`${t.tracker}#${t.id}`}>
+                  [{t.tracker}#{t.id}] {t.title}
+                  <span style={{ color: "var(--text-primary)" }}>
+                    {" "}
+                    — {t.reasons.join(", ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       ) : null}
 

@@ -68,7 +68,11 @@ tests/test_directive_health.py  # pendiente-de-triage
 tests/test_directive_retrieval.py  # pendiente-de-triage
 tests/test_directive_schema.py  # pendiente-de-triage
 tests/test_doc_indexer.py  # pendiente-de-triage
-tests/test_docs_api.py  # pendiente-de-triage
+# Plan 285 — tests/test_docs_api.py SALE de la allowlist: el plan 284 lo
+# registro en el ratchet (run_harness_tests.ps1:369 / .sh:420) y lo dejo
+# tambien aca, o sea declarado a la vez "vigilado" y "deliberadamente fuera".
+# test_allowlist_no_se_solapa_con_ratchet quedo rojo desde entonces. Estar en
+# el ratchet es estrictamente mejor que estar exento: gana el ratchet.
 tests/test_epic_autopublish_backend.py  # pendiente-de-triage
 tests/test_epic_confidence_extraction.py  # pendiente-de-triage
 tests/test_epic_from_brief.py  # pendiente-de-triage

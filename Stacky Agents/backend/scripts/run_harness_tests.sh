@@ -1041,6 +1041,23 @@ HARNESS_TEST_FILES=(
   # Plan 262 - recuperacion en caliente
   tests/test_plan262_recovery_flags.py
   tests/test_plan262_runtime_doctor_recovery.py
+
+  # Plan 283 - calendario de reuniones, minutas y pendientes accionables.
+  # Los 12 van tambien en run_harness_tests.ps1: el lag entre los dos scripts
+  # esta EXACTAMENTE en su tope congelado (_PS1_LAG_MAX), asi que agregar uno
+  # solo aca pone rojo test_plan259_ratchet_script_parity.
+  tests/test_plan283_baseline.py
+  tests/test_plan283_flags.py
+  tests/test_plan283_help_limpio.py
+  tests/test_plan283_store.py
+  tests/test_plan283_transcript_parser.py
+  tests/test_plan283_graph_client.py
+  tests/test_plan283_meetings_source.py
+  tests/test_plan283_minutes.py
+  tests/test_plan283_backend_parity.py
+  tests/test_plan283_api.py
+  tests/test_plan283_publish.py
+  tests/test_plan283_e2e.py
 )
 
 pass=0

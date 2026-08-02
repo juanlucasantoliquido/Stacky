@@ -254,6 +254,46 @@ def test_10_si_el_modelo_falla_la_transcripcion_sigue_guardada(monkeypatch):
     guardada, _fmt = meetings_store.get_transcript(mid)
     assert guardada == FUENTE
 
+    # ── La huella de error de este fallo, validada SOLA contra las 9 reglas ──
+    # Por que aca y no en un archivo aparte: el catalogo esta ROJO DE FABRICA (5
+    # rojos ajenos) y sus tests cortan en el PRIMER ofensor, asi que "mi id no
+    # aparece en el mensaje de fallo" puede ser cierto por accidente — el test
+    # ni siquiera llego a mi huella. Esto lo mide de verdad. Y vive en el test
+    # que la propia huella declara como su `guard_test`: si se renombra este
+    # caso, el catalogo miente y hay que enterarse aca.
+    _verificar_huella_de_error()
+
+
+_REQUERIDOS_HUELLA = (
+    "id", "title", "class", "status", "log_pattern",
+    "log_guarded", "killed_by", "guard_test", "self_test",
+)
+_STATUS_HUELLA = {"resolved", "open", "by_design"}
+
+
+def _verificar_huella_de_error() -> None:
+    import re
+
+    catalogo = (
+        pathlib.Path(__file__).resolve().parents[2] / "docs" / "sistema" / "error_fingerprints.json"
+    )
+    datos = json.loads(catalogo.read_text(encoding="utf-8"))
+    propias = [f for f in datos["fingerprints"] if f["id"] == "meeting_minutes_failed"]
+    assert len(propias) == 1, "la huella de este plan falta o esta duplicada"
+    huella = propias[0]
+
+    assert [k for k in _REQUERIDOS_HUELLA if k not in huella] == []
+    assert huella["status"] in _STATUS_HUELLA          # "guarded" NO esta en el enum
+    patron = re.compile(huella["log_pattern"])
+    for muestra in huella["self_test"]["matches"]:
+        assert patron.search(muestra), f"la muestra positiva no matchea: {muestra!r}"
+    for muestra in huella["self_test"]["clean"]:
+        assert not patron.search(muestra), f"la muestra limpia matcheo: {muestra!r}"
+    crudo = json.dumps(huella, ensure_ascii=False)
+    malos = [c for c in crudo if ord(c) < 0x20 and c not in "\t\n\r"]
+    assert malos == [], "hay bytes de control crudos: ponen rojo el catalogo entero"
+    assert huella["guard_test"].startswith("tests/test_plan283_minutes.py")
+
 
 _HABLANTES_K8 = ("Juan Perez", "Ana Gomez")
 

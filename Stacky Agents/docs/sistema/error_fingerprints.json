@@ -1167,6 +1167,27 @@
           "INFO ado_publisher publish ok tracker=gitlab item=1115 comment_id=99"
         ]
       }
+    },
+    {
+      "id": "meeting_minutes_failed",
+      "title": "La transcripcion de la reunion se importo pero la minuta no se pudo generar",
+      "class": "degraded-output",
+      "status": "open",
+      "log_pattern": "meeting_minutes.*(No se pudo generar la minuta|minutes_state\\s*=\\s*failed)",
+      "log_guarded": true,
+      "killed_by": null,
+      "guard_test": "tests/test_plan283_minutes.py::test_10_si_el_modelo_falla_la_transcripcion_sigue_guardada",
+      "note": "Plan 283 D8. El fallo mas probable del modulo: el texto de la reunion queda guardado entero y el destilado falla. NO es perdida de dato — la transcripcion sigue en la base y la pantalla ofrece Reintentar — pero el operador se queda sin minuta y sin compromisos. status=open a proposito: es una huella de DETECCION, no una regresion cerrada.",
+      "self_test": {
+        "matches": [
+          "ERROR meeting_minutes No se pudo generar la minuta: el proveedor devolvio 500",
+          "WARNING services.meeting_minutes reunion 42 minutes_state = failed"
+        ],
+        "clean": [
+          "INFO meeting_minutes minuta lista: 3 compromisos, 0 descartados",
+          "INFO meeting_minutes reunion 42 minutes_state = done"
+        ]
+      }
     }
   ]
 }

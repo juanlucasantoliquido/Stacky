@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import TeamScreen from "./pages/TeamScreen";
 import TicketBoard from "./pages/TicketBoard";
 import IncidentInboxPage from "./pages/IncidentInboxPage"; // Plan 238
+import MeetingsPage from "./pages/MeetingsPage"; // Plan 283
 import { INCIDENT_ICON } from "./utils/workItemTypeColor"; // Plan 238 (reuso)
 import UnblockerPage from "./pages/UnblockerPage";
 import SystemLogsPage from "./pages/SystemLogsPage";
@@ -131,6 +132,7 @@ export default function App() {
   // Plan 167: tab Evolución visible solo si el flag está ON en el backend
   const [evolutionGate, setEvolutionGate] = useState<GateState>("unknown");
   const [incidentInboxGate, setIncidentInboxGate] = useState<GateState>("unknown"); // Plan 238
+  const [meetingsGate, setMeetingsGate] = useState<GateState>("unknown"); // Plan 283
   // Plan 129: búsqueda profunda de la paleta (Ctrl+K) solo si el flag está ON en el backend
   const [deepSearchEnabled, setDeepSearchEnabled] = useState(false);
 
@@ -199,6 +201,12 @@ export default function App() {
     // Plan 238 — gate de la bandeja de incidencias (default ON del lado backend).
     void probeFlagHealth("/api/incident-inbox/status").then((v) => {
       if (alive) setIncidentInboxGate((prev) => gateStateFromVerdict(prev, v));
+    });
+    // Plan 283 — gate del tab Reuniones. Su /health responde 200 SIEMPRE, aun
+    // con la capacidad apagada, para que el gate resuelva y el enlace directo
+    // sobreviva; el flag_enabled del cuerpo es el veredicto.
+    void probeFlagHealth("/api/meetings/health").then((v) => {
+      if (alive) setMeetingsGate((prev) => gateStateFromVerdict(prev, v));
     });
     void probeFlagHealth("/api/search/health").then((v) => {
       if (alive) setDeepSearchEnabled((prev) => nextEnabledState(prev, v));
@@ -366,7 +374,8 @@ export default function App() {
     else if (tab === "planes" && shouldRedirectAway(planesGate)) avisarYSalir("planes");
     else if (tab === "evolution" && shouldRedirectAway(evolutionGate)) avisarYSalir("evolution");
     else if (tab === "incidencias" && shouldRedirectAway(incidentInboxGate)) avisarYSalir("incidencias");
-  }, [tab, sectionsReady, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorGate, devopsGate, dbCompareGate, costCenterGate, planesGate, evolutionGate, incidentInboxGate]);
+    else if (tab === "reuniones" && shouldRedirectAway(meetingsGate)) avisarYSalir("reuniones"); // Plan 283
+  }, [tab, sectionsReady, sections.team, sections.pm, sections.logs, sections.docs, sections.memory, migradorGate, devopsGate, dbCompareGate, costCenterGate, planesGate, evolutionGate, incidentInboxGate, meetingsGate]);
 
   const visibleTabs = computeVisibleTabs({
     sections: {
@@ -383,6 +392,7 @@ export default function App() {
     planesEnabled: isGateOn(planesGate),
     evolutionEnabled: isGateOn(evolutionGate),
     incidentInboxEnabled: isGateOn(incidentInboxGate), // Plan 238
+    meetingsEnabled: isGateOn(meetingsGate), // Plan 283
   });
 
   // [Contrato §3.2 Plan 139 — Plan 134] Espejo del badge de la nav v1: MISMA
@@ -430,6 +440,9 @@ export default function App() {
       {tab === "incidencias" && (isGateResolving(incidentInboxGate)
         ? <Skeleton lines={3} />
         : isGateOn(incidentInboxGate) && <IncidentInboxPage />)} {/* Plan 238 */}
+      {tab === "reuniones" && (isGateResolving(meetingsGate)
+        ? <Skeleton lines={3} />
+        : isGateOn(meetingsGate) && <MeetingsPage />)} {/* Plan 283 */}
     </>
   );
 

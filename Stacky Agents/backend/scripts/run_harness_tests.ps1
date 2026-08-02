@@ -957,7 +957,23 @@ $HarnessTestFiles = @(
 
   # Plan 262 - recuperacion en caliente
   "tests/test_plan262_recovery_flags.py",
-  "tests/test_plan262_runtime_doctor_recovery.py"
+  "tests/test_plan262_runtime_doctor_recovery.py",
+
+  # Plan 283 - calendario de reuniones, minutas y pendientes accionables.
+  # ENTRECOMILLADAS y con coma: pegar una ruta sin comillas NO rompe el parseo,
+  # PIERDE LA RUTA EN SILENCIO, que es peor.
+  "tests/test_plan283_baseline.py",
+  "tests/test_plan283_flags.py",
+  "tests/test_plan283_help_limpio.py",
+  "tests/test_plan283_store.py",
+  "tests/test_plan283_transcript_parser.py",
+  "tests/test_plan283_graph_client.py",
+  "tests/test_plan283_meetings_source.py",
+  "tests/test_plan283_minutes.py",
+  "tests/test_plan283_backend_parity.py",
+  "tests/test_plan283_api.py",
+  "tests/test_plan283_publish.py",
+  "tests/test_plan283_e2e.py"
 )
 
 $pass = 0; $fail = 0; $missing = 0

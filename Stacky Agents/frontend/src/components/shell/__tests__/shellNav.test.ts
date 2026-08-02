@@ -12,10 +12,11 @@ const ALL_TABS = [
   "team", "tickets", "review", "unblocker", "pm", "logs", "settings",
   "docs", "memory", "diagnostics", "history", "migrador", "devops", "dbcompare",
   "costcenter", "planes", "evolution", "incidencias",
+  "reuniones", // Plan 283
 ] as const;
 
 describe("shellNav — modelo de navegación", () => {
-  it("TAB_META cubre exactamente los 18 tabs", () => {
+  it("TAB_META cubre exactamente los 19 tabs", () => {
     expect(Object.keys(TAB_META).sort()).toEqual([...ALL_TABS].sort());
   });
 
@@ -66,6 +67,7 @@ describe("shellNav — modelo de navegación", () => {
       migradorEnabled: true, devopsEnabled: true, dbCompareEnabled: true,
       costCenterEnabled: true, planesEnabled: true, evolutionEnabled: true,
       incidentInboxEnabled: true,
+      meetingsEnabled: true, // Plan 283
     });
     expect([...v].sort()).toEqual([...ALL_TABS].sort());
   });

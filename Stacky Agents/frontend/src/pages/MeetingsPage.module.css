@@ -1,0 +1,139 @@
+/* Plan 283 F9 — Pantalla de Reuniones.
+   Cero color hexadecimal y cero tiempo literal: todo por tokens del tema
+   (uiDebtRatchet y motionDebtRatchet congelan las dos deudas por archivo, y un
+   archivo nuevo tiene permitido 0).
+   Los tokens que EXISTEN son --accent, --success, --danger, --border,
+   --text-primary, --bg-panel y familia. `--color-*` NO existe en este tema. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  color: var(--text-primary);
+}
+
+.columnas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .columnas {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.aviso {
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+}
+
+.avisoAccionable {
+  border-color: var(--accent);
+}
+
+.grupoDia {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tituloDia {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  border: var(--border-width) solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-standard);
+}
+
+.fila:hover {
+  border-color: var(--accent);
+}
+
+.filaActiva {
+  border-color: var(--accent);
+}
+
+.filaTexto {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.filaTitulo {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filaMeta {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pendiente {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: var(--border-width) solid var(--border);
+  border-left: var(--space-1) solid var(--success);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+}
+
+.pendienteDudoso {
+  border-left-color: var(--danger);
+}
+
+.cita {
+  border-left: var(--border-width) solid var(--border-muted);
+  padding-left: var(--space-3);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.vacio {
+  color: var(--text-muted);
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.textoLargo {
+  width: 100%;
+  min-height: var(--space-9);
+}

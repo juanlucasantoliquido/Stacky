@@ -38,6 +38,9 @@ export default function WorkbenchPage() {
   const [resultado, setResultado] = useState<{ ok: boolean; codigo?: string; detalle?: string } | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [historial, setHistorial] = useState<Array<Record<string, string>>>([]);
+  const [sesionEvidencias, setSesionEvidencias] = useState<string>("");
+  const [evidencias, setEvidencias] = useState<Array<{ nombre: string; guardado: string; tipo: string; bytes: number }>>([]);
+  const [rechazadas, setRechazadas] = useState<Array<{ nombre: string; motivo: string }>>([]);
 
   const cargar = useCallback(async () => {
     const r = await rawGet<Record<string, unknown>>("/api/workbench/overview");
@@ -52,6 +55,28 @@ export default function WorkbenchPage() {
   }, []);
 
   useEffect(() => { void cargar(); }, [cargar]);
+
+  /** Sube capturas y las deja previsualizadas ANTES de crear la propuesta.
+   *  Se usa `fetch` directo y no el wrapper: es multipart, no JSON. */
+  const subirEvidencias = async (lista: FileList | null) => {
+    if (!lista || lista.length === 0) return;
+    const form = new FormData();
+    if (sesionEvidencias) form.append("sesion", sesionEvidencias);
+    for (const f of Array.from(lista)) form.append("archivos", f);
+    setOcupado(true);
+    try {
+      const r = await fetch("/api/workbench/evidencias", { method: "POST", body: form });
+      const cuerpo = await r.json();
+      if (cuerpo?.sesion) setSesionEvidencias(cuerpo.sesion);
+      setRechazadas(cuerpo?.rechazados ?? []);
+      const l = await rawGet<{ archivos?: typeof evidencias }>(
+        `/api/workbench/evidencias?sesion=${encodeURIComponent(cuerpo?.sesion ?? "")}`,
+      );
+      setEvidencias(l.data?.archivos ?? []);
+    } finally {
+      setOcupado(false);
+    }
+  };
 
   const verDiff = async (path: string) => {
     const r = await rawGet<{ diff?: string; reason?: string }>(
@@ -204,6 +229,49 @@ export default function WorkbenchPage() {
                 value={estado.pruebas}
                 onChange={(e) => setEstado((s) => ({ ...s, pruebas: e.target.value }))}
               />
+
+              <h4 className={styles.grupoTitulo}>Capturas de lo que probaste</h4>
+              <p className={styles.ayuda}>
+                Sirven para que quien revise vea que funciona. Se aceptan imágenes y PDF.
+              </p>
+              <input
+                type="file"
+                multiple
+                accept="image/*,application/pdf"
+                disabled={ocupado}
+                onChange={(e) => void subirEvidencias(e.target.files)}
+              />
+
+              {evidencias.length > 0 && (
+                <div className={styles.miniaturas}>
+                  {evidencias.map((ev) => (
+                    <figure key={ev.guardado} className={styles.miniatura}>
+                      {ev.tipo.startsWith("image/") ? (
+                        <img
+                          alt={ev.nombre}
+                          src={`/api/workbench/evidencias/vista?sesion=${encodeURIComponent(sesionEvidencias)}&archivo=${encodeURIComponent(ev.guardado)}`}
+                        />
+                      ) : (
+                        <span className={styles.docIcono}>PDF</span>
+                      )}
+                      <figcaption>{ev.nombre}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              )}
+
+              {rechazadas.length > 0 && (
+                <div className={styles.aviso}>
+                  <strong>No se pudieron adjuntar ({rechazadas.length})</strong>
+                  <ul className={styles.listaFuera}>
+                    {rechazadas.map((r) => (
+                      <li key={r.nombre}>
+                        {r.nombre} — {traducir(r.motivo).titulo}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </>
           )}
         </section>
@@ -254,6 +322,20 @@ export default function WorkbenchPage() {
           onClick={() => void accionar("/api/workbench/enviar", { rama })}
         >
           Enviar al servidor
+        </button>
+        <button
+          className={styles.secundario}
+          disabled={!flags.envio || ocupado || estado.mensaje.trim().length < 5}
+          title={!flags.envio ? traducir("push_apagado").queHacer : ""}
+          onClick={() => void accionar("/api/workbench/proponer", {
+            rama,
+            titulo: estado.mensaje.split("\n")[0].slice(0, 200),
+            resumen: estado.mensaje,
+            pruebas: estado.pruebas,
+            sesion_evidencias: sesionEvidencias,
+          })}
+        >
+          Pedir que lo revisen
         </button>
       </footer>
 

@@ -174,6 +174,82 @@ const DICCIONARIO: Record<string, Traduccion> = {
     tono: "bloqueo",
   },
 
+  // ── Evidencias de prueba ────────────────────────────────────────────────
+  formato_no_permitido: {
+    titulo: "Ese archivo no es una imagen ni un PDF",
+    queSignifica: "Se mira el contenido real del archivo, no cómo se llama. Lo que subiste no es ninguno de los formatos que aceptamos.",
+    queHacer: "Adjuntá una captura de pantalla (PNG, JPG, GIF, BMP o WEBP) o un PDF.",
+    tono: "bloqueo",
+  },
+  archivo_muy_grande: {
+    titulo: "Esa captura pesa demasiado",
+    queSignifica: "Cada archivo puede pesar hasta 10 MB.",
+    queHacer: "Recortá la captura o guardala con menos calidad y volvé a adjuntarla.",
+    tono: "bloqueo",
+  },
+  total_muy_grande: {
+    titulo: "Las capturas juntas pesan demasiado",
+    queSignifica: "Entre todas pueden sumar hasta 25 MB.",
+    queHacer: "Sacá alguna de las que ya adjuntaste, o subí menos de una vez.",
+    tono: "bloqueo",
+  },
+  demasiados_archivos: {
+    titulo: "Adjuntaste demasiadas capturas",
+    queSignifica: "Se pueden adjuntar hasta 10 por propuesta.",
+    queHacer: "Elegí las 10 que mejor muestren lo que probaste.",
+    tono: "bloqueo",
+  },
+  sesion_invalida: {
+    titulo: "Se perdió la referencia de tus capturas",
+    queSignifica: "La tanda de capturas ya no existe, seguramente porque se recargó la pantalla.",
+    queHacer: "Volvé a adjuntarlas.",
+    tono: "bloqueo",
+  },
+  evidencia_inexistente: {
+    titulo: "Esa captura ya no está",
+    queSignifica: "El archivo que se quiso mostrar no existe.",
+    queHacer: "Volvé a adjuntarla.",
+    tono: "bloqueo",
+  },
+
+  // ── Propuesta de cambio ─────────────────────────────────────────────────
+  titulo_vacio: {
+    titulo: "Falta el título",
+    queSignifica: "Quien revise necesita saber de un vistazo qué cambiaste.",
+    queHacer: "Escribí una frase corta en el cuadro de arriba.",
+    tono: "bloqueo",
+  },
+  sin_rama_destino: {
+    titulo: "No se sabe contra qué comparar tu trabajo",
+    queSignifica: "No se pudo determinar cuál es la versión principal del proyecto en el servidor.",
+    queHacer: "Avisá al equipo: hay que configurar cuál es la versión principal.",
+    tono: "bloqueo",
+  },
+  misma_rama: {
+    titulo: "Estás trabajando sobre la versión principal",
+    queSignifica: "No se puede pedir que revisen un cambio contra la misma versión en la que estás.",
+    queHacer: "Creá una versión de trabajo propia, guardá ahí y después pedí la revisión.",
+    tono: "bloqueo",
+  },
+  tracker_sin_propuestas: {
+    titulo: "Este proyecto no tiene dónde pedir revisiones",
+    queSignifica: "No hay un servidor configurado donde abrir un pedido de revisión para este proyecto.",
+    queHacer: "Podés guardar y enviar igual. Para pedir revisiones, avisá al equipo que falta configurar el servidor del proyecto.",
+    tono: "bloqueo",
+  },
+  no_se_pudo_proponer: {
+    titulo: "El servidor no aceptó el pedido de revisión",
+    queSignifica: "La propuesta no se creó. Tu trabajo sigue guardado y enviado.",
+    queHacer: "Volvé a intentar. Si sigue fallando, avisá al equipo.",
+    tono: "bloqueo",
+  },
+  sin_confirmacion: {
+    titulo: "Falta confirmar la acción",
+    queSignifica: "Toda acción que modifica algo se confirma antes de ejecutarse.",
+    queHacer: "Volvé a tocar el botón y confirmá.",
+    tono: "bloqueo",
+  },
+
   // ── Avisos: informan, NO bloquean ───────────────────────────────────────
   hay_cambios_no_seleccionados: {
     titulo: "Hay archivos que no elegiste",

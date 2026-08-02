@@ -253,6 +253,68 @@ def traer():
     return jsonify(res.to_dict())
 
 
+# ── Evidencias de prueba ────────────────────────────────────────────────────
+@bp.post("/evidencias")
+def subir_evidencias():
+    """Recibe capturas. El guard de tamano corre ANTES de leer un solo byte:
+    la app NO define MAX_CONTENT_LENGTH (unico hit en todo el backend es un
+    comentario en api/incidents.py admitiendolo), asi que cada endpoint que
+    recibe archivos hereda CERO proteccion y tiene que ponerla."""
+    if not _flags()["lectura"]:
+        return _apagado()
+
+    from services import work_evidence as we
+
+    if request.content_length and request.content_length > we.MAX_BYTES_TOTAL + 1_048_576:
+        return jsonify({
+            "ok": False, "codigo": "total_muy_grande",
+            "mensaje": "Las capturas juntas pesan demasiado.",
+        }), 413
+
+    sesion = (request.form.get("sesion") or "").strip() or we.nueva_sesion()
+    archivos: list[tuple[str, bytes]] = []
+    for f in request.files.getlist("archivos"):
+        if not f or not f.filename:
+            continue
+        datos = f.read(we.MAX_BYTES_POR_ARCHIVO + 1)
+        archivos.append((f.filename, datos))
+
+    res = we.guardar(sesion, archivos)
+    res["sesion"] = sesion
+    _auditar("evidencia_subida", cantidad=len(res.get("archivos") or []))
+    return jsonify(res)
+
+
+@bp.get("/evidencias")
+def listar_evidencias():
+    """La PREVISUALIZACION antes de crear la propuesta, que era el pedido literal."""
+    if not _flags()["lectura"]:
+        return _apagado()
+
+    from services import work_evidence as we
+
+    sesion = (request.args.get("sesion") or "").strip()
+    return jsonify({"ok": True, "sesion": sesion, "archivos": we.listar(sesion)})
+
+
+@bp.get("/evidencias/vista")
+def ver_evidencia():
+    """Sirve el archivo para la miniatura. La ruta NO se arma con lo que llega
+    de afuera: el nombre interno tiene que figurar en el meta de la tanda."""
+    if not _flags()["lectura"]:
+        return _apagado()
+
+    from flask import send_file
+
+    from services import work_evidence as we
+
+    ruta = we.ruta_de((request.args.get("sesion") or "").strip(),
+                      (request.args.get("archivo") or "").strip())
+    if ruta is None:
+        return jsonify({"ok": False, "codigo": "evidencia_inexistente"}), 404
+    return send_file(str(ruta))
+
+
 @bp.post("/proponer")
 def proponer():
     """El UNICO paso que va por REST: abrir una propuesta de cambio no tiene
@@ -275,16 +337,33 @@ def proponer():
     rama_origen = (datos.get("rama") or "").strip() or (vista.get("repo") or {}).get("branch") or ""
     archivos = datos.get("archivos") or [a["path"] for a in (vista.get("archivos") or [])]
 
-    _auditar("proponer", proyecto=proyecto, cantidad=len(archivos))
-    return jsonify(cp.abrir_propuesta(
+    # Las evidencias se suben y se EMBEBEN en la descripcion que se manda al
+    # crear la propuesta, en un unico llamado. Nunca se "completa" despues: ese
+    # es el camino que puede pisar contenido del servidor.
+    evidencias: list[str] = []
+    degradado = None
+    sesion = (datos.get("sesion_evidencias") or "").strip()
+    if sesion:
+        from services import work_evidence as we
+
+        subida = we.subir_al_proveedor(sesion, project=proyecto)
+        evidencias = subida.get("markdown") or []
+        degradado = subida.get("degradado")
+
+    _auditar("proponer", proyecto=proyecto, cantidad=len(archivos), evidencias=len(evidencias))
+    res = cp.abrir_propuesta(
         raiz=raiz,
         rama_origen=rama_origen,
         titulo=(datos.get("titulo") or "")[:200],
         resumen=(datos.get("resumen") or "")[:_MAX_MENSAJE],
         archivos=list(archivos)[:_MAX_RUTAS],
         pruebas=(datos.get("pruebas") or "")[:_MAX_MENSAJE],
+        evidencias=evidencias,
         project=proyecto,
-    ))
+    )
+    if degradado:
+        res["degradado"] = degradado
+    return jsonify(res)
 
 
 @bp.post("/rama")

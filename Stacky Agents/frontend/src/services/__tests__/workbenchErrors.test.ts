@@ -11,9 +11,14 @@ import { traducir, codigosCubiertos, JERGA_PROHIBIDA } from "../workbenchErrors"
  *  Así, si mañana se agrega un código y no su traducción, este test lo caza. */
 function codigosDelBackend(): string[] {
   const base = resolve(__dirname, "../../../../backend/services");
+  // Los CUATRO módulos que pueden devolverle un código al navegador. Si mañana
+  // aparece un quinto y no se agrega acá, este gate deja de vigilarlo: por eso
+  // la lista está en el test y no derivada de un glob.
   const textos = [
     readFileSync(resolve(base, "git_workbench.py"), "utf-8"),
     readFileSync(resolve(base, "git_local_writer.py"), "utf-8"),
+    readFileSync(resolve(base, "change_proposal.py"), "utf-8"),
+    readFileSync(resolve(base, "work_evidence.py"), "utf-8"),
   ].join("\n");
 
   const codigos = new Set<string>();

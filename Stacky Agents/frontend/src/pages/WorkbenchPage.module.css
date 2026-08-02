@@ -75,6 +75,24 @@
 .queHacer { font-weight: 600; }
 
 .vacio { padding: 1rem; color: var(--text-secondary); font-size: 0.9rem; }
+.ayuda { margin: 0 0 0.4rem; font-size: 0.78rem; color: var(--text-secondary); }
+
+/* Previsualización de evidencias ANTES de crear la propuesta. */
+.miniaturas { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.75rem; }
+.miniatura {
+  margin: 0; width: 8rem; border: 1px solid var(--border);
+  border-radius: 6px; padding: 0.3rem; text-align: center;
+}
+.miniatura img { width: 100%; height: 5rem; object-fit: cover; border-radius: 4px; display: block; }
+.miniatura figcaption {
+  font-size: 0.7rem; color: var(--text-secondary); margin-top: 0.25rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.docIcono {
+  display: flex; align-items: center; justify-content: center; height: 5rem;
+  font-size: 0.8rem; font-weight: 700; color: var(--accent);
+  border: 1px dashed var(--border); border-radius: 4px;
+}
 
 .historial { list-style: none; margin: 0; padding: 0; font-size: 0.83rem; }
 .historial li { padding: 0.25rem 0; border-bottom: 1px solid var(--border); color: var(--text-primary); }

@@ -1,10 +1,24 @@
 # Plan 285 — El Documentador pisa firme: corpus vivo, rigor por afirmación y descarte trazable
 
-**Estado:** MEJORADO (**v2** — criticado y reescrito)
-**Versión:** v1 (PROPUESTO, commit `56c7f42c`) → **v2** (esta)
+**Estado:** **IMPLEMENTADO** (v2 construida el 2026-08-02 — ver §13)
+**Versión:** v1 (PROPUESTO, commit `56c7f42c`) → **v2** (esta, `e4d3ef30`) → IMPLEMENTADA
 **Veredicto de la crítica v1:** **RECHAZADO** — 6 hallazgos BLOQUEANTES, 9 MAYORES, 3 MENORES.
 **Fecha:** 2026-08-01
 **Rama de origen:** `docs/plan-279`
+
+| Fase | Estado | Evidencia |
+|---|---|---|
+| **F0.1** saldar el mapa `requires` | **IMPLEMENTADA** | `1 failed, 8 passed` → **`9 passed`** |
+| **F0** red-team (11 tests) | **IMPLEMENTADA** | rojo previo medido: `4 failed, 25 passed` + `7 failed, 38 passed` |
+| **F1.0** `build_base_blocks` | **IMPLEMENTADA** | las etapas de papel pasan de **1** bloque a **≥ 4** |
+| **F1.1** `ensure_corpus_indexed` | **IMPLEMENTADA** | + `skipped_plans` aditivo en `index_project` |
+| **F1.4** `_corpus_block` | **IMPLEMENTADA** | `grep docs_rag doc_documenter.py`: **0 → 6** |
+| **F1.2** panel del corpus | **IMPLEMENTADA** | `buildCorpusView` cableada en `DocumenterResultPanel` |
+| **F1.3** huérfanos + backup + purga | **IMPLEMENTADA** (purga **NO EJECUTADA**) | pendiente de aprobación del operador — ver §13.3 |
+| **F2** rigor por afirmación | **IMPLEMENTADA** | alcanzable en las 4 combinaciones de flags |
+| **F3** descarte trazable | **IMPLEMENTADA** | `ticket_mining` deja de devolver `{}` |
+| **F4** el árbol deja de mezclar | **IMPLEMENTADA** | `doc_class` en el frontend: **2 → 11** hits |
+| **F5** 7 ratchets | **IMPLEMENTADA** | por ALCANZABILIDAD, no por orden de líneas |
 **Antecesor directo:** `284_PLAN_EL_DOCUMENTADOR_DEJA_DE_MEZCLAR_Y_DE_ADIVINAR_RADIOGRAFIA_VERIFICADA.md` (IMPLEMENTADO hoy, commits `f881f615` → `ac66a7af`)
 
 > **Lección que gobierna esta v2.** La v1 tenía **91 de 93 anclajes `archivo:línea` correctos (97,8 %)** y aun así fue rechazada. Igual que el 284 (101/104 y 6 bloqueantes), sus defectos **no estaban en dónde miraba sino en qué daba por existente y en qué orden lo hacía**. Verificar anclajes es el **piso**, no el techo. Todo lo que sigue está medido el 2026-08-01 sobre el árbol de HOY, **ejecutando** los comandos, no leyéndolos.
@@ -165,7 +179,7 @@ Verificado contra el molde real (`harness_flags.py:2848-2862` para bool, `:2864-
 3. `backend/tests/test_harness_flags.py` → agregar la key al set `_CURATED_DEFAULTS_ON` (arranca en `:467`, hoy **12 keys**). El assert de `:1151` es **por IGUALDAD en los dos sentidos** (`known_keys == _CURATED_DEFAULTS_ON`): sobra o falta y se pone rojo.
 4. **Sólo las booleanas `default=True` entran a `_CURATED_DEFAULTS_ON`.** Las numéricas **NO declaran `default=`** en el `FlagSpec` (si lo declaran, `default_is_known` las mete en `known_keys` y rompe el assert de `:1151`). Sí llevan `min_value`/`max_value`.
 5. **`backend/tests/test_harness_flags_requires.py:120` → agregar la key nueva a `_REQUIRES_MAP_FROZEN`.** El guardián es `test_requires_map_is_frozen` (`:364-372`): `actual = {s.key: s.requires for s in FLAG_REGISTRY if s.requires}` comparado **por igualdad** contra un mapa de **165 keys**. El mapa está indexado **por key de flag**, no por el valor de `requires`: **reusar un `requires` que ya existe NO exime de agregar la key nueva.** El archivo está registrado en `run_harness_tests.ps1:351` y `run_harness_tests.sh:402`. Y ojo: `tests/test_fitness_flags.py:69` y `tests/test_knowledge_flags.py:93` **también** importan ese mapa.
-6. Categoría: cae en `capacidades_optin` por el prefijo; verificar que `test_flag_registry_categorization` siga verde.
+6. **[CORREGIDO AL IMPLEMENTAR — la v2 se equivocaba]** La categoría **NO se deriva del prefijo**. `_CATEGORY_KEYS` (`harness_flags.py:120`) es un mapa **explícito** y hay que declarar cada key a mano: las booleanas en `"capacidades_optin"` (`:460`) y las numéricas en el grupo de knobs (`:149-157`). **Medido:** con las 9 flags registradas y sin declararlas acá, `test_every_registry_flag_is_categorized` da **`1 failed, 58 passed`**; declarándolas, **`59 passed`**.
 7. `backend/services/harness_flags_help.py` → una entrada `PlainHelp(what=..., on_effect=..., off_effect=..., example=...)` en lenguaje llano (molde real en `:434-440`). **Sin jerga**: la denylist de `test_harness_flags_help.py` ya está roja de fábrica; no la empeores.
 8. **Un consumidor real de producción** (no sólo un test) + `deployment/harness_defaults.env` regenerado **con el generador del repo, no a mano**.
 
@@ -215,8 +229,12 @@ npx vitest run src/docs/docTreeModel.test.ts       # nuevo, hermano del modulo
 | `tests/test_harness_flags_help.py` | **4 failed, 4 passed** | No — deuda ajena |
 | `tests/test_error_fingerprints_catalog.py` | **3 failed, 5 passed** | No — deuda ajena |
 | **`tests/test_harness_flags_requires.py`** | **1 failed, 8 passed** | **Deuda directa del 284** — este plan la **SALDA** (F0.1) |
+| **`tests/test_harness_ratchet_meta.py`** | **1 failed, 3 passed** | **[AGREGADO AL IMPLEMENTAR — la v2 no lo vio]** Deuda del 284 también; **SALDADO** |
 
 El criterio para los dos primeros es **delta**: igual o menos fallos, nunca más. El tercero **pasa a verde** en F0.1.
+
+> **CORRECCIÓN v2 → implementación: son CUATRO, no tres.** El DoD de §10 exigía `test_harness_ratchet_meta.py` con **0 failed** y **hoy daba `1 failed`**: `test_allowlist_no_se_solapa_con_ratchet` fallaba porque el plan 284 registró `tests/test_docs_api.py` en el ratchet (`run_harness_tests.ps1:369`, `.sh:420`) y lo **dejó también** en `tests/harness_ratchet_allowlist.txt:71`, o sea declarado a la vez *vigilado* y *deliberadamente fuera*. Es exactamente la misma forma que C3 y el mismo origen (commit `3b233376`). Se saldó sacándolo de la allowlist: estar en el ratchet es estrictamente mejor que estar exento. Queda en **`4 passed`**.
+> **La lección se repite:** la v2 midió los rojos de las suites que *pensaba tocar*, pero su propio DoD nombraba una cuarta suite cuyo estado nunca midió. Un DoD que nombra un comando obliga a medir ese comando.
 
 ---
 
@@ -904,7 +922,12 @@ El plan 285 está HECHO cuando **todas** estas afirmaciones son verificables con
 - [ ] Las **9 flags nuevas** tienen sus **8 patas** completas y **cada una tiene al menos un consumidor de producción** (congelado por `test_r285_las_flags_del_285_tienen_consumidor_de_produccion`).
 - [ ] `grep -n "from api\|import api" backend/services/doc_*.py` → **0 líneas**.
 - [ ] `grep -rn "doc_class\|docClass" frontend/src/ | wc -l` → **`>= 8`** (hoy **2**).
-- [ ] `grep -n "ticket_mining" backend/services/doc_documenter.py` → **`>= 1`** (hoy **0**).
+- [ ] ~~`grep -n "ticket_mining" backend/services/doc_documenter.py` → **`>= 1`** (hoy **0**).~~
+      **[CRITERIO CORREGIDO AL IMPLEMENTAR — la afirmación era FALSA]** Hoy da **3**, no 0
+      (`:331` el import y `:332-333` las dos llamadas del 284). Un `>= 1` estaba
+      satisfecho de antemano y **no discriminaba nada**. El criterio real es la clave
+      ESCRITA en el reporte: `grep -c '"ticket_mining"' backend/services/doc_documenter.py`
+      → **`>= 1`** (hoy **0**, medido).
 - [ ] `grep -rn "docs_rag" backend/services/doc_documenter.py` → **`>= 1`** (hoy **0**) — **el corpus se lee, no sólo se escribe.**
 - [ ] `SELECT COUNT(*) FROM docs_index` sobre `backend/data/stacky_agents.db` **no creció** por correr la suite (hoy **51**).
 - [ ] `deployment/harness_defaults.env` regenerado **con el generador**, no editado a mano.
@@ -967,3 +990,99 @@ Si al implementar alguna afirmación de la §3 no se reproduce, **detenete y rep
 - **[ADICIÓN ARQUITECTO 2] El ratchet de ALCANZABILIDAD reemplaza al de orden de líneas.** El ratchet de la v1 (`lineno(evaluate_rigor_gate) < lineno(dest.write_text)`) **se cumple igual si el gate es inalcanzable** — habría congelado el bug de C4 como si fuera la solución. El nuevo ejecuta la matriz de 4 combinaciones de flags. Es la lección destilada de los planes 280 y 284 ("función construida, testeada, verde y jamás cableada") convertida en un test que se puede copiar a cualquier gate futuro.
 - **[ADICIÓN ARQUITECTO 3] F0.1 — saldar el rojo antes de sumarle deuda.** Un test ratchet que ya está rojo **no protege nada**: cualquier daño nuevo se esconde en el mismo mensaje de error. Saldar `test_harness_flags_requires.py` cuesta una edición de lista y devuelve una señal viva para las 9 flags de este plan y para todos los planes que vengan.
 - **[ADICIÓN ARQUITECTO 4] Backup + `expected_rows` en la purga.** `docs_index` es una tabla **derivada**: volcarla a `.jsonl` antes de borrar hace reversible la única operación destructiva del plan, sin costo ni trabajo para el operador. El `expected_rows` cierra la ventana de carrera entre "el operador miró la lista" y "el operador confirmó".
+
+---
+
+## 13. Reporte de implementación (2026-08-02)
+
+Implementado en la rama `docs/plan-279`, **sin push**, con pathspec explícito en cada commit.
+
+### 13.1 Resultado real de los tests — **una invocación por archivo**
+
+| Archivo | Antes (medido) | Después (medido) | Criterio |
+|---|---|---|---|
+| `test_doc_evidence.py` | `25 passed` | **`38 passed`** | DoD `>= 38` ✅ |
+| `test_documenter_v2_pipeline.py` | `38 passed` | **`60 passed`** | DoD `>= 52` ✅ |
+| `test_docs_api.py` | `16 passed` | **`21 passed`** | DoD `>= 16` ✅ |
+| `test_harness_flags.py` | `59 passed` | **`59 passed`** | DoD `>= 59` ✅ |
+| `test_harness_flags_requires.py` | **`1 failed`, 8 passed** | **`9 passed`** | F0.1 ✅ |
+| `test_fitness_flags.py` | `7 passed` | `7 passed` | ✅ |
+| `test_knowledge_flags.py` | `8 passed` | `8 passed` | ✅ |
+| `test_harness_ratchet_meta.py` | **`1 failed`, 3 passed** | **`4 passed`** | ✅ (4.º rojo, saldado) |
+| `test_plan259_ratchet_script_parity.py` | `12 passed` | `12 passed` | ✅ |
+| `test_harness_flags_help.py` | `4 failed, 4 passed` | `4 failed, 4 passed` | delta **0** ✅ (ajeno) |
+| `test_error_fingerprints_catalog.py` | `3 failed, 5 passed` | `3 failed, 5 passed` | delta **0** ✅ (ajeno) |
+
+Frontend: `documenterModel.test.ts` **20 → 29 passed** (DoD `>= 29`), `docTreeModel.test.ts` **7 passed**
+(DoD `>= 6`), `npx tsc --noEmit` **EXIT 0, cero errores**.
+
+**Delta de rojos: −2** (los dos saldados). Ningún rojo nuevo.
+
+### 13.2 Los greps del DoD
+
+| Comando | Antes | Después |
+|---|---|---|
+| `grep -c docs_rag backend/services/doc_documenter.py` | **0** | **6** (2 son llamadas reales) |
+| `grep -c '"ticket_mining"' backend/services/doc_documenter.py` | **0** | **2** |
+| `grep -rn "doc_class\|docClass" frontend/src/ \| wc -l` | **2** | **11** |
+| `grep -c "from api\|import api" backend/services/doc_*.py` | **0** | **0** |
+| `SELECT COUNT(*) FROM docs_index` (base viva) | **51** | **51** (no creció) |
+
+### 13.3 La purga: **CONSTRUIDA, NO EJECUTADA — PENDIENTE DE APROBACIÓN DEL OPERADOR**
+
+El código está completo y testeado, y la flag `STACKY_DOCS_CORPUS_PURGE_ENABLED` nace **OFF**.
+Durante la implementación sólo se hicieron `SELECT` contra `backend/data/stacky_agents.db`.
+
+**Estado medido de los huérfanos (2026-08-02, sólo lectura):** 51 filas en 8 proyectos —
+`C1`(41), `D1`(2), `K1`(2), `M1`(2), `N1`(1), `PF1`(1), `PF2`(1), `ST1`(1).
+
+Para ejecutarla hacen falta **dos** cosas del operador:
+1. Encender la flag desde el panel del arnés (o `STACKY_DOCS_CORPUS_PURGE_ENABLED=true`).
+2. Confirmar el conteo exacto. Si no coincide, **no borra nada** (`row_count_mismatch`).
+
+```bash
+# 1) Verificar la lista (sólo lectura, no borra)
+curl -s http://localhost:5000/api/docs-rag/corpus/orphans
+
+# 2) Purgar — SÓLO tras aprobación explícita. Hace backup a
+#    backend/data/backups/docs_index_backup_<sello>.jsonl ANTES de cualquier DELETE.
+curl -s -X POST http://localhost:5000/api/docs-rag/corpus/purge \
+  -H "Content-Type: application/json" \
+  -d '{"project_names":["C1","D1","K1","M1","N1","PF1","PF2","ST1"],"expected_rows":51}'
+```
+
+### 13.4 Afirmaciones del plan que resultaron **FALSAS** al implementarlas
+
+1. **Pata 6 de §4.1** — *"cae en `capacidades_optin` por el prefijo"*. **Falso**: `_CATEGORY_KEYS` es un
+   mapa explícito. Corregido arriba, con la medición.
+2. **DoD §10** — *"`grep -n "ticket_mining" backend/services/doc_documenter.py` → `>= 1` (hoy 0)"*.
+   **Falso**: hoy da **3**. El criterio no discriminaba. Corregido arriba.
+3. **§4.4** — *"son TRES archivos"* rojos de fábrica. Son **CUATRO**: el DoD nombraba
+   `test_harness_ratchet_meta.py` con `0 failed` y estaba en `1 failed`. Corregido arriba.
+4. **F0.1 paso 2** — *"agregar exactamente esas con el valor de `requires` que el error indica"*. El
+   mensaje del test lista **keys pero no valores**, y trunca a 4. Dos de las 11
+   (`STACKY_DOCS_TAXONOMY_ENABLED`, `STACKY_DOCS_RADIOGRAPHY_ENABLED`) cuelgan de
+   `STACKY_DOCS_GRAPH_ENABLED`, no del Documentador. Copiar el valor de las vecinas deja el test rojo
+   con **`Extras: [] / Faltantes: []`** — completamente indiagnóstico.
+5. **Rojos ajenos del brief** — se anunciaban 9 errores de `tsc` (`FinishWorkButton.tsx`,
+   `QaBrowserRunModal.tsx`, `TicketBoard.tsx`). **Ya no existen**: `tsc --noEmit` da EXIT 0.
+
+### 13.5 Desvíos deliberados
+
+- **Las 9 flags se registraron en un solo paso**, no fase por fase. Sin dependencias entre ellas y con la
+  ventaja de que el rojo de `_CATEGORY_KEYS` apareció una sola vez y fue atribuible.
+- **Guarda extra en `list_orphan_corpus_projects`** que el plan no pedía: si la lista de proyectos
+  configurados viene vacía devuelve `[]` en vez de declarar huérfano a **todo** el corpus. Un fallo de
+  lectura de configuración no puede convertir la base entera en basura borrable.
+- **`total_rows` en `mine_project_tickets`** rompía `test_plan284_mine_project_tickets_forma_garantizada`
+  (assert de igualdad de claves). Se actualizó el test del 284 con el motivo escrito: la forma sigue
+  siendo garantizada (misma clave en OFF, en OK y en el `except`).
+
+### 13.6 Honestidad sobre el rojo previo
+
+Los **11 tests de F0 se midieron rojos** contra el árbol de hoy, con el output pegado en el commit
+`41b8b13c`. Los `test_f2_*`, `test_f3_*`, `test_f1_*` y `test_r285_*` se escribieron **después** de su
+implementación en la misma fase: **no se midieron rojos**. Su símbolo objetivo no existía antes
+(`evaluate_rigor_gate` dio `ImportError` en F0, medido), así que eran rojos por construcción — pero eso es
+una deducción, no una medición. La excepción es `test_f2_rigor_lee_los_umbrales_de_config`, donde sí se
+corrió una **prueba de mutación**: con los umbrales hardcodeados el test cae, o sea discrimina de verdad.

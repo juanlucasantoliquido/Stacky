@@ -215,6 +215,27 @@ _REQUIRES_MAP_FROZEN = {
     "STACKY_DOCS_DOCUMENTER_V2_ENABLED": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 137
     "STACKY_DOCS_DOCUMENTER_EVIDENCE_MAX_CHARS": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 137
     "STACKY_DOCS_STALENESS_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",  # Plan 114
+    # Plan 285 F0.1 — saldo del rojo de fabrica que dejo el plan 284.
+    # Estas 11 keys ya estaban en FLAG_REGISTRY con su `requires`, pero nadie
+    # las agrego aca: el test comparaba por IGUALDAD y quedo `1 failed, 8 passed`
+    # desde el 284. Un ratchet rojo no protege nada — cualquier dano nuevo se
+    # esconde en el mismo mensaje de error. Se saldan ANTES de registrar las
+    # flags del 285 para que su rojo vuelva a ser una senal util.
+    # OJO: estas dos cuelgan del GRAFO, no del Documentador. El mensaje de
+    # error del test lista keys pero NO valores, asi que copiar el `requires`
+    # de las vecinas deja el test rojo con "Extras: [] / Faltantes: []" —
+    # completamente indiagnostico. Los valores salen del FLAG_REGISTRY.
+    "STACKY_DOCS_TAXONOMY_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",  # Plan 284
+    "STACKY_DOCS_RADIOGRAPHY_ENABLED": "STACKY_DOCS_GRAPH_ENABLED",  # Plan 284
+    "STACKY_DOCS_TICKET_MINING_ENABLED": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_TICKET_MINING_MAX": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_CITATION_GATE_ENABLED": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_CITATION_GATE_MIN_RATIO": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_OPERATOR_NOTE_ENABLED": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_OPERATOR_NOTE_MAX_CHARS": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_PIPELINE_STAGES_ENABLED": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_PIPELINE_AUTOAPPLY": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
+    "STACKY_DOCS_PIPELINE_MAX_LLM_CALLS": "STACKY_DOCS_DOCUMENTER_ENABLED",  # Plan 284
     "STACKY_DEVOPS_CONNECTION_DOCTOR_ENABLED": "STACKY_DEVOPS_PANEL_ENABLED",  # Plan 116
     "STACKY_LOCAL_INSIGHTS_SWEEP_SEC": "STACKY_LOCAL_INSIGHTS_ENABLED",  # Plan 117
     "STACKY_LOCAL_INSIGHTS_MAX_PER_CYCLE": "STACKY_LOCAL_INSIGHTS_ENABLED",  # Plan 117

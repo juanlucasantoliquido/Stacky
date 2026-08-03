@@ -2249,6 +2249,130 @@ export const ClientProfileApi = {
     ),
 };
 
+/**
+ * Plan 296 — copiloto conversacional del perfil de cliente.
+ *
+ * Usa rawGet/rawPost y NO el wrapper `api.*`: `api.*` LANZA en non-2xx, y este
+ * flujo depende de leer los cuerpos de 403/409/400, que son estados NORMALES
+ * del copiloto (flag apagada, cambio de runtime sin confirmar, propuesta
+ * desactualizada) y no errores de red.
+ *
+ * Acá SÍ van las URL finales con /api: es el cliente HTTP, no el decorador de
+ * Flask (C7).
+ */
+export const ProfileCopilotApi = {
+  runtimes: () => rawGet<ProfileCopilotRuntimesResponse>("/api/runtimes/profile"),
+  state: (project: string) =>
+    rawGet<ProfileCopilotStateResponse>(
+      `/api/projects/${encodeURIComponent(project)}/client-profile/copilot/state`
+    ),
+  turn: (project: string, body: unknown) =>
+    rawPost<ProfileCopilotTurnResponse>(
+      `/api/projects/${encodeURIComponent(project)}/client-profile/copilot/turn`,
+      body
+    ),
+  propose: (project: string, body: unknown) =>
+    rawPost<ProfileCopilotProposeResponse>(
+      `/api/projects/${encodeURIComponent(project)}/client-profile/copilot/propose`,
+      body
+    ),
+  apply: (project: string, body: unknown) =>
+    rawPost<ProfileCopilotApplyResponse>(
+      `/api/projects/${encodeURIComponent(project)}/client-profile/copilot/apply`,
+      body
+    ),
+};
+
+export interface ProfileCopilotFicha {
+  runtime: string;
+  conocido: boolean;
+  disponible: boolean;
+  disponibilidad_motivo: string;
+  recomendado_para: string[];
+  capacidades: Record<string, unknown>;
+  credenciales: string[];
+  ejecucion: string;
+  si_falla: string;
+  como_cambiar: string;
+  [key: string]: unknown;
+}
+
+export interface ProfileCopilotRuntimesResponse {
+  ok: boolean;
+  runtimes: ProfileCopilotFicha[];
+  recomendacion: { runtime: string | null; motivo: string };
+}
+
+export interface ProfileCopilotPregunta {
+  id: string;
+  seccion: string;
+  texto: string;
+  tipo: string;
+  opciones: string[];
+  obligatoria: boolean;
+  motivo: string;
+}
+
+export interface ProfileCopilotCompletitud {
+  requeridas_ok: number;
+  requeridas_total: number;
+  opcionales_ok: number;
+  opcionales_total: number;
+  porcentaje: number;
+  listo_para_usar: boolean;
+}
+
+export interface ProfileCopilotStateResponse {
+  ok: boolean;
+  estado: Record<string, unknown>;
+  completitud: ProfileCopilotCompletitud;
+  preguntas: ProfileCopilotPregunta[];
+  contexto: Record<string, string[]>;
+}
+
+export interface ProfileCopilotTurnResponse {
+  ok: boolean;
+  session: Record<string, unknown>;
+  mensaje: string;
+  pregunta: ProfileCopilotPregunta | null;
+  completitud: ProfileCopilotCompletitud;
+  runtime_elegido: string;
+  cambio_sugerido: { runtime: string; motivo: string } | null;
+  preferencia_persistida: boolean;
+  advertencia: string;
+}
+
+export interface ProfileCopilotPatch {
+  proyecto: string;
+  cambios: Array<{
+    path: string[];
+    path_texto: string;
+    antes: unknown;
+    existia: boolean;
+    despues: unknown;
+    motivo: string;
+    sensible: boolean;
+  }>;
+  rechazos: string[];
+  confirm_token: string;
+  version: string;
+  sensibles: string[];
+}
+
+export interface ProfileCopilotProposeResponse {
+  ok: boolean;
+  patch: ProfileCopilotPatch;
+  validacion_previa: { ok: boolean; errors: string[]; warnings: string[] };
+}
+
+export interface ProfileCopilotApplyResponse {
+  ok: boolean;
+  session: Record<string, unknown>;
+  completitud: ProfileCopilotCompletitud;
+  aplicados: number;
+  profile: Record<string, unknown>;
+}
+
 export const DbReadonlyAuth = {
   meta: (project: string) =>
     api.get<DbReadonlyAuthMeta>(

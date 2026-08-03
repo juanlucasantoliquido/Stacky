@@ -84,6 +84,11 @@ def bd(tmp_path, monkeypatch):
             self._s.expire_all()
             return self._s
 
+        # El mismo `session_scope` aislado que usa el sync. Se expone para que un
+        # test pueda re-apuntar OTRO módulo que también lo importó por valor
+        # (`api.tickets`), sin lo cual ese módulo escribiría en la BD del operador.
+        scope = staticmethod(_scope_de_test)
+
     fachada = _BD()
     yield fachada
     fachada._s.close()
@@ -361,3 +366,114 @@ def test_17_proyecto_ado_no_ejecuta_el_bloque_nuevo(bd, monkeypatch):
                                                         "updated": 0, "removed": 0})
     t._sync_via_provider_or_ado("P")
     assert llamadas == [], "para un proyecto ADO se resolvió un provider de tracker"
+
+
+# ── Casos 18-21: el publicador de épica y el sync tienen que hablar el MISMO ──
+# idioma. Los dos escriben en `tickets`; si no coinciden en la terna, el issue
+# entra DOS veces y el grafo muestra la épica duplicada.
+
+_EPIC_HTML = "<h1>Épica de prueba</h1><h2>RF-001 — algo</h2><p>cuerpo</p>"
+
+
+class _ProviderQueCrea:
+    """Provider falso con la forma REAL de `GitLabTrackerProvider.create_item`:
+    devuelve `_normalize_issue`, que estringa los ids (gitlab_provider.py:131-132)."""
+
+    name = "gitlab"
+
+    def __init__(self, issue):
+        self._issue = issue
+        self.creados = 0
+
+    def create_item(self, item):
+        self.creados += 1
+        return dict(self._issue)
+
+    def item_url(self, item_id):
+        return f"https://gl.interno/ripley/agenda-web/-/issues/{item_id}"
+
+
+def _publicar(monkeypatch, bd, issue):
+    """Corre `_publish_epic_to_ado` con el provider GitLab contra la BD del test."""
+    import api.tickets as t
+
+    prov = _ProviderQueCrea(issue)
+    monkeypatch.setattr(t, "_provider_for_ticket", lambda **kw: prov)
+    monkeypatch.setattr(t, "session_scope", bd.scope)
+    monkeypatch.setattr(t, "_epic_brief_save", lambda *a, **k: None)
+    return t._publish_epic_to_ado(
+        description_html=_EPIC_HTML, brief="brief", project_name="RIPLEY",
+    ), prov
+
+
+def test_18_el_id_publicado_es_int_y_es_el_iid(bd, monkeypatch):
+    """El sello viaja a `metadata["epic_ado_id"]` y el modal lo lee con
+    `typeof === "number"` (EpicFromBriefModal.tsx:223). Un str ahí significa que el
+    guard NO reconoce la épica ya publicada y el frontend publica una SEGUNDA."""
+    publicada, _ = _publicar(monkeypatch, bd, _issue(7, id_=4242))
+
+    assert isinstance(publicada.ado_id, int), (
+        f"el id publicado es {type(publicada.ado_id).__name__} "
+        f"({publicada.ado_id!r}); el guard del modal solo acepta number"
+    )
+    assert publicada.ado_id == 7, "el número visible de GitLab es el iid, no el id global"
+
+
+def test_19_la_fila_del_publicador_nace_con_la_terna_de_gitlab(bd, monkeypatch):
+    """`tracker_type` NO puede quedar en el default `azure_devops` (models.py:49)
+    dentro de un proyecto GitLab: el sync busca por la terna y no la encontraría."""
+    from models import Ticket
+
+    _publicar(monkeypatch, bd, _issue(7, id_=4242))
+
+    fila = bd.session.query(Ticket).one()
+    assert fila.tracker_type == "gitlab", (
+        f"la fila quedó con tracker_type={fila.tracker_type!r}: el sync de GitLab "
+        f"busca por (proyecto, 'gitlab', external_id) y va a dar de alta otra fila"
+    )
+    assert fila.external_id == 4242, "external_id es el id GLOBAL (gitlab_sync.py:144)"
+    assert fila.ado_id == 7, "ado_id es el iid (gitlab_sync.py:145)"
+
+
+def test_20_publicar_y_sincronizar_deja_UNA_fila_no_dos(bd, monkeypatch):
+    """EL SÍNTOMA: 'creo una épica en el grafo y me la duplica'.
+
+    Publicador y sync escriben en la misma tabla. Si no coinciden en la terna, el
+    MISMO issue de GitLab entra dos veces y el grafo dibuja dos nodos."""
+    from models import Ticket
+
+    issue = _issue(7, id_=4242, titulo="Épica de prueba", tipo="Epic")
+    _publicar(monkeypatch, bd, issue)
+    res, _ = _sync(monkeypatch, [issue])
+
+    filas = bd.session.query(Ticket).all()
+    assert len(filas) == 1, (
+        f"el issue de GitLab quedó {len(filas)} veces en la tabla: "
+        f"{[(f.id, f.ado_id, f.external_id, f.tracker_type) for f in filas]}"
+    )
+    assert res["created"] == 0, "el sync dio de alta el issue que el publicador ya había creado"
+
+
+def test_21_proyecto_ado_conserva_el_id_int_y_su_tracker_type(bd, monkeypatch):
+    """Backward-compat: sin provider (camino ADO) nada cambia."""
+    import api.tickets as t
+    from models import Ticket
+
+    monkeypatch.setattr(t, "_provider_for_ticket", lambda **kw: None)
+    monkeypatch.setattr(t, "session_scope", bd.scope)
+    monkeypatch.setattr(t, "_epic_brief_save", lambda *a, **k: None)
+
+    class _Ado:
+        def create_work_item(self, **kw):
+            return {"id": 555, "rev": 1,
+                    "fields": {"System.Title": "T"},
+                    "_links": {"html": {"href": "https://dev.azure.com/wi/555"}}}
+
+    monkeypatch.setattr(t, "_ado_client_for_ticket", lambda **kw: _Ado())
+
+    publicada = t._publish_epic_to_ado(
+        description_html=_EPIC_HTML, brief="b", project_name="ProyADO",
+    )
+    assert publicada.ado_id == 555 and isinstance(publicada.ado_id, int)
+    fila = bd.session.query(Ticket).one()
+    assert fila.tracker_type == "azure_devops" and fila.external_id == 555

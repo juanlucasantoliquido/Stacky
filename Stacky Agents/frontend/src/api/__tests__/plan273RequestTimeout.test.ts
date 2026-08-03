@@ -131,10 +131,16 @@ describe("plan273 F6 — deadline en request()", () => {
 
 // ── Gates estructurales sobre el fuente ───────────────────────────────────────
 
-/** Los 12 endpoints largos que van con `timeoutMs: 0` (v3, C23: 10 + los 2 de postWithHeaders). */
+/** Los 13 endpoints largos que van con `timeoutMs: 0` (v3, C23: 10 + los 2 de
+ *  postWithHeaders; +1: run-brief, que el barrido original no vio — ver abajo). */
 const LONG_ENDPOINTS: Array<[string, string]> = [
   ["/api/tickets/sync", "sincronizacion completa contra ADO/GitLab"],
   ["/api/agents/run", "ejecucion de agente (DOS sitios)"],
+  [
+    "/api/agents/run-brief",
+    "pre-vuelo de intencion SINCRONICO dentro del request (api/agents.py:737-745) " +
+      "contra copilot_bridge, presupuesto 300s (copilot_bridge.py:524)",
+  ],
   ["/api/packs/start", "arranque de pack multi-paso"],
   ["/publish-to-ado", "publicacion en el sistema real del operador"],
   ["/api/config/import", "importacion de bundle (DOS sitios)"],
@@ -146,6 +152,28 @@ const LONG_ENDPOINTS: Array<[string, string]> = [
   ["/finish-work", "cancela ejecucion + publica en ADO + transiciona el estado (C23)"],
   ["/create-child-task", "crea una Task en ADO (C23)"],
 ];
+
+/**
+ * Ocurrencias de `route` en `src` que NO son un prefijo de una ruta mas larga.
+ *
+ * EL DEFECTO QUE ESTO CIERRA: el censo original usaba `indexOf(route)` pelado, asi
+ * que `/api/agents/run` matcheaba TAMBIEN adentro de `/api/agents/run-brief`. Como
+ * el veredicto es `.some(...)`, alcanzaba con que UNA de las ocurrencias (la de
+ * `/api/agents/run`, que si tiene `timeoutMs: 0`) pasara para dar por cubierta a
+ * `run-brief`, que no lo tenia. El unico endpoint largo sin escape del repo quedo
+ * VERDE en el censo que existia para encontrarlo justamente a el.
+ */
+function routeOccurrences(src: string, route: string): number[] {
+  const out: number[] = [];
+  let i = src.indexOf(route);
+  while (i >= 0) {
+    // Frontera: el caracter siguiente no puede continuar el segmento de ruta.
+    const next = src[i + route.length] ?? "";
+    if (!/[A-Za-z0-9_-]/.test(next)) out.push(i);
+    i = src.indexOf(route, i + 1);
+  }
+  return out;
+}
 
 describe("plan273 F6 — gates estructurales", () => {
   it("los_verbos_aceptan_opts", () => {
@@ -163,16 +191,23 @@ describe("plan273 F6 — gates estructurales", () => {
     ).toEqual([]);
   });
 
-  it("los_12_endpoints_largos_declaran_timeout_cero", () => {
+  it("una_ruta_no_queda_cubierta_por_su_prefijo", () => {
+    // EL GATE CONTRA EL DEFECTO: con el matcher viejo (indexOf pelado) esta
+    // asercion era falsa y `/api/agents/run-brief` pasaba en falso.
+    const brief = ENDPOINTS_SRC.indexOf("/api/agents/run-brief");
+    expect(brief, "no se encontro /api/agents/run-brief en endpoints.ts").toBeGreaterThan(-1);
+    expect(
+      routeOccurrences(ENDPOINTS_SRC, "/api/agents/run"),
+      "/api/agents/run NO debe matchear adentro de /api/agents/run-brief"
+    ).not.toContain(brief);
+  });
+
+  it("los_13_endpoints_largos_declaran_timeout_cero", () => {
     const missing: string[] = [];
     for (const [route, why] of LONG_ENDPOINTS) {
       // Ventana alrededor de cada mencion de la ruta; alguna tiene que traer timeoutMs: 0.
-      const idxs: number[] = [];
-      let i = ENDPOINTS_SRC.indexOf(route);
-      while (i >= 0) {
-        idxs.push(i);
-        i = ENDPOINTS_SRC.indexOf(route, i + 1);
-      }
+      const idxs = routeOccurrences(ENDPOINTS_SRC, route);
+      expect(idxs.length, `la ruta ${route} no aparece en endpoints.ts`).toBeGreaterThan(0);
       const ok = idxs.some((at) =>
         ENDPOINTS_SRC.slice(at, at + 420).includes("timeoutMs: 0")
       );
@@ -187,9 +222,9 @@ describe("plan273 F6 — gates estructurales", () => {
 
   it("el_conteo_de_timeout_cero_no_baja", () => {
     const n = (ENDPOINTS_SRC.match(/timeoutMs:\s*0/g) ?? []).length;
-    // 12 rutas, y /api/agents/run y /api/config/import aparecen dos veces cada una
-    // => 14 sitios. Ratchet: si alguien borra un timeoutMs: 0, se pone rojo.
-    expect(n, `solo ${n} sitios con timeoutMs: 0 en endpoints.ts`).toBeGreaterThanOrEqual(14);
+    // 13 rutas, y /api/agents/run y /api/config/import aparecen dos veces cada una
+    // => 15 sitios. Ratchet: si alguien borra un timeoutMs: 0, se pone rojo.
+    expect(n, `solo ${n} sitios con timeoutMs: 0 en endpoints.ts`).toBeGreaterThanOrEqual(15);
   });
 
   it("ningun_verbo_enruta_por_request_sin_canal_de_deadline", () => {

@@ -355,7 +355,8 @@ def list_conversations():
                 .first()
             )
             last_status = last.status if last else None
-            server_alias_val = _chat_meta(t).get("server_alias")
+            meta_conv = _chat_meta(t)
+            server_alias_val = meta_conv.get("server_alias")
             item = {
                 "conversation_id": t.id,
                 "title": t.title,
@@ -366,6 +367,13 @@ def list_conversations():
                 "started_at": t.created_at.isoformat() if getattr(t, "created_at", None) else None,
                 # Plan 108 F3 — servidor al que quedó sellada la conversación (None si no).
                 "server_alias": server_alias_val,
+                # Plan 288 — ¿este hilo ES una sesión del copiloto de pipelines?
+                # Sin esta señal la sección del copiloto no puede cumplir lo que
+                # promete por escrito ("la sesión se retoma sola"): el listado no
+                # distinguía un hilo de copiloto de uno de chat libre.
+                "pipeline_copilot": isinstance(
+                    meta_conv.get("pipeline_session"), dict
+                ),
                 # [ADICIÓN ARQUITECTO v2] Señal HONESTA por-conversación (C3): continuar
                 # SOLO conserva el hilo si (a) el resume está activo para el proyecto Y
                 # (b) el último turno terminó "completed" (harness/resume.py:96).

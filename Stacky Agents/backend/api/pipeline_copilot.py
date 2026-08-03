@@ -16,6 +16,7 @@ from flask import Blueprint, jsonify, request
 
 import config as _config
 from services.pipeline_session import (
+    PIPELINE_FILENAME,
     PipelineSession,
     advance,
     next_question,
@@ -60,19 +61,41 @@ def _meta(ticket) -> dict:
     return cargado if isinstance(cargado, dict) else {}
 
 
-def _payload(session: PipelineSession) -> dict:
+def _provider_del_proyecto(project: str | None) -> str:
+    """Plan 288 — Proveedor de pipeline que le corresponde a `project`, o "".
+
+    El destino de la escritura lo decide el PROYECTO (Plan 286), no un default
+    del frontend: `services/devopsActionBindings.ts:63` cae en 'ado' salvo que
+    los params digan 'gitlab', asi que un proyecto GitLab terminaba creando
+    `azure-pipelines.yml`. Este endpoint solo lo DECLARA (es solo-estado); quien
+    lo hace cumplir al escribir es `api/pipeline_generator.py::_target_efectivo`,
+    y los dos leen el MISMO resolvedor para no poder divergir.
+    """
+    # Import local: idioma de la casa, y ademas mantiene el modulo interceptable
+    # con monkeypatch en el ORIGEN (services.project_context).
+    from services.project_context import provider_de_pipeline_del_proyecto
+
+    return provider_de_pipeline_del_proyecto(project)
+
+
+def _payload(session: PipelineSession, project: str | None = None) -> dict:
     """Cuerpo comun de las respuestas que devuelven la sesion."""
     faltantes = list(_GENERATOR_ACTIONS) if _generator_off() else []
+    provider = _provider_del_proyecto(project)
     return {
         "ok": True,
         "session": session_to_dict(session),
         "unavailable_actions": faltantes,
         "unavailable_reason": _GENERATOR_FLAG if faltantes else "",
+        # Plan 288 — el destino, dicho por el proyecto y no adivinado por la UI.
+        "provider": provider,
+        "provider_source": "project" if provider else "unknown",
+        "pipeline_file": PIPELINE_FILENAME.get(provider, ""),
     }
 
 
 def _leer(conversation_id: int):
-    """(session, meta) si la conversacion existe; (None, None) si no."""
+    """(session, meta, project) si la conversacion existe; (None, None, None) si no."""
     from db import session_scope
     from models import Ticket
 
@@ -81,9 +104,10 @@ def _leer(conversation_id: int):
             id=conversation_id, ado_id=_CONVERSATION_ADO_ID
         ).first()
         if ticket is None:
-            return None, None
+            return None, None, None
         meta = _meta(ticket)
-    return session_from_dict(meta.get(_SESSION_KEY)), meta
+        project = ticket.stacky_project_name or ticket.project
+    return session_from_dict(meta.get(_SESSION_KEY)), meta, project
 
 
 def _log_transicion(conversation_id: int, origen: str, destino: str,
@@ -115,10 +139,10 @@ def _log_transicion(conversation_id: int, origen: str, destino: str,
 def get_session(conversation_id: int):
     if _flag_off():
         return jsonify({"error": "pipeline_copilot_disabled"}), 404
-    session, meta = _leer(conversation_id)
+    session, _meta_leido, project = _leer(conversation_id)
     if session is None:
         return jsonify({"ok": False, "error": "conversation_not_found"}), 404
-    return jsonify(_payload(session))
+    return jsonify(_payload(session, project))
 
 
 @bp.post("/session/<int:conversation_id>/advance")
@@ -142,6 +166,7 @@ def advance_session(conversation_id: int):
             return jsonify({"ok": False, "error": "conversation_not_found"}), 404
 
         meta = _meta(ticket)
+        project = ticket.stacky_project_name or ticket.project
         actual = session_from_dict(meta.get(_SESSION_KEY))
         origen = actual.state
 
@@ -163,14 +188,14 @@ def advance_session(conversation_id: int):
         ticket.description = json.dumps(meta)
 
     _log_transicion(conversation_id, origen, nueva.state, nueva.last_action_id)
-    return jsonify(_payload(nueva))
+    return jsonify(_payload(nueva, project))
 
 
 @bp.get("/session/<int:conversation_id>/question")
 def next_question_route(conversation_id: int):
     if _flag_off():
         return jsonify({"error": "pipeline_copilot_disabled"}), 404
-    session, _ = _leer(conversation_id)
+    session, _meta_leido, _project = _leer(conversation_id)
     if session is None:
         return jsonify({"ok": False, "error": "conversation_not_found"}), 404
     return jsonify({"ok": True, "question": next_question(session)})
@@ -182,7 +207,7 @@ def undo_hint_route(conversation_id: int):
     "" mientras todavia no aplique."""
     if _flag_off():
         return jsonify({"error": "pipeline_copilot_disabled"}), 404
-    session, _ = _leer(conversation_id)
+    session, _meta_leido, _project = _leer(conversation_id)
     if session is None:
         return jsonify({"ok": False, "error": "conversation_not_found"}), 404
     return jsonify({"ok": True, "undo_hint": undo_hint(session)})

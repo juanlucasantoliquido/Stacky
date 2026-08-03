@@ -152,3 +152,67 @@ def test_f5_c1_tracker_api_error_403(app_flag_on):
 # NOTA: test_f5_c12_ado_not_implemented_501 se eliminó en Plan 95 F1.a porque commit_file ADO
 # ahora está implementado. Originalmente verificaba que el endpoint devolvía 501 cuando ADO
 # lanzaba NotImplementedError, pero F1 lo implementó.
+
+
+# ---------------------------------------------------------------------------
+# Plan 288 — el destino de la escritura lo decide el PROYECTO.
+#
+# Defecto que matan: `draftProvider()` del frontend
+# (services/devopsActionBindings.ts:63) manda 'ado' salvo que los params digan
+# 'gitlab', y el catalogo de `devops.pipeline_new.commit` NO declara un param
+# `provider`. Resultado: en un proyecto GitLab, el copiloto commiteaba YAML de
+# ADO en `azure-pipelines.yml` DENTRO del repo GitLab (el writer si sale del
+# proyecto, via get_repo_writer). Pipeline rota, en silencio.
+#
+# Regla: si el proyecto declara tracker, gana el proyecto. Si no lo declara,
+# manda el cuerpo — byte-compat con todo lo anterior a este plan.
+# ---------------------------------------------------------------------------
+
+
+def _commit_con_proyecto(app, monkeypatch, *, declarado, target, project="P"):
+    """Commitea y devuelve el kwarg `path` con el que se llamo a commit_file."""
+    import services.project_context as pc
+
+    monkeypatch.setattr(pc, "tracker_declarado_del_proyecto", lambda _p: declarado)
+    with app.test_client() as c:
+        with patch("api.pipeline_generator.get_repo_writer") as mock_gw:
+            writer = MagicMock()
+            writer.commit_file.return_value = {"sha": "s", "branch": "b",
+                                               "path": "x", "web_url": "",
+                                               "status": "create"}
+            mock_gw.return_value = writer
+            r = c.post("/api/pipeline-generator/commit", json={
+                **_VALID_SPEC, "confirm": True, "target": target,
+                "project": project,
+            })
+            assert r.status_code == 200, r.get_data(as_text=True)
+            writer.commit_file.assert_called_once()
+            return writer.commit_file.call_args[1]["path"], r.get_json()
+
+
+def test_plan288_el_proyecto_gana_sobre_el_target_del_cuerpo(app_flag_on, monkeypatch):
+    """Los DOS sentidos en el MISMO caso: ninguna constante pasa el test."""
+    path_gl, body_gl = _commit_con_proyecto(
+        app_flag_on, monkeypatch, declarado="gitlab", target="ado")
+    assert path_gl == ".gitlab-ci.yml", path_gl
+    assert body_gl["target"] == "gitlab", body_gl
+    assert body_gl["target_source"] == "project", body_gl
+
+    path_ado, body_ado = _commit_con_proyecto(
+        app_flag_on, monkeypatch, declarado="azure_devops", target="gitlab")
+    assert path_ado == "azure-pipelines.yml", path_ado
+    assert body_ado["target"] == "ado", body_ado
+    assert body_ado["target_source"] == "project", body_ado
+
+
+def test_plan288_sin_tracker_declarado_manda_el_cuerpo(app_flag_on, monkeypatch):
+    """Byte-compat: proyecto que no declara tracker => el cuerpo sigue decidiendo.
+
+    Guard anti-falso-verde: arriba ya quedo probado que el proyecto SI puede
+    ganar, asi que este `== "ado"` no puede pasar por "la resolucion nunca corre".
+    """
+    for sin_tracker in (None, "", "jira"):
+        path, body = _commit_con_proyecto(
+            app_flag_on, monkeypatch, declarado=sin_tracker, target="ado")
+        assert path == "azure-pipelines.yml", (sin_tracker, path)
+        assert body["target_source"] == "body", (sin_tracker, body)

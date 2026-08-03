@@ -101,3 +101,49 @@
   color: var(--text-secondary);
   font-size: 13px;
 }
+
+/* Plan 288 — arranque local del copiloto. Solo tokens: CERO hex. */
+
+.pedido {
+  width: 100%;
+  min-height: 76px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.destino {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.destinoArchivo {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.destinoFalta {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.chip {
+  padding: 4px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chipApagado {
+  opacity: 0.55;
+}

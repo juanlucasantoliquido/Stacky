@@ -31,6 +31,7 @@ import {
 import ConfirmButton from "../components/ConfirmButton";
 import { ModelEffortPicker } from "../components/ModelEffortPicker";
 import { useModelCatalog } from "../hooks/useModelCatalog";
+import AvisoCatalogoModelos from "../components/AvisoCatalogoModelos";  // Plan 288 F9
 import {
   ACTION_LABEL,
   RUNTIME_ACTION_NOTE,
@@ -535,6 +536,8 @@ export default function PlansBoardPage() {
                 setActionEffort(effort ?? "");
               }}
             />
+            {/* Plan 288 F9 — de dónde salió esta lista y qué se descartó. */}
+            <AvisoCatalogoModelos runtime="claude_code_cli" />
             <span className={styles.actionsLabel} title={RUNTIME_ACTION_NOTE}>
               Runtime: Claude Code CLI
             </span>

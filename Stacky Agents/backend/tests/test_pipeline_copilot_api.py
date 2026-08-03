@@ -239,3 +239,126 @@ def test_undo_hint_route_devuelve_el_texto_en_confirm_y_vacio_en_intake(
     ).get_json()["undo_hint"]
     assert "azure-pipelines.yml" in texto, texto
     assert "feature/x" in texto, texto
+
+
+# ---------------------------------------------------------------------------
+# Plan 288 — el destino de escritura lo decide el PROYECTO, no un default.
+#
+# El defecto que estos 3 casos matan: `draftProvider()` del frontend
+# (services/devopsActionBindings.ts:63) devuelve 'ado' salvo que alguien haya
+# puesto 'gitlab' en los params, asi que un proyecto GitLab terminaba creando
+# `azure-pipelines.yml`. La sesion tiene que DECLARAR el proveedor que sale del
+# config del proyecto (services/project_context.tracker_declarado_del_proyecto,
+# Plan 286), y declararlo VACIO cuando no lo puede resolver — nunca 'ado'.
+# ---------------------------------------------------------------------------
+
+
+def _forzar_tracker(monkeypatch, valor):
+    """Fuerza lo que declara el config del proyecto. Se parchea en el ORIGEN
+    (services.project_context) porque api/pipeline_copilot.py lo importa local
+    dentro de la funcion, que es el idioma interceptable de la casa."""
+    import services.project_context as pc
+
+    vistos: list = []
+
+    def _fake(project_name):
+        vistos.append(project_name)
+        return valor
+
+    monkeypatch.setattr(pc, "tracker_declarado_del_proyecto", _fake)
+    return vistos
+
+
+def test_el_payload_declara_el_provider_del_proyecto(client, copilot_on, monkeypatch):
+    """El proyecto manda: azure_devops -> ado, gitlab -> gitlab.
+
+    Los DOS casos viven en el mismo test a proposito: un `_payload` que
+    devolviera la constante 'ado' pasaria la mitad del test, y uno que
+    devolviera 'gitlab' pasaria la otra mitad. Juntos, ninguna constante pasa.
+    """
+    cid = _nueva_conversacion()
+
+    vistos = _forzar_tracker(monkeypatch, "azure_devops")
+    ado = client.get(f"/api/pipeline-copilot/session/{cid}").get_json()
+    assert ado["provider"] == "ado", ado
+    assert ado["provider_source"] == "project", ado
+    assert ado["pipeline_file"] == "azure-pipelines.yml", ado
+    # Y le pregunto al proyecto de ESTA conversacion, no a "el proyecto activo".
+    assert vistos == ["ProyectoDePrueba"], vistos
+
+    _forzar_tracker(monkeypatch, "gitlab")
+    gl = client.get(f"/api/pipeline-copilot/session/{cid}").get_json()
+    assert gl["provider"] == "gitlab", gl
+    assert gl["provider_source"] == "project", gl
+    assert gl["pipeline_file"] == ".gitlab-ci.yml", gl
+
+
+def test_sin_tracker_resoluble_el_provider_queda_vacio_no_ado(
+    client, copilot_on, monkeypatch
+):
+    """Degradacion HONESTA: si el proyecto no declara tracker, la sesion lo dice.
+
+    Guard anti-falso-verde: primero se comprueba que el mismo endpoint SI sabe
+    resolver un provider (si no, el `== ""` de abajo pasaria porque la clave
+    nunca se puebla).
+    """
+    cid = _nueva_conversacion()
+
+    _forzar_tracker(monkeypatch, "gitlab")
+    poblado = client.get(f"/api/pipeline-copilot/session/{cid}").get_json()
+    assert poblado["provider"] == "gitlab", poblado
+
+    for sin_tracker in (None, "", "   ", "jira"):
+        _forzar_tracker(monkeypatch, sin_tracker)
+        r = client.get(f"/api/pipeline-copilot/session/{cid}").get_json()
+        assert r["provider"] == "", (sin_tracker, r)
+        assert r["provider_source"] == "unknown", (sin_tracker, r)
+        assert r["pipeline_file"] == "", (sin_tracker, r)
+
+
+def test_advance_devuelve_el_mismo_provider_que_get(client, copilot_on, monkeypatch):
+    """Las dos rutas que devuelven la sesion comparten `_payload`: si una lo
+    declara y la otra no, la UI ve el destino cambiar sola al avanzar."""
+    cid = _nueva_conversacion()
+    _forzar_tracker(monkeypatch, "gitlab")
+
+    antes = client.get(f"/api/pipeline-copilot/session/{cid}").get_json()
+    r = client.post(f"/api/pipeline-copilot/session/{cid}/advance",
+                    json={"to": "discovery"})
+    assert r.status_code == 200, r.get_data(as_text=True)
+    despues = r.get_json()
+
+    assert antes["provider"] == "gitlab", antes
+    assert despues["provider"] == "gitlab", despues
+    assert despues["pipeline_file"] == antes["pipeline_file"] == ".gitlab-ci.yml"
+
+
+def test_la_conversacion_del_copiloto_se_puede_reencontrar(
+    client, copilot_on, monkeypatch
+):
+    """Plan 288 — la seccion promete "la sesion se retoma sola" y hasta hoy no
+    tenia con que: /devops/agent/conversations no distinguia un hilo del
+    copiloto de uno de chat libre.
+
+    Presencia Y ausencia en el MISMO caso: una conversacion sellada como sesion
+    de pipeline marca True y una de chat libre marca False. Con la clave
+    ausente (el defecto) el `is True` falla.
+    """
+    import config as cfg
+
+    # monkeypatch y NO asignacion directa: `cfg.config` es un singleton de
+    # proceso y una asignacion pelada contamina las suites que corren despues.
+    monkeypatch.setattr(cfg.config, "STACKY_DEVOPS_AGENT_ENABLED", True,
+                        raising=False)
+    con_sesion = _nueva_conversacion(json.dumps({
+        "kind": "devops_chat",
+        "pipeline_session": {"state": "draft", "version": "1"},
+    }))
+    sin_sesion = _nueva_conversacion()
+
+    r = client.get("/api/devops/agent/conversations?project=ProyectoDePrueba")
+    assert r.status_code == 200, r.get_data(as_text=True)
+    por_id = {c["conversation_id"]: c for c in r.get_json()["conversations"]}
+
+    assert por_id[con_sesion]["pipeline_copilot"] is True, por_id[con_sesion]
+    assert por_id[sin_sesion]["pipeline_copilot"] is False, por_id[sin_sesion]

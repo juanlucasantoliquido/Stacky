@@ -1172,6 +1172,17 @@ export interface RuntimeModelCatalog {
   effort_mode?: string;
   /** Plan 264 [C8] — si con la config vigente el effort produce efecto real. */
   effort_effective_now?: boolean;
+  /** Plan 288 — solo en claude_code_cli: de dónde salió la lista y qué se descartó. */
+  cuenta?: {
+    disponible: boolean;
+    motivo: string;
+    suscripcion: string;
+    nivel_de_limite: string;
+    agregados: string[];
+    omitidos: { id: string; motivo: string }[];
+  };
+  /** Plan 212 — resultado de la sonda al programa instalado. Plan 288: ahora se muestra. */
+  probe?: { ok: boolean; command: string; reason: string; added: string[] };
 }
 export interface ModelCatalogResponse {
   ok: boolean;
@@ -1179,6 +1190,8 @@ export interface ModelCatalogResponse {
   cached_at?: number;
   ttl_sec?: number;
   fallback_used?: boolean;
+  /** Plan 288 — el motivo por el que se usó el respaldo de emergencia. */
+  error?: string | null;
   runtimes: Partial<Record<"claude_code_cli" | "codex_cli" | "github_copilot", RuntimeModelCatalog>>;
 }
 export const ModelCatalogApi = {
@@ -3599,6 +3612,10 @@ export const SetupGuide = {
     gitlab_project: string;
     gitlab_token: string;
     gitlab_enable_engine: boolean;
+    /** Plan 295 F5 — el certificado de la empresa que el operador ACABA de tipear.
+     *  Sin esto la sonda hablaba un TLS distinto del que usa el sync: daba rojo
+     *  ("no se pudo llegar a esa direccion") con el producto andando. */
+    gitlab_ca_bundle: string;
   }) =>
     rawPost<{ ok: boolean; checks?: GuideCheckResult[]; error?: string }>(
       "/api/setup-guide/gitlab/verify",
@@ -4709,6 +4726,9 @@ export interface DevOpsConversationItem {
   server_alias?: string | null; // Plan 108 F3 — servidor al que quedó sellada la conversación
   // Plan 108 [ADICIÓN ARQUITECTO v2] — ausente si no hay alias; null si la auditoría falló.
   audited_remote_commands?: number | null;
+  /** Plan 288 — true si el hilo es una sesión del copiloto de pipelines. Sin
+   *  esta señal la sección del copiloto no puede retomar la sesión sola. */
+  pipeline_copilot?: boolean;
 }
 
 /** Plan 90 — conversaciones del agente DevOps (multi-turno sobre runtimes CLI). */
@@ -5214,6 +5234,12 @@ export const PipelineCopilot = {
       unavailable_actions: string[];
       /** Nombre de la flag que falta, o "" si no falta ninguna. */
       unavailable_reason: string;
+      /** Plan 288 — destino que DECLARA el proyecto: "ado" | "gitlab" | "". */
+      provider: string;
+      /** "project" si lo declara el proyecto; "unknown" si no se pudo resolver. */
+      provider_source: string;
+      /** Archivo que se va a crear (azure-pipelines.yml | .gitlab-ci.yml | ""). */
+      pipeline_file: string;
     }>(`/api/pipeline-copilot/session/${conversationId}`),
   /** POST .../advance — mueve el estado. 409 si la transición es ilegal. */
   advance: (conversationId: number, body: { to: string; fields?: Record<string, unknown> }) =>
@@ -5745,7 +5771,46 @@ export const Incidents = {
     effort?: "low" | "medium" | "high" | "xhigh" | "max";
     open_pr?: boolean; // Plan 177 — checkbox "Abrir PR" del board
   }) =>
-    api.post<{ execution_id: number; status: string }>("/api/agents/run-incident-dev", payload),
+    api.post<{
+      execution_id: number;
+      status: string;
+      /** 2026-08-02 — qué pasó con el tilde "Abrir PR" en ESTE lanzamiento.
+       * `accepted:false` viene con `reason`/`message`: el operador se entera en
+       * el acto, en vez de esperar un PR que nunca iba a existir. */
+      auto_pr: {
+        requested: boolean;
+        accepted: boolean;
+        reason: string | null;
+        message: string;
+      };
+    }>("/api/agents/run-incident-dev", payload),
+
+  /** 2026-08-02 — chequeo PREVIO de repositorio git, antes de ofrecer el tilde.
+   * 200 SIEMPRE (el fallo viaja en el body): `api.get` lanza en non-2xx. */
+  devPrPreflight: (project?: string | null) =>
+    api.get<import("../incidents/incidentDevPrModel").DevPrPreflight>(
+      `/api/incidents/dev-pr/preflight${project ? `?project=${encodeURIComponent(project)}` : ""}`,
+    ),
+
+  /** 2026-08-02 — estado del repositorio git de TODOS los proyectos, de un
+   * vistazo, sin cambiar el proyecto activo. */
+  devPrPreflightAll: (refresh = false) =>
+    api.get<import("../incidents/incidentDevPrModel").DevPrPreflightAll>(
+      `/api/incidents/dev-pr/preflight-all${refresh ? "?refresh=1" : ""}`,
+    ),
+
+  /** 2026-08-02 — resultado del auto-PR de un run (creado / no creado / falló). */
+  devPrResult: (executionId: number) =>
+    api.get<import("../incidents/incidentDevPrModel").DevPrResultDTO>(
+      `/api/incidents/dev-pr/result/${executionId}`,
+    ),
+
+  /** 2026-08-02 — resultado del auto-PR del ÚLTIMO run del resolutor sobre un
+   * ticket. Es el que usa el board: sobrevive al refresh de la página. */
+  devPrResultByTicket: (ticketId: number) =>
+    api.get<import("../incidents/incidentDevPrModel").DevPrResultDTO>(
+      `/api/incidents/dev-pr/result-by-ticket/${ticketId}`,
+    ),
 };
 
 // Plan 183 — Sandbox de demostración del comparador (par sqlite RS-like, 1 click).

@@ -59,6 +59,10 @@ export interface DevOpsHealth {
   pipeline_nl_edit_commit_enabled?: boolean; // Plan 250 — commit al repo real (default OFF)
   env_matrix_enabled?: boolean; // Plan 251 — Matriz de entornos
   handoff_bundle_enabled?: boolean; // Plan 252 — Paquete de entrega
+  action_nl_enabled?: boolean; // Plan 267 — lenguaje natural → propuesta de acción
+  agent_action_run_enabled?: boolean; // Plan 267 — ejecutar lo que ESCRIBE (default OFF)
+  pipeline_copilot_enabled?: boolean; // Plan 279 — copiloto de pipelines
+  pipeline_copilot_commit_enabled?: boolean; // Plan 279 — crear la pipeline en el repo REAL (default OFF)
   [k: string]: boolean | undefined; // Keys futuras aditivas
 }
 

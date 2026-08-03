@@ -171,6 +171,38 @@ def tracker_declarado_del_proyecto(project_name: str | None) -> str | None:
         return None
 
 
+#: Plan 288 — del tracker que declara el proyecto al proveedor de PIPELINE.
+#: CERRADO a los 2 que el generador sabe renderizar y escribir
+#: (`api/pipeline_generator.py`: `to_ado_yaml`/`to_gitlab_yaml`). Un tracker
+#: fuera de este mapa (jira, mantis, demo...) no tiene pipeline: se declara "".
+#: `_DEFAULT_TRACKER_TYPE` en vez del literal a proposito: el ratchet de
+#: acoplamiento (tests/test_plan218_coupling_ratchet.py) cuenta LINEAS con el
+#: literal del tracker de Azure entre comillas, y esta constante ya ES ese
+#: valor. Reusarla mantiene el censo K4 sin subir — y por eso este comentario
+#: tampoco lo escribe: se cazaria a si mismo.
+_TRACKER_A_PROVIDER_PIPELINE = {_DEFAULT_TRACKER_TYPE: "ado", "gitlab": "gitlab"}
+
+
+def provider_de_pipeline_del_proyecto(project_name: str | None) -> str:
+    """Plan 288 — "ado" | "gitlab" | "" para el proyecto dado.
+
+    Hermano de `tracker_declarado_del_proyecto` en el vocabulario del generador
+    de pipelines. Vive acá, al lado del resolvedor canónico, para que el mapa
+    tracker→proveedor exista UNA sola vez: `api/pipeline_generator.py` y
+    `api/pipeline_copilot.py` lo comparten en vez de duplicarlo.
+
+    Devuelve "" cuando no se puede resolver. NUNCA cae en "ado": una cadena
+    vacía hace que el llamador pregunte o conserve lo que ya tenía; un "ado"
+    inventado hace que escriba `azure-pipelines.yml` en un repo de GitLab.
+    NUNCA lanza.
+    """
+    try:
+        declarado = tracker_declarado_del_proyecto(project_name)
+    except Exception:  # noqa: BLE001 — pragma: defensa, el resolvedor ya es a prueba de todo
+        return ""
+    return _TRACKER_A_PROVIDER_PIPELINE.get((declarado or "").strip().lower(), "")
+
+
 def tracker_efectivo_de_ticket(ticket) -> str:
     """Plan 286 — A qué tracker le corresponde ESCRIBIR este ticket.
 

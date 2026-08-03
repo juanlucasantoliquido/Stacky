@@ -24,6 +24,30 @@ from services.tracker_provider import TrackerApiError
 bp = Blueprint("pipeline_generator", __name__, url_prefix="/pipeline-generator")
 
 
+def _target_efectivo(body: dict) -> tuple[str, str]:
+    """Plan 288 — (target, origen) de la escritura. El PROYECTO manda.
+
+    `get_repo_writer(project)` ya resuelve el repositorio por el tracker del
+    proyecto, así que un `target` que no coincida con ese tracker sólo puede
+    producir un archivo mal formado en el repo correcto: YAML de ADO dentro de
+    un repo de GitLab, o al revés. No hay caso legítimo en el que ganen los dos.
+
+    Por eso: si el proyecto DECLARA tracker, gana el proyecto (origen
+    "project"). Si no lo declara — proyecto ausente, sin config, o tracker sin
+    pipelines (jira/mantis) — manda el cuerpo (origen "body"), que es el
+    comportamiento byte-idéntico al previo a este plan.
+
+    NUNCA lanza: el resolvedor de `services/project_context.py` ya es a prueba
+    de todo y devuelve "" cuando no puede.
+    """
+    from services.project_context import provider_de_pipeline_del_proyecto
+
+    del_proyecto = provider_de_pipeline_del_proyecto(body.get("project"))
+    if del_proyecto:
+        return del_proyecto, "project"
+    return body.get("target"), "body"
+
+
 def _slug(name: str) -> str:
     """FIX C11: nombre de rama git válido a partir de spec.name.
     [a-z0-9._-]; strip('-'); fallback 'pipeline'."""
@@ -62,7 +86,9 @@ def commit_route():
     errors = spec.validate()
     if errors:
         return jsonify({"errors": [{"field": e.field, "message": e.message} for e in errors]}), 400
-    target = body.get("target")  # "ado" | "gitlab"
+    # Plan 288 — "ado" | "gitlab". El proyecto manda sobre el cuerpo (ver
+    # _target_efectivo); sin proyecto resoluble, el cuerpo decide como siempre.
+    target, target_source = _target_efectivo(body)
     try:
         yaml_str = to_ado_yaml(spec) if target == "ado" else to_gitlab_yaml(spec)
     except Exception as e:
@@ -105,4 +131,13 @@ def commit_route():
     except NotImplementedError as e:
         # ADO render-only v1 (C12)
         return jsonify({"error": str(e)}), 501
-    return jsonify(result)
+    # Plan 288 — el operador tiene que poder VER a qué proveedor fue y por qué:
+    # sin esto, "el proyecto ganó" es una decisión invisible. Copia: el dict del
+    # writer no se muta.
+    return jsonify({
+        **(result if isinstance(result, dict) else {"result": result}),
+        # Espejo EXACTO de la decisión que se tomó arriba para elegir renderer y
+        # ruta (`target == "ado"`): informa lo que pasó, no lo que se pidió.
+        "target": "ado" if target == "ado" else "gitlab",
+        "target_source": target_source,
+    })

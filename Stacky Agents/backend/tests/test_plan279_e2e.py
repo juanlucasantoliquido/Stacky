@@ -248,3 +248,65 @@ def test_en_confirm_el_operador_ve_el_deshacer(client, todo_on):
     ).get_json()["undo_hint"]
     assert "azure-pipelines.yml" in texto, texto
     assert "feature/x" in texto, texto
+
+
+# ---------------------------------------------------------------------------
+# Plan 288 — el reclamo del operador, tal cual: "el copiloto no me deja usarlo
+# porque dice que tengo que tener configurado un agente devops remoto".
+# ---------------------------------------------------------------------------
+
+
+def test_plan288_el_copiloto_arranca_sin_ningun_servidor_configurado(
+    client, todo_on, run_agent_mock, monkeypatch
+):
+    """Con las 3 flags de servidor/consola/remoto en OFF, abrir el hilo del
+    copiloto tiene que funcionar igual: el copiloto corre LOCAL.
+
+    PRESENCIA + AUSENCIA en el MISMO caso, porque un `!= 400` suelto pasaria por
+    accidente si el endpoint devolviera cualquier otra cosa:
+      - presencia: nace la conversacion, con id, y su sesion se lee en 'intake';
+      - ausencia: NO se manda `server_alias`, que es lo unico que ata el turno a
+        un host (api/devops_agent.py:144-149);
+      - control: con `server_alias` y esas flags OFF, el MISMO endpoint SI
+        rechaza — o sea, el gate remoto existe y simplemente no aplica al
+        camino local.
+    """
+    import config as cfg
+
+    for apagada in ("STACKY_DEVOPS_SERVERS_ENABLED",
+                    "STACKY_DEVOPS_REMOTE_CONSOLE_ENABLED",
+                    "STACKY_DEVOPS_REMOTE_TARGET_ENABLED"):
+        monkeypatch.setattr(cfg.config, apagada, False, raising=False)
+
+    local = client.post("/api/devops/agent/conversations", json={
+        "project": "ProyectoDePrueba",
+        "message": "necesito una pipeline que compile y corra los tests",
+        "runtime": "claude_code_cli",
+        "pipeline_session": {"state": "intake", "version": "1"},
+    })
+    assert local.status_code == 202, local.get_data(as_text=True)
+    cid = local.get_json()["conversation_id"]
+    assert isinstance(cid, int)
+    assert local.get_json()["server_alias"] is None
+
+    # La conversacion nacio sellada como sesion de copiloto y se puede leer.
+    sesion = client.get(f"/api/pipeline-copilot/session/{cid}")
+    assert sesion.status_code == 200, sesion.get_data(as_text=True)
+    assert sesion.get_json()["session"]["state"] == "intake"
+
+    # Y el copiloto la vuelve a encontrar sola (lo que la seccion promete).
+    listado = client.get(
+        "/api/devops/agent/conversations?project=ProyectoDePrueba").get_json()
+    del_copiloto = [c for c in listado["conversations"] if c.get("pipeline_copilot")]
+    assert cid in [c["conversation_id"] for c in del_copiloto], listado
+
+    # CONTROL: el gate remoto NO desaparecio; simplemente no aplica al local.
+    remoto = client.post("/api/devops/agent/conversations", json={
+        "project": "ProyectoDePrueba",
+        "message": "lo mismo pero anclado a un servidor",
+        "runtime": "claude_code_cli",
+        "server_alias": "srv-inexistente",
+        "pipeline_session": {"state": "intake", "version": "1"},
+    })
+    assert remoto.status_code == 400, remoto.get_data(as_text=True)
+    assert remoto.get_json()["error"] == "remote_target_disabled"

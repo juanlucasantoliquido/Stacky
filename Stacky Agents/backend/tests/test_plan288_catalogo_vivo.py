@@ -266,3 +266,117 @@ def test_fable_sigue_fuera_del_catalogo_y_de_la_allowlist():
     assert ID_NUEVO in ids_archivo
     assert ID_NUEVO in ids_respaldo
     assert ID_NUEVO in llm_router._OPUS_ALLOWLIST
+
+
+# ── F8 — la respuesta publica de donde salio cada modelo ─────────────────────
+
+def _cliente(monkeypatch):
+    """App de pruebas minima para pegarle a la ruta del catalogo."""
+    import app as _app
+
+    aplicacion = _app.create_app()
+    aplicacion.config.update(TESTING=True)
+    return aplicacion.test_client()
+
+
+def _respuesta_catalogo(tmp_path, monkeypatch, cuenta=None) -> dict:
+    catalogo_efectivo(tmp_path, monkeypatch, cuenta)   # siembra CLAUDE_CONFIG_DIR
+    cli = _cliente(monkeypatch)
+    return cli.get("/api/agents/model-catalog?refresh=true").get_json()
+
+
+def test_respuesta_conserva_probe_y_cuenta_despues_del_enriquecido_de_capacidades(
+    tmp_path, monkeypatch
+):
+    """El bloque del 264 RECONSTRUYE cada runtime: las claves nuevas tienen que sobrevivir."""
+    datos = _respuesta_catalogo(tmp_path, monkeypatch, {
+        "stats": {"modelUsage": {"claude-opus-5": {}}}, "config": {},
+    })
+    bloque = datos["runtimes"]["claude_code_cli"]
+
+    # DOS PATAS: las claves nuevas del 288 estan...
+    assert "cuenta" in bloque
+    assert "motivo" in bloque["cuenta"]
+    assert "omitidos" in bloque["cuenta"]
+    # ...y la clave que puso el 264 NO desaparecio.
+    assert "effort_mode" in bloque
+
+
+def test_respuesta_trae_fallback_used_y_error(tmp_path, monkeypatch):
+    """Con el archivo ilegible, el operador tiene con que enterarse."""
+    monkeypatch.setattr(
+        model_catalog, "_catalog_path", lambda: tmp_path / "no_existe.json"
+    )
+    datos = _respuesta_catalogo(tmp_path, monkeypatch)
+
+    assert datos["fallback_used"] is True
+    assert datos.get("error"), "el motivo del respaldo no viaja en la respuesta"
+
+
+def test_los_modelos_del_catalogo_efectivo_llegan_a_la_respuesta(tmp_path, monkeypatch):
+    """La capa del 264 no anula lo que agrego la cuenta."""
+    datos = _respuesta_catalogo(tmp_path, monkeypatch, {
+        "stats": {"modelUsage": {"claude-sonnet-4-5-sembrado": {}}}, "config": {},
+    })
+    bloque = datos["runtimes"]["claude_code_cli"]
+    ids = [m["id"] for m in bloque["models"]]
+
+    assert "claude-sonnet-4-5-sembrado" in ids, (
+        "el id que agrego la cuenta se perdio en el enriquecido del plan 264"
+    )
+    assert "claude-sonnet-4-5-sembrado" in bloque["cuenta"]["agregados"]
+
+
+# ── F11 — gate de paridad de motores ─────────────────────────────────────────
+
+def test_paridad_codex_y_copilot_no_cambian_con_la_cuenta_encendida(tmp_path, monkeypatch):
+    """DOS PATAS: los otros dos motores identicos, Y el de Claude SI cambio.
+
+    Sin la contra-pata, la primera mitad pasaria por accidente si el lector no
+    estuviera cableado: un gate que no puede fallar es un adorno.
+    """
+    import config as _config
+
+    semilla = {"stats": {"modelUsage": {"claude-opus-5": {}}}, "config": {}}
+
+    monkeypatch.setattr(_config.config, "STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED", True)
+    encendido = catalogo_efectivo(tmp_path / "on", monkeypatch, semilla)["runtimes"]
+    encendido = json.loads(json.dumps(encendido))
+
+    monkeypatch.setattr(_config.config, "STACKY_CLAUDE_ACCOUNT_MODELS_ENABLED", False)
+    apagado = catalogo_efectivo(tmp_path / "off", monkeypatch, semilla)["runtimes"]
+    apagado = json.loads(json.dumps(apagado))
+
+    # PATA 1 — los otros dos motores, clave por clave.
+    for motor in ("codex_cli", "github_copilot"):
+        assert encendido[motor] == apagado[motor], f"{motor} cambio con la flag"
+        assert "cuenta" not in encendido[motor], f"{motor} no puede tener la clave cuenta"
+        assert "cuenta" not in apagado[motor]
+
+    # PATA 2 (CONTRA-PRUEBA) — el de Claude SI tiene que cambiar.
+    assert encendido["claude_code_cli"] != apagado["claude_code_cli"], (
+        "el bloque claude_code_cli quedo igual con la flag encendida y apagada: "
+        "el lector de cuenta NO esta cableado y la pata 1 pasa por accidente"
+    )
+    assert encendido["claude_code_cli"]["cuenta"]["disponible"] is True
+    assert apagado["claude_code_cli"]["cuenta"]["motivo"] == "flag_apagada"
+
+
+def test_ningun_simbolo_nuevo_nombra_un_motor():
+    """Los simbolos nuevos no bifurcan por motor (salvo la excepcion declarada)."""
+    raiz = Path(model_catalog.__file__).resolve().parents[1]
+    frontend = raiz.parent / "frontend" / "src" / "services"
+    objetivos = [
+        raiz / "services" / "claude_account_models.py",
+        frontend / "modelCatalogOrigin.ts",
+        frontend / "modelCatalogRefresh.ts",
+    ]
+    for ruta in objetivos:
+        if not ruta.exists():
+            continue
+        for n, linea in enumerate(ruta.read_text(encoding="utf-8").splitlines(), 1):
+            if "// paridad-ok" in linea:
+                continue          # excepcion declarada: regla 7 de F9 (copilot)
+            bajo = linea.lower()
+            assert "codex" not in bajo, f"{ruta.name}:{n} nombra codex"
+            assert "copilot" not in bajo, f"{ruta.name}:{n} nombra copilot"

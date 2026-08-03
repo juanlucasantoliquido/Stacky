@@ -87,6 +87,14 @@ LEGITIMOS = {
     "components/StructuredOutput.tsx",
     "components/devops/PipelineLintPanel.tsx",
     "components/EpicFromBriefModal.tsx",
+    # ── Agregadas 2026-08-02 al consolidar docs/plan-27x en main. Las tres
+    #    nombran el tracker CONDICIONADAS al proveedor real (mensaje que pide
+    #    configurar el destino, ternario por proveedor, y mapa de lookup); el
+    #    detector cuenta lineas y no distingue eso de un rotulo fijo. El motivo
+    #    largo de cada una vive en el espejo de vitest, que es un dict.
+    "components/devops/pipelineCopilotModel.ts",
+    "components/devops/PipelineCopilotSection.tsx",
+    "incidents/incidentDevPrModel.ts",
 }
 
 _RE_ROTULO = re.compile(r"\b(ADO|Azure DevOps)\b")

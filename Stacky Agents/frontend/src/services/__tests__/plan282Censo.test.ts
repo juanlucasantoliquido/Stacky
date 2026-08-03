@@ -63,6 +63,21 @@ const LEGITIMOS: Record<string, string> = {
     "lint de azure-pipelines.yml: mismo criterio que el resto de components/devops",
   "components/EpicFromBriefModal.tsx":
     "DEUDA DECLARADA: archivo con cambios sin commitear de OTRA sesion (fix de la epica duplicada). Se rutea en el barrido siguiente, no en este plan",
+
+  // ── Agregadas 2026-08-02 al consolidar las ramas docs/plan-27x en main. Las
+  //    tres nombran el tracker CONDICIONADAS al proveedor real, que es justo el
+  //    patron que este plan buscaba instalar; el detector cuenta lineas y no
+  //    puede distinguirlo de un rotulo fijo. NO se rutean por trackerLabels.ts a
+  //    proposito: `nombreLargoDeTracker()` pasa por `clave()`, y con el
+  //    kill-switch STACKY_TRACKER_LABELS_GLOBAL_ENABLED en OFF devuelve siempre
+  //    "azure_devops" (trackerLabels.ts:55), o sea que una pipeline de GitLab
+  //    quedaria rotulada al reves — peor que el rotulo que se quiere evitar. ──
+  "components/devops/pipelineCopilotModel.ts":
+    "el mensaje SIN_DESTINO nombra los DOS trackers a proposito ('no puede saber si la pipeline va a Azure DevOps o a GitLab') para decirle al operador que le falta configurar; no rotula un destino",
+  "components/devops/PipelineCopilotSection.tsx":
+    "condicional por proveedor (target.provider === 'ado' ? ... : 'GitLab'): dice el nombre de Azure SOLO cuando el destino ES Azure, y GitLab cuando es GitLab",
+  "incidents/incidentDevPrModel.ts":
+    "NOMBRES_PROVEEDOR es un mapa de lookup: la clave azure_devops se traduce a su propio nombre presentable, igual que gitlab. Es un dato del diccionario, no un rotulo incondicional",
 };
 
 /** Archivos que este plan SI rutea. La allowlist no puede tragarselos: es el
@@ -164,10 +179,11 @@ describe("Plan 282 F0 — censo particionado de rotulos ADO (K2)", () => {
   });
 
   it("sentinela: la allowlist no crece sin justificacion", () => {
-    // 23 en el plan + 5 agregadas al implementarlo, con motivo escrito una por
-    // una (ver el bloque de arriba). Subir este numero exige justificar la
-    // entrada nueva en el PR.
-    expect(Object.keys(LEGITIMOS).length).toBe(28);
+    // 23 en el plan + 5 agregadas al implementarlo + 3 agregadas el 2026-08-02
+    // al consolidar las ramas docs/plan-27x, con motivo escrito una por una (ver
+    // el bloque de arriba). Subir este numero exige justificar la entrada nueva
+    // en el PR.
+    expect(Object.keys(LEGITIMOS).length).toBe(31);
     // Toda entrada debe traer motivo NO vacio: sin esto la allowlist es un agujero.
     for (const [k, v] of Object.entries(LEGITIMOS)) expect(v.trim().length, k).toBeGreaterThan(0);
   });

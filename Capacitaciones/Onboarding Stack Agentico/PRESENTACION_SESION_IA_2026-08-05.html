@@ -4,9 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ubimia® · IA: de qué estamos hablando realmente · 05/08/2026</title>
-<!-- v2 · 26 slides · registro único: la oficina. Eje conceptual: CHAT vs AGENTE -->
+<!-- v3 · 40 slides · registro único: la oficina. Eje conceptual: CHAT vs AGENTE -->
+<!-- v3 agrega: rampa de entrada desde cero (círculos IA/ML/GenAI/LLM, autocompletar, 5 datos, parada de comprensión),
+     la escalera de 4 escalones, el repaso del día, y el bloque Stacky (logo, flujo en orden, agente por agente, runtimes) -->
 <!-- Fuentes: GUION_SESION_IA_2026-08-05.md (v3) · CHULETA_1_PAGINA.md · README.md -->
-<!-- Bloque 2: Stacky Agents/backend/Stacky/agents/*.agent.md + manifest.json · RSPACIFICO/trunk/docs/agentic_manual/ · RSSICREA/Agentes/outputs/ + memory-bank/ -->
+<!-- Bloque 2: Stacky Agents/backend/Stacky/agents/*.agent.md + manifest.json · Stacky Agents/docs/sistema/{01,05,10}.md · RSPACIFICO/trunk/docs/agentic_manual/ · RSSICREA/Agentes/outputs/ + memory-bank/ -->
+<!-- Logo Stacky: frontend/public/stacky-pixel.svg, embebido inline como <symbol> (el deck sigue siendo un único archivo) -->
 <!-- Sin dependencias externas: abrir con doble clic. ← → · clic · N notas · F pantalla · B negro · T reloj -->
 <style>
 :root{
@@ -184,6 +187,64 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
 .step{opacity:0;transform:translateY(10px);transition:opacity .28s ease,transform .28s ease}
 .step.on{opacity:1;transform:none}
 
+/* ============ v3 · PIEZAS NUEVAS (rampa de entrada + bloque Stacky) ============ */
+/* Marca Stacky — pixel-art de frontend/public/stacky-pixel.svg, embebido inline (sin assets externos) */
+.stk{display:inline-flex;align-items:center;gap:14px;font-family:var(--u-font-head);font-weight:700;
+  letter-spacing:-.02em;line-height:1;color:#fff}
+.stk svg{display:block;flex:none;shape-rendering:crispEdges}
+.s-light .stk{color:var(--u-ink)}
+.stk--pill{background:var(--u-ink);border:1.5px solid rgba(31,227,164,.45);border-radius:999px;padding:11px 26px 11px 17px;color:#fff}
+.s-light .stk--pill{color:#fff}
+
+/* Escalones: chat → asistente → agente → sistema agéntico */
+.stairs{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;align-items:end}
+.stair{background:var(--u-light-card);border:1px solid var(--u-light-bd);border-bottom:5px solid var(--u-green-2);
+  border-radius:14px 14px 0 0;padding:15px 17px}
+.s-dark .stair{background:var(--u-card);border-color:var(--u-card-bd);border-bottom-color:var(--u-green)}
+.stair .lv{font-family:var(--u-font-head);font-size:12px;font-weight:700;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--u-green-2)}
+.stair h3{font-family:var(--u-font-head);font-weight:700;font-size:23px;line-height:1.1;margin:5px 0 8px;color:var(--u-ink)}
+.stair p{font-size:16px;line-height:1.3;color:#41606b}
+.stair .an{display:block;margin-top:8px;color:#12776f;font-weight:600}
+
+/* Repaso del día del fichaje (línea de tiempo horizontal) */
+.day{display:grid;grid-template-columns:repeat(6,1fr);gap:16px}
+.day .d{position:relative;padding-top:54px}
+.day .d::before{content:'';position:absolute;left:0;right:-16px;top:19px;height:3px;background:rgba(18,201,140,.38)}
+.day .d:last-child::before{right:0}
+.day .hr{position:absolute;top:0;left:0;display:inline-flex;align-items:center;height:40px;padding:0 15px;
+  border-radius:999px;background:var(--u-green);color:var(--u-ink);font-family:var(--u-font-head);font-weight:700;font-size:18px}
+.day .k{font-family:var(--u-font-head);font-weight:600;font-size:18px;line-height:1.15;color:var(--u-ink)}
+.day .v{font-size:16px;line-height:1.28;color:#41606b;margin-top:6px}
+
+/* Cadena del flujo agéntico (el diagrama en orden) */
+.chain{display:flex;flex-direction:column}
+.cstep{display:grid;grid-template-columns:34px 236px 1fr 290px;gap:16px;align-items:center;
+  background:var(--u-light-card);border:1px solid var(--u-light-bd);border-radius:12px;padding:6px 14px}
+.s-dark .cstep{background:var(--u-card);border-color:var(--u-card-bd)}
+.cstep .cn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;
+  background:var(--u-green);color:var(--u-ink);font-family:var(--u-font-head);font-weight:700;font-size:16px}
+.cstep .ca{font-family:var(--u-mono);font-size:16px;font-weight:600;color:#12776f;line-height:1.15}
+.s-dark .cstep .ca{color:var(--u-green)}
+.cstep .cr{font-size:14px;color:#55707c;line-height:1.2;margin-top:2px}
+.s-dark .cstep .cr{color:var(--u-on-dark-2)}
+.cstep .co{font-size:16px;line-height:1.24;color:var(--u-ink)}
+.s-dark .cstep .co{color:#fff}
+.cstep .cg{font-size:14px;line-height:1.22;color:#41606b;border-left:3px solid var(--u-green-2);padding-left:12px}
+.s-dark .cstep .cg{color:var(--u-on-dark-2);border-left-color:var(--u-green)}
+.carr{height:15px;padding-left:9px;color:var(--u-green-2);font-size:13px;line-height:1}
+.s-dark .carr{color:var(--u-green)}
+.cin{display:flex;align-items:center;gap:14px;border:1px dashed var(--u-green-2);border-radius:12px;padding:8px 14px;
+  font-size:16px;line-height:1.24;color:#2c4d59}
+.s-dark .cin{border-color:var(--u-green);color:var(--u-on-dark-2)}
+.cin b{color:var(--u-ink)}
+.s-dark .cin b{color:#fff}
+
+/* Tarjetas densas (la pasada agente por agente: 4 fichas con tres datos cada una) */
+.cards--tight .card{padding:15px 18px}
+.cards--tight .card h3{font-size:22px;margin-bottom:6px}
+.cards--tight .card p{font-size:17px;line-height:1.3}
+
 @page{size:1280px 720px;margin:0}
 @media print{
   html,body{background:#fff;overflow:visible;height:auto}
@@ -196,6 +257,48 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
 </style>
 </head>
 <body>
+
+<!-- Logo de Stacky, embebido inline · copia literal de Stacky Agents/frontend/public/stacky-pixel.svg
+     (es el que usan el favicon y la barra superior de la app, junto al logo de ubimia).
+     Va como <symbol> para reusarlo con <use> sin repetir 35 rectángulos por slide. -->
+<svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+  <symbol id="stacky-pixel" viewBox="0 0 16 16">
+    <rect x="7" y="1" width="2" height="1" fill="#00F7BC"/>
+    <rect x="6" y="2" width="1" height="1" fill="#7FFCDE"/>
+    <rect x="7" y="2" width="2" height="1" fill="#00F7BC"/>
+    <rect x="9" y="2" width="1" height="1" fill="#7FFCDE"/>
+    <rect x="6" y="3" width="4" height="1" fill="#00F7BC"/>
+    <rect x="3" y="4" width="10" height="1" fill="#00F7BC"/>
+    <rect x="2" y="5" width="2" height="1" fill="#7FFCDE"/>
+    <rect x="4" y="5" width="8" height="1" fill="#00F7BC"/>
+    <rect x="12" y="5" width="2" height="1" fill="#7FFCDE"/>
+    <rect x="2" y="6" width="2" height="1" fill="#00F7BC"/>
+    <rect x="4" y="6" width="2" height="1" fill="#053B34"/>
+    <rect x="6" y="6" width="4" height="1" fill="#00F7BC"/>
+    <rect x="10" y="6" width="2" height="1" fill="#053B34"/>
+    <rect x="12" y="6" width="2" height="1" fill="#00F7BC"/>
+    <rect x="2" y="7" width="2" height="1" fill="#00F7BC"/>
+    <rect x="4" y="7" width="2" height="1" fill="#053B34"/>
+    <rect x="6" y="7" width="4" height="1" fill="#00F7BC"/>
+    <rect x="10" y="7" width="2" height="1" fill="#053B34"/>
+    <rect x="12" y="7" width="2" height="1" fill="#00F7BC"/>
+    <rect x="2" y="8" width="12" height="1" fill="#00F7BC"/>
+    <rect x="2" y="9" width="12" height="1" fill="#00F7BC"/>
+    <rect x="2" y="10" width="2" height="1" fill="#00F7BC"/>
+    <rect x="4" y="10" width="8" height="1" fill="#053B34"/>
+    <rect x="12" y="10" width="2" height="1" fill="#00F7BC"/>
+    <rect x="2" y="11" width="10" height="1" fill="#00F7BC"/>
+    <rect x="12" y="11" width="2" height="1" fill="#00C49A"/>
+    <rect x="3" y="12" width="1" height="1" fill="#00C49A"/>
+    <rect x="4" y="12" width="8" height="1" fill="#00F7BC"/>
+    <rect x="12" y="12" width="1" height="1" fill="#00C49A"/>
+    <rect x="4" y="13" width="2" height="1" fill="#00F7BC"/>
+    <rect x="10" y="13" width="2" height="1" fill="#00F7BC"/>
+    <rect x="4" y="14" width="2" height="1" fill="#00C49A"/>
+    <rect x="10" y="14" width="2" height="1" fill="#00C49A"/>
+  </symbol>
+</svg>
+
 <div id="stage"><div id="deck">
 
 <!-- ============ 01 · PORTADA · guion L32 ============ -->
@@ -226,6 +329,66 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
   </aside>
 </section>
 
+<!-- ============ 01a · NUEVA v3 · el gancho de apertura · guion L40-44 ============ -->
+<!-- (los números de estos comentarios son los de la v2; las slides nuevas llevan sufijo de letra) -->
+<section class="slide s-dark" data-sec="Apertura · la pregunta a mano alzada">
+  <div class="arc" style="width:640px;height:640px;bottom:-330px;left:-260px;opacity:.5"></div>
+  <div class="mid" style="bottom:88px">
+    <div class="chip" style="margin-bottom:34px">A mano alzada</div>
+    <h1 class="h-l">¿A quién le pasó que le preguntó algo a una IA,<br>
+      la respuesta sonaba <span class="mint">perfecta</span>…<br>
+      y después resultó que estaba <span class="red">mal</span>?</h1>
+  </div>
+  <div class="useband">
+    <span class="lbl">Bien</span>
+    <span>Esa cara que están poniendo es <b>exactamente</b> de lo que vamos a hablar hoy.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:00 → 0:03 · Apertura · <b>slide nueva de la v3</b> (antes esto era solo una nota de la portada)</p>
+    <p>Pregunta a mano alzada, y <b>esperá de verdad</b>. Normalmente levantan la mano casi todos, y con una sonrisa. Esa complicidad es el mejor arranque que vas a tener en toda la charla: no la desperdicies pasando rápido.</p>
+    <p class="n-nota">[NOTA] Si la sala está fría y nadie levanta la mano, no insistas: “por las caras, veo que a varios sí”, y seguí. <b>No pierdas 40 segundos.</b></p>
+    <p class="n-nota">[NOTA] Acordate de anunciar la chuleta: está boca abajo delante de ellos, <b>no se toca hasta el final</b>, y por eso <b>no hace falta tomar notas</b>.</p>
+    <p class="n-src">fuente: GUION_SESION_IA_2026-08-05.md §0 (L40-44)</p>
+  </aside>
+</section>
+
+<!-- ============ 01b · NUEVA v3 · el contrato de los 45 minutos · guion L46-54 ============ -->
+<section class="slide s-light" data-sec="Apertura · el contrato: qué se llevan hoy">
+  <div class="hd">
+    <div><div class="kick">El contrato de estos 45 minutos</div><h2>No los voy a convertir en expertos</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:flex;flex-direction:column;justify-content:center;gap:22px">
+    <p style="font-size:22px;color:#41606b">No se puede y no hace falta. <b style="color:var(--u-ink)">Quiero que salgan de acá con tres cosas.</b></p>
+    <div class="cards" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="card">
+        <h3 style="color:var(--u-ink)"><span class="num" style="width:32px;height:32px;font-size:17px;margin-right:10px">1</span>Entender las palabras</h3>
+        <p>Que nadie diga “agente”, “prompt” o “skill” y ustedes tengan que <b>asentir sin saber</b>.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--u-ink)"><span class="num" style="width:32px;height:32px;font-size:17px;margin-right:10px">2</span>Elegir la herramienta</h3>
+        <p>Hoy hay veinte. Usar la equivocada es la forma <b>más rápida</b> de concluir que esto no sirve.</p>
+      </div>
+      <div class="card" style="border-color:var(--u-green-2);background:#EAF9F4">
+        <h3 style="color:var(--u-ink)"><span class="num" style="width:32px;height:32px;font-size:17px;margin-right:10px">3</span>Saber cuándo desconfiar</h3>
+        <p><b>Esta es la importante.</b> Y es la que se va a repetir toda la mañana.</p>
+      </div>
+    </div>
+    <p style="font-size:20px;color:#55707c">Voy a explicar <b style="color:var(--u-ink)">todo desde cero</b>. Si a alguien le parece básico, que aguante diez minutos: después subimos.</p>
+  </div>
+  <div class="useband">
+    <span class="lbl">Y una regla<br>del día</span>
+    <span>La palabra que no se entiende <b>arruina todo lo que viene después</b>. Si algo no se entiende, se pregunta en el momento. <b>Mejor cinco conceptos entendidos que veinte oídos.</b></span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:00 → 0:03 · Apertura · <b>slide nueva de la v3</b></p>
+    <p>Les hago un contrato: <b>no los voy a convertir en expertos</b>, no se puede y no hace falta. Tres cosas: entender todas las palabras cuando alguien hable de IA · saber elegir la herramienta correcta · y saber cuándo desconfiar, que es la importante.</p>
+    <p>Y decilo tal cual: <b>voy a explicar todo desde cero</b>. Esa frase le compra paciencia al técnico de la primera fila y le compra permiso al que no sabe nada.</p>
+    <p class="n-nota">[NOTA] La “regla del día” de la banda es del propio guion y es la que habilita la <b>parada de comprensión</b> de más adelante. Dejala dicha acá para poder invocarla después.</p>
+    <p class="n-src">fuente: guion §0 (L46-54) + encabezado del guion (L21, “regla del día”) · README.md</p>
+  </aside>
+</section>
+
 <!-- ============ 02 · DIVISOR BLOQUE 1 · eje conceptual chat/agente ============ -->
 <section class="slide s-light" data-sec="Bloque 1 · Conceptos básicos de IA · 45 min">
   <div class="arc" style="width:300px;height:300px;top:-150px;left:-150px"></div>
@@ -252,6 +415,140 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
   </aside>
 </section>
 
+<!-- ============ 02a · NUEVA v3 · círculos IA ⊃ ML ⊃ Generativa ⊃ LLM · guion §1 L60-83 ============ -->
+<section class="slide s-light" data-sec="B1 · «IA» es una palabra enorme · de afuera hacia adentro">
+  <div class="hd">
+    <div><div class="kick">Empezamos por el principio</div><h2>“IA” es una palabra enorme. Vamos de afuera hacia adentro</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:grid;grid-template-columns:400px 1fr;gap:40px;align-items:center;padding-top:20px">
+    <svg viewBox="0 0 400 400" style="width:100%;height:auto" aria-hidden="true">
+      <circle cx="200" cy="200" r="197" fill="#EDF4F6" stroke="#D6E3E6" stroke-width="2"/>
+      <circle cx="200" cy="200" r="151" fill="#D9F0EA" stroke="#B7E4D6" stroke-width="2"/>
+      <circle cx="200" cy="200" r="105" fill="#A6EDD2" stroke="#8FF1CE" stroke-width="2"/>
+      <circle cx="200" cy="200" r="59" fill="#12C98C" stroke="#0F2530" stroke-width="3"/>
+      <g font-family="Poppins,Montserrat,Segoe UI,system-ui,sans-serif" font-weight="700" text-anchor="middle" fill="#16323C">
+        <text x="200" y="42" font-size="19">INTELIGENCIA ARTIFICIAL</text>
+        <text x="200" y="88" font-size="17">MACHINE LEARNING</text>
+        <text x="200" y="134" font-size="17">IA GENERATIVA</text>
+        <text x="200" y="212" font-size="34" fill="#ffffff">LLM</text>
+      </g>
+      <g font-family="Inter,Segoe UI,system-ui,Arial,sans-serif" text-anchor="middle" fill="#55707c" font-size="14">
+        <text x="200" y="62">desde los años 50</text>
+        <text x="200" y="152">explotó a fines de 2022</text>
+      </g>
+    </svg>
+    <div class="pairs" style="gap:15px">
+      <div class="p" style="grid-template-columns:220px 1fr"><div class="k">Inteligencia<br>Artificial</div>
+        <div class="v">Que una máquina haga algo que, si lo hiciera una persona, <b>diríamos que requiere inteligencia</b>. <span class="off">El corrector del Word, el GPS, el filtro de spam: nada de eso es nuevo.</span></div></div>
+      <div class="p" style="grid-template-columns:220px 1fr"><div class="k">Machine<br>Learning</div>
+        <div class="v">Antes: <i>yo escribo las reglas</i>. Acá al revés: <b>le mostrás diez mil correos que son spam y diez mil que no, y las reglas las deduce él</b>. <span class="off">Nadie le dijo “si dice VIAGRA, es spam”.</span></div></div>
+      <div class="p" style="grid-template-columns:220px 1fr"><div class="k">IA<br>Generativa</div>
+        <div class="v">Todo lo anterior <b>clasificaba</b>. Esta <b>crea cosas nuevas</b>: texto, imágenes, código, voz.</div></div>
+      <div class="p" style="grid-template-columns:220px 1fr"><div class="k mint-2">LLM</div>
+        <div class="v"><b>“Modelo grande de lenguaje”.</b> El motor de ChatGPT, Claude, Gemini y Copilot. <b style="color:var(--u-ink)">De esto hablamos el resto de la charla.</b></div></div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Quedate<br>con esto</span>
+    <span>Cuando alguien dice “IA” hoy, casi siempre habla del <b>círculo de adentro</b>. Los otros tres tienen setenta años y ya los usás todos los días sin llamarlos así.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:03 → 0:07 · §1 ¿Qué es “la IA”? (4 min) · <b>slide nueva de la v3</b>: en la v2 esto iba solo hablado</p>
+    <p>De afuera hacia adentro, y despacio: son cuatro palabras que la gente usa como sinónimos y no lo son.</p>
+    <p><b>Inteligencia Artificial:</b> el círculo grande, un campo académico de los años cincuenta. La definición es simple y conviene decirla tal cual. Los tres ejemplos (Word, GPS, spam) están para <b>desdramatizar</b>: la sala ya convive con IA hace veinte años.</p>
+    <p><b>Machine Learning:</b> acá hay un cambio de mentalidad, no un detalle técnico. <i>Yo no escribo las reglas.</i> Le muestro veinte mil ejemplos y las <b>deduce solo</b>. Si en la sala hay perfil no técnico, esta es la idea que más les cuesta: dale los diez segundos extra.</p>
+    <p><b>IA Generativa:</b> la anterior clasificaba, esta crea. Es lo que explotó a fines de 2022 con ChatGPT.</p>
+    <p><b>LLM:</b> el centro, y el único del que vamos a hablar el resto de la mañana.</p>
+    <p class="n-nota">[NOTA] Si vas mal de tiempo, esta slide se cuenta en <b>40 segundos</b> señalando los cuatro anillos con el dedo. No la saltees entera: es la que evita que la mitad de la sala confunda “IA” con “ChatGPT” durante toda la charla.</p>
+    <p class="n-src">fuente: guion §1 (L60-83)</p>
+  </aside>
+</section>
+
+<!-- ============ 02b · NUEVA v3 · el autocompletar · guion L91-98 ============ -->
+<section class="slide s-dark" data-sec="B1 · Un autocompletar que leyó casi todo internet">
+  <div class="hd">
+    <div><div class="kick">Cómo funciona, sin una sola fórmula</div><h2>Es el autocompletar del móvil — que leyó casi todo internet</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="display:grid;grid-template-columns:520px 1fr;gap:44px;align-items:center;padding-top:20px">
+    <div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid var(--u-card-bd);border-radius:16px;padding:22px 24px">
+        <div style="font-size:14px;letter-spacing:.14em;text-transform:uppercase;font-family:var(--u-font-head);font-weight:700;color:var(--u-green);margin-bottom:14px">El teclado del móvil</div>
+        <div style="font-family:var(--u-font-head);font-weight:600;font-size:29px;line-height:1.25;color:#fff">Los viernes cerramos a las&nbsp;<span style="border-bottom:3px solid var(--u-green);padding:0 24px">&nbsp;</span></div>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <span class="chip" style="background:rgba(31,227,164,.18);font-size:16px;letter-spacing:.02em;text-transform:none;padding:8px 20px;color:#fff;border-width:2px">tres</span>
+          <span class="chip" style="font-size:16px;letter-spacing:.02em;text-transform:none;padding:8px 20px;opacity:.75">cinco</span>
+          <span class="chip" style="font-size:16px;letter-spacing:.02em;text-transform:none;padding:8px 20px;opacity:.5">siete</span>
+        </div>
+        <div style="margin-top:16px;font-size:17px;color:var(--u-on-dark-2)">Elige <b style="color:#fff">la más probable</b> y sigue. Después repite la jugada con la palabra siguiente. Y con la siguiente. <span class="off">(ejemplo ilustrativo)</span></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <p style="font-size:21px;line-height:1.36;color:var(--u-on-dark-2)">
+        Es <b style="color:#fff">el mismo mecanismo</b> del teclado que te sugiere la palabra siguiente. Solo que este leyó <b style="color:#fff">casi todo el texto público de internet</b>.
+      </p>
+      <p style="font-size:21px;line-height:1.36;color:var(--u-on-dark-2)">
+        Y es tan grande que, <b style="color:#fff">para acertar la palabra siguiente</b>, tuvo que aprender otras cosas de paso: gramática, lógica, cómo se arma un argumento, algo parecido a razonar, y una cantidad brutal de conocimiento del mundo.
+      </p>
+      <div class="pull pull--s">Pero sigue siendo eso: una máquina de predecir qué viene después.</div>
+      <div style="display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.05);border:1px solid var(--u-card-bd);border-radius:12px;padding:13px 17px">
+        <span style="font-family:var(--u-font-head);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--u-green);white-space:nowrap">En la<br>oficina</span>
+        <span style="font-size:17px;line-height:1.3;color:var(--u-on-dark-2)">Es el compañero que te termina las frases porque escuchó <b style="color:#fff">veinte años de conversaciones</b> como esa. Acierta muchísimo. Pero no está consultando el expediente: <b style="color:#fff">está completando</b>.</span>
+      </div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Si el dato tiene que ser <b>exacto</b>, no se lo pidas de memoria: <b>dáselo vos, o hacé que lo vaya a buscar</b>. Es la diferencia entre una respuesta útil y una respuesta que suena bien.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:07 → 0:09 · §1, cierre · <b>slide nueva de la v3</b></p>
+    <p>Un LLM, en el fondo, es <b>un autocompletar</b>. El mismo del teclado del móvil, ese que te sugiere la palabra siguiente. Mostralo con el ejemplo de la pantalla: “Los viernes cerramos a las…”, y elige la más probable.</p>
+    <p class="n-nota">[NOTA] Las tres palabras candidatas <b>no llevan porcentajes a propósito</b>: son un ejemplo ilustrativo, no una medición. Si alguien pregunta “¿y cómo sabe cuál es más probable?”, la respuesta corta es: “porque vio esa frase, o una parecida, muchísimas veces”. No entres en matemática.</p>
+    <p>El remate es el que importa: es tan grande que <b>para acertar la palabra siguiente tuvo que aprender gramática, lógica y una cantidad brutal de conocimiento del mundo</b>. Por eso parece que razona. Pero el mecanismo sigue siendo predecir qué viene después.</p>
+    <p class="n-src">fuente: guion §1 (L91-98)</p>
+  </aside>
+</section>
+
+<!-- ============ 02c · NUEVA v3 · las cinco cosas de cómo funciona · guion §2 L115-137 ============ -->
+<!-- revelado progresivo: los 5 puntos aparecen de a uno (el guion pide “cinco puntos que aparecen de a uno”) -->
+<section class="slide s-light" data-sec="B1 · Cinco cosas que explican casi todo lo raro">
+  <div class="hd hd--mint">
+    <div><div class="kick">Aparecen de a una · clic para la siguiente</div><h2>Cinco cosas que explican casi todo lo raro</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:20px;display:flex;flex-direction:column;gap:13px">
+    <div class="step" style="display:flex;gap:16px;align-items:baseline"><span class="num">1</span>
+      <div><div style="font-family:var(--u-font-head);font-weight:600;font-size:22px;color:var(--u-ink)">Token — no lee palabras, lee <span class="mint-2">pedacitos</span></div>
+      <div style="font-size:17px;line-height:1.28;color:#41606b">Unos cuatro caracteres cada uno. Es un detalle técnico que importa por algo muy práctico: <b>todo se mide y se cobra en tokens</b>. <span class="off">Cuando alguien dice “esta consulta costó cuarenta céntimos”, está contando tokens.</span></div></div></div>
+    <div class="step" style="display:flex;gap:16px;align-items:baseline"><span class="num">2</span>
+      <div><div style="font-family:var(--u-font-head);font-weight:600;font-size:22px;color:var(--u-ink)">Entrenar no es lo mismo que <span class="mint-2">usar</span></div>
+      <div style="font-size:17px;line-height:1.28;color:#41606b">Entrenar cuesta cientos de millones, tarda meses y lo hacen cinco empresas en el mundo. Usarlo cuesta céntimos y tarda segundos. <span class="off">Es la diferencia entre la carrera de medicina y la consulta de veinte minutos.</span> <b>Nosotros nunca vamos a entrenar nada: nosotros usamos.</b></div></div></div>
+    <div class="step" style="display:flex;gap:16px;align-items:baseline"><span class="num">3</span>
+      <div><div style="font-family:var(--u-font-head);font-weight:600;font-size:22px;color:var(--u-ink)">No tiene <span class="mint-2">memoria</span></div>
+      <div style="font-size:17px;line-height:1.28;color:#41606b">Cada conversación arranca de cero: no se acuerda de vos, ni de ayer, ni de lo que le corregiste. Cuando parece acordarse de tu nombre, hay un programa alrededor que <b>lo anotó y se lo vuelve a pegar</b>. <span class="off">La memoria no es del modelo: es de la aplicación que lo envuelve.</span></div></div></div>
+    <div class="step" style="display:flex;gap:16px;align-items:baseline"><span class="num">4</span>
+      <div><div style="font-family:var(--u-font-head);font-weight:600;font-size:22px;color:var(--u-ink)">Tiene <span class="mint-2">fecha de corte</span></div>
+      <div style="font-size:17px;line-height:1.28;color:#41606b">Se entrenó hasta cierta fecha y de ahí en adelante no sabe nada. <span class="off">Es el que volvió de un año sin señal.</span> Si le preguntás por algo de la semana pasada, <b>o te dice que no sabe, o te lo inventa</b>.</div></div></div>
+    <div class="step" style="display:flex;gap:16px;align-items:baseline"><span class="num">5</span>
+      <div><div style="font-family:var(--u-font-head);font-weight:600;font-size:22px;color:var(--u-ink)">No es <span class="mint-2">determinista</span></div>
+      <div style="font-size:17px;line-height:1.28;color:#41606b">La misma pregunta dos veces te da dos respuestas distintas. No es un fallo: <b>es de diseño</b>, hay algo de azar controlado. Se regula con un parámetro, la <b>temperatura</b>: <span class="off">baja para cerrar el mes, alta para una lluvia de ideas.</span></div></div></div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Ninguna de las<br>cinco es un fallo</span>
+    <span>Las cinco son <b>de fábrica</b>. Todo lo que viene después en esta charla es, literalmente, <b>cómo se convive con ellas</b>.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:09 → 0:12 · §2 Cómo funciona, sin matemática · <b>slide nueva de la v3</b> (antes iban solo dichas)</p>
+    <p class="n-nota">[NOTA] ⚠ <b>Esta slide tiene revelado progresivo</b>: arranca vacía y cada clic (o flecha →) trae un punto. El sexto clic pasa a la slide siguiente. Si preferís verlos todos de golpe, entrá desde la slide siguiente con ← (vuelve con todo revelado).</p>
+    <p>Cinco cosas, cortas. La que más sorprende siempre es <b>la tres</b>: que no tenga memoria. Detenete ahí dos segundos, porque es la que después explica el “cuaderno” y la que explica por qué las herramientas serias son “un modelo + un cuaderno bien organizado”.</p>
+    <p>La <b>dos</b> es la que tranquiliza a los responsables: <b>nosotros nunca vamos a entrenar nada</b>. Nadie acá va a gastar cientos de millones. Nosotros usamos.</p>
+    <p class="n-nota">[NOTA] Si vas mal de tiempo, contá <b>tres</b> (token, sin memoria, temperatura) y decí que las cinco están en la chuleta. No las leas: están proyectadas.</p>
+    <p class="n-src">fuente: guion §2 (L115-137) · CHULETA filas Token / Memoria / Temperatura</p>
+  </aside>
+</section>
+
 <!-- ============ 03 · No busca. Predice. + ALUCINACIÓN · guion L85, L139, L167 ============ -->
 <section class="slide s-dark" data-sec="B1 · No busca, predice · alucinación · 9 min">
   <div class="arc" style="width:700px;height:700px;top:-340px;right:-280px;opacity:.8"></div>
@@ -272,20 +569,62 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
     <span>Cada vez que te dé un dato concreto —un número, un nombre, una norma— <b>preguntale de dónde lo sacó</b>. Esa sola costumbre te evita el 90% de los sustos.</span>
   </div>
   <aside class="notes">
-    <p class="n-time">⏱ 0:03 → 0:13 · absorbe §1 (¿qué es la IA?), §2 (cómo funciona) y §3 (parada de comprensión)</p>
-    <p class="n-nota">[NOTA] ⚠ Esta slide se queda en pantalla ~9 minutos. <b>Antes de pasar al fichaje nuevo, hacé la parada de comprensión</b> (abajo). No se negocia y no se recorta.</p>
-    <p class="n-h">Lo que va hablado (nada de esto está en pantalla, y está bien así)</p>
+    <p class="n-time">⏱ 0:12 → 0:13 · el remate de §1 y §2: la frase-ancla y la alucinación</p>
+    <p class="n-nota">[NOTA] ⚠ <b>Cambió en la v3:</b> los círculos (IA/ML/Generativa/LLM), el autocompletar y los cinco datos <b>ya están proyectados en las tres slides anteriores</b>. Esta slide es el <b>remate</b>: la frase que se llevan y la alucinación. Y la <b>parada de comprensión va justo después</b>, en sus dos slides. No se negocia y no se recorta.</p>
+    <p class="n-h">Repaso de respaldo (por si venís de un recorte y no proyectaste las tres anteriores)</p>
     <p><b>De afuera hacia adentro:</b> <b>Inteligencia Artificial</b> es el círculo grande — un campo académico de los años cincuenta: que una máquina haga algo que, si lo hiciera una persona, diríamos que requiere inteligencia. El corrector del Word es IA. El GPS es IA. El filtro de spam es IA. Adentro está el <b>Machine Learning</b>: programar de toda la vida es “yo escribo las reglas”; el ML lo da vuelta — le muestro diez mil correos que son spam y diez mil que no, y <b>deduce solo</b> las reglas. Más adentro, la <b>IA Generativa</b>: la anterior clasificaba, esta <b>crea</b> texto, imágenes, código, voz. Y en el centro el <b>LLM</b>, “modelo grande de lenguaje”: el motor de ChatGPT, Claude, Gemini, Copilot.</p>
     <p><b>Un LLM es un autocompletar</b> — el del teclado del móvil. Solo que leyó casi todo el texto público de internet, y es tan grande que para acertar la palabra siguiente tuvo que aprender gramática, lógica, cómo se arma un argumento, algo parecido a razonar. Pero sigue siendo eso: <b>una máquina de predecir qué viene después</b>. No es Google. No tiene una base de datos adentro: <b>genera</b> la respuesta que le parece más probable. Esa frase explica el 90% de las cosas raras que hace.</p>
     <p class="n-h">Cinco datos de cómo funciona (dichos, no proyectados)</p>
     <p><b>1. Token:</b> ve pedacitos de palabra, unos cuatro caracteres. Todo se cobra y se mide en tokens. <b>2. Entrenar no es usar:</b> entrenar cuesta cientos de millones y lo hacen cinco empresas en el mundo; usar cuesta céntimos. <b>Nosotros nunca vamos a entrenar nada.</b> <b>3. No tiene memoria:</b> cada conversación arranca de cero — cuando parece acordarse de tu nombre es porque un programa alrededor lo anotó y se lo vuelve a pegar. <b>4. Tiene fecha de corte:</b> de ahí en adelante, o dice que no sabe, o te lo inventa. <b>5. No es determinista:</b> dos veces la misma pregunta, dos respuestas distintas; es de diseño, y se regula con la <b>temperatura</b> (baja para cerrar el mes, alta para una lluvia de ideas). Token, temperatura y fecha de corte están en la chuleta: <b>no hace falta proyectarlos</b>.</p>
     <p class="n-h">Alucinación</p>
     <p>Alucina cuando dice algo falso con seguridad absoluta: te inventa una función que no existe, una tabla que no está en la base, un artículo de una ley, una cita con autor y año. ¿Por qué? <b>Su trabajo es que suene bien, no que sea cierto.</b> Y lo peligroso: <b>la IA nunca suena insegura</b>. Un compañero que no sabe duda, se le nota, dice “creo que…”. La IA te dice la barbaridad más grande con la misma calma con la que te dice cuánto es dos más dos. <b>Toda la duda la tenés que poner vos.</b></p>
-    <p class="n-h">Parada de comprensión (1 min) — antes de avanzar</p>
+    <p class="n-h">Parada de comprensión (1 min) — <b>ahora tiene sus dos slides propias, justo después de esta</b></p>
     <p>Pregunto a la sala, sin señalar a nadie: <b>¿qué significa que la IA “no busca, predice”?</b> <i>(esperar de verdad. Contar hasta cinco. Incomodarse un poco es parte del trabajo.)</i></p>
     <p><i>(Si contestan bien:)</i> Exacto — y por eso, cuando no sabe algo, no se calla: <b>completa</b>. <i>(Si nadie contesta:)</i> Lo digo yo, porque es la clave de todo: no va a un archivo a buscar la respuesta, <b>la escribe</b>, palabra por palabra, eligiendo la más probable. Por eso a veces escribe algo perfecto y por eso a veces escribe algo perfectamente falso. Es el mismo mecanismo haciendo las dos cosas.</p>
     <p class="n-use">→ Para qué te sirve (proyectado): preguntale siempre de dónde lo sacó.</p>
     <p class="n-src">fuente: guion §1 (L60-105), §2 (L109-159), §3 (L163-181) · CHULETA “Las 3 frases”</p>
+  </aside>
+</section>
+
+<!-- ============ 03a · NUEVA v3 · parada de comprensión: LA PREGUNTA · guion §3 L163-181 · INNEGOCIABLE ============ -->
+<section class="slide s-dark" data-sec="B1 · Parada de comprensión ⚠ · la pregunta">
+  <div class="arc" style="width:560px;height:560px;top:-280px;left:-240px;opacity:.45"></div>
+  <div class="mid">
+    <div class="chip" style="margin-bottom:36px">Paro un segundo</div>
+    <h1 class="h-l">¿Qué significa que la IA<br><span class="mint">“no busca, predice”</span>?</h1>
+    <p style="margin-top:38px;font-size:22px;color:var(--u-on-dark-2)">Tomate cinco segundos. No hay trampa, y no voy a señalar a nadie.</p>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:14 · §3 Parada de comprensión (1 min) · <b>slide nueva de la v3</b></p>
+    <p class="n-nota">[NOTA] ⚠ <b>Esta parada no se negocia y no se recorta</b> (el README la marca como innegociable). En una sala mixta, el que se perdió <b>no levanta la mano</b>: se queda callado y desconecta. Y desde el atril no lo ves, porque el técnico de la primera fila asiente.</p>
+    <p><b>Esperá de verdad. Contá hasta cinco.</b> Incomodarse un poco es parte del trabajo: el silencio es lo que hace que alguien se anime.</p>
+    <p><i>(Si alguien contesta bien:)</i> “Exacto”, y pasás a la slide siguiente para rematarlo. <i>(Si nadie contesta o contestan flojo:)</i> pasás igual y lo decís vos.</p>
+    <p class="n-src">fuente: guion §3 (L163-181) · README.md (“no se recorta”)</p>
+  </aside>
+</section>
+
+<!-- ============ 03b · NUEVA v3 · parada de comprensión: LA RESPUESTA · guion L177-181 ============ -->
+<section class="slide s-dark" data-sec="B1 · Parada de comprensión ⚠ · la respuesta">
+  <div class="arc" style="width:560px;height:560px;top:-280px;right:-240px;opacity:.55"></div>
+  <div class="mid" style="bottom:88px">
+    <h1 class="h-m" style="color:var(--u-on-dark-2);font-weight:600">No va a un archivo a buscar la respuesta.</h1>
+    <h1 class="h-xxl mint" style="margin-top:10px">La escribe.</h1>
+    <p style="margin-top:30px;font-size:23px;line-height:1.34;color:var(--u-on-dark-2);max-width:960px">
+      Palabra por palabra, eligiendo la más probable. Por eso a veces escribe algo <b style="color:#fff">perfecto</b>,
+      y por eso a veces escribe algo <b class="red">perfectamente falso</b>.
+      <b style="color:#fff">Es el mismo mecanismo haciendo las dos cosas.</b>
+    </p>
+  </div>
+  <div class="useband">
+    <span class="lbl">Y por eso</span>
+    <span>Cuando <b>no sabe</b> algo, no se calla: <b>completa</b>. Con eso alcanza — seguimos.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:13 → 0:14 · §3, el remate de la parada · <b>slide nueva de la v3</b></p>
+    <p>Lo decís vos, aunque alguien haya contestado bien: es la clave de todo y conviene que quede dicha con estas palabras. <b>No va a un archivo a buscar la respuesta: la escribe.</b> Palabra por palabra, eligiendo la más probable.</p>
+    <p>Y el cierre, que es el que se llevan: <b>por eso a veces escribe algo perfecto, y por eso a veces escribe algo perfectamente falso. Es el mismo mecanismo haciendo las dos cosas.</b></p>
+    <p class="n-nota">[NOTA] Acá terminan los cimientos. Todo lo que sigue (el fichaje nuevo) se apoya en esta frase: si alguien se pierde más adelante, se vuelve a esta slide.</p>
+    <p class="n-src">fuente: guion §3 (L177-181) · CHULETA “Las 3 frases”, frase 1</p>
   </aside>
 </section>
 
@@ -493,7 +832,7 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
     <div style="display:flex;align-items:center;gap:16px;background:rgba(255,255,255,.05);border:1px solid var(--u-card-bd);border-radius:12px;padding:14px 18px">
       <span style="font-family:var(--u-font-head);font-size:14px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--u-green);white-space:nowrap">Los que usa<br>el equipo</span>
       <span style="font-family:var(--u-font-head);font-weight:700;font-size:23px;color:#fff">Claude Code · Codex · GitHub Copilot Pro</span>
-      <span style="font-size:17px;color:var(--u-on-dark-2)">Tres agentes de código. Cada uno con su forma de trabajar — no son idénticos, pero los tres <b>hacen</b>, no solo opinan.</span>
+      <span style="font-size:17px;color:var(--u-on-dark-2)">Tres <b style="color:#fff">motores</b> distintos —en la jerga, <i>runtimes</i>—. Cada uno con su forma de trabajar, pero los tres <b style="color:#fff">hacen</b>, no solo opinan.</span>
     </div>
   </div>
   <div class="useband">
@@ -501,7 +840,7 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
     <span>Antes de pedirle algo, preguntate <b>si tiene acceso a lo que hace falta para saberlo</b>. Porque si no lo tiene, te va a contestar igual — y esa respuesta va a ser inventada. Es la causa número uno de las respuestas malas.</span>
   </div>
   <aside class="notes">
-    <p class="n-time">⏱ 0:13 → 0:25 · §4 momento 5 (11:00) + absorbe §6 (la escalera de 4 escalones)</p>
+    <p class="n-time">⏱ 0:13 → 0:25 · §4 momento 5 (11:00) — la definición de agente</p>
     <p>Once de la mañana. El fichaje ya sabe qué queremos, cómo son las normas y cuál es el procedimiento. Y todavía <b>no puede hacer nada</b>, porque no tiene acceso a ningún sistema. Lo único que puede hacer es <b>darte consejos</b>. Muy buenos, quizás. Pero consejos.</p>
     <p>Entonces le das los accesos: el usuario del ERP, la llave del archivo, permiso para lanzar la consulta. <b>Eso son las herramientas</b> — en IA, <i>tools</i>. Es la capacidad de decir “para contestarte esto necesito abrir este fichero”. Y abrirlo de verdad.</p>
     <p>Y acá pasa el salto más grande de los últimos dos años: <b>un modelo sin herramientas te explica cómo se arregla el problema; un modelo con herramientas te lo arregla.</b> Lo segundo se llama <b>agente</b>. Y ya está: esa es toda la definición — la palabra que todo el mundo usa y casi nadie define. Tres cosas juntas: un modelo, herramientas para actuar, y <b>un bucle</b>.</p>
@@ -509,9 +848,55 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
     <p><b>Claude Code</b>, <b>Codex</b> y <b>GitHub Copilot Pro</b>. Son los tres agentes de código que usamos. No los pongo como equivalentes exactos: cada uno tiene su forma de trabajar y su sitio. Lo que importa hoy es que los tres son del lado “agente”: les das un objetivo y dan las vueltas necesarias, en vez de devolverte un párrafo para copiar y pegar.</p>
     <p class="n-h">Dos palabras más, dichas al pasar</p>
     <p><b>Subagente:</b> pedirle a un compañero que se encargue de una parte — “tú revisa las facturas de proveedores mientras yo sigo”. <b>Multiagente:</b> un equipo con roles — uno propone, otro revisa, otro ejecuta, otro audita. <b>Eso es literalmente lo que les voy a mostrar en la segunda parte.</b></p>
-    <p class="n-nota">[NOTA] Acá va lo que en el guion era “la escalera de cuatro escalones”. Ya no se proyecta porque se solapa con chat-vs-agente. Si querés decirlo: <b>el escalón que más rinde es pasar del chat pelado al asistente que está DENTRO de la herramienta donde ya trabajás</b> — es gratis y es el mayor salto de calidad que se nota.</p>
+    <p class="n-nota">[NOTA] ⚠ <b>Cambió en la v3:</b> “la escalera de cuatro escalones” del guion <b>vuelve a proyectarse, en la slide siguiente</b>. Acá no la adelantes: cerrá con la definición de agente y pasá.</p>
+    <p class="n-nota">[NOTA] La palabra <b>runtime</b> aparece por primera vez acá, en la caja de herramientas (“tres motores distintos”). No la desarrolles ahora: tiene su slide propia en el bloque 2, con los tres motores reales del sistema.</p>
     <p class="n-use">→ Para qué te sirve (proyectado): preguntate si tiene acceso a lo que hace falta para saberlo.</p>
     <p class="n-src">fuente: guion §4 momento 5 (L333-372) + §6 (L449-477) · brief del operador (herramientas del equipo)</p>
+  </aside>
+</section>
+
+<!-- ============ 09a · NUEVA v3 · la escalera de 4 escalones · guion §6 L449-477 ============ -->
+<section class="slide s-light" data-sec="B1 · La escalera: de chat a sistema agéntico">
+  <div class="hd hd--mint">
+    <div><div class="kick">La misma tecnología, cuatro formas de usarla</div><h2>De chat a sistema agéntico: cuatro escalones</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:20px;display:flex;flex-direction:column;gap:14px">
+    <p style="font-size:19px;color:#41606b">Cada escalón le da <b style="color:var(--u-ink)">más contexto y más poder</b> — y te saca a vos más trabajo mecánico de encima.</p>
+    <div class="stairs">
+      <div class="stair" style="height:264px">
+        <div class="lv">Escalón 1</div><h3>Chat</h3>
+        <p>Le pregunto, me contesta, <b>yo copio, yo pego, yo pruebo</b>. Todo el trabajo y toda la responsabilidad siguen siendo míos.
+        <span class="an">Es el consultor al que llamás por teléfono. <b>Y es el 90% de lo que la gente usa hoy.</b></span></p>
+      </div>
+      <div class="stair" style="height:302px">
+        <div class="lv">Escalón 2</div><h3>Asistente<br>integrado</h3>
+        <p>Está <b>dentro</b> de la herramienta donde ya trabajo y <b>ve lo que estoy haciendo</b>. En el correo, ve el hilo y me redacta la respuesta.
+        <span class="an">Es el compañero sentado al lado, que ve tu pantalla: ya no hay que explicarle dónde estás parado.</span></p>
+      </div>
+      <div class="stair" style="height:338px">
+        <div class="lv">Escalón 3</div><h3>Agente</h3>
+        <p>Ya tiene <b>llaves</b>. Le pido un objetivo y da todas las vueltas necesarias. No me contesta una pregunta: <b>me hace el trabajo</b>.
+        <span class="an">Es el que se levanta de la silla, va, busca, vuelve y te trae el trabajo hecho.</span></p>
+      </div>
+      <div class="stair" style="height:394px;border-bottom-color:var(--u-green);background:#EAF9F4">
+        <div class="lv">Escalón 4</div><h3>Sistema<br>agéntico</h3>
+        <p>Varios agentes con roles distintos y —esto es lo importante— <b>desconfianza incorporada entre ellos</b>. Uno propone; otro, cuya única misión es encontrarle los agujeros, lo critica; un tercero lo implementa; un cuarto audita que lo hecho sea lo que decía el plan.
+        <span class="an">Es un equipo con revisor. <b>Es el caso real que les cuento en la segunda parte.</b></span></p>
+      </div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>La mayoría está en el <b>escalón 1</b> y cree que eso es “usar IA”. <b>Pasar del 1 al 2 es gratis y es el salto de calidad más grande que vas a notar</b>: es usar la IA que ya está metida en la herramienta donde trabajás, en vez de abrir una pestaña aparte.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:24 → 0:27 · §6 La escalera (4 min) · <b>slide nueva de la v3</b> — en la v2 se había quitado por solaparse con chat-vs-agente</p>
+    <p>Ordená todo lo dicho hasta acá en cuatro escalones, con un ejemplo en cada uno. La sala se ubica sola: casi todos van a reconocerse en el 1.</p>
+    <p><b>Escalón 1, chat:</b> todo el trabajo y toda la responsabilidad siguen siendo míos. <b>Escalón 2, asistente integrado:</b> menos copiar y pegar, y mucho mejores respuestas, porque ya no tengo que explicarle dónde estoy parado. <b>Escalón 3, agente:</b> tiene llaves, le doy un objetivo. <b>Escalón 4, sistema agéntico:</b> varios agentes con roles y desconfianza entre ellos.</p>
+    <p class="n-nota">[NOTA] El “para qué te sirve” de esta slide es <b>el consejo más rentable de toda la charla para el que no programa</b>: pasar del 1 al 2 no cuesta dinero ni proyecto, y el salto se nota el mismo día. Decilo despacio.</p>
+    <p class="n-nota">[NOTA] Del Plan B de recortes: si vas mal de tiempo, <b>contá solo el escalón 1 y el 3</b> y señalá el 4 diciendo “esto es lo de la segunda parte”. Se entiende igual.</p>
+    <p class="n-src">fuente: guion §6 (L449-477) · Anexo B, plan de recortes (L968)</p>
   </aside>
 </section>
 
@@ -549,9 +934,51 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
     <p>Retengan la palabra <b>grounding</b>, porque la segunda parte de la charla es entera sobre esto.</p>
     <p>Y lo último del día: el informe lo firmás <b>vos</b>. Él lo prepara, la firma es de una persona. Eso es <b>human-in-the-loop</b>, humano en el bucle. Y como la firma es tuya, la responsabilidad también.</p>
     <p class="n-h">Y al día siguiente…</p>
-    <p>Martes, nueve de la mañana. Llega otra vez. Y <b>no se acuerda de nada</b>: ni de vos, ni del informe, ni de lo que le corregiste. Si querés que se acuerde, <b>tenés que darle un cuaderno</b> — y el cuaderno no es él: se lo ponemos nosotros por fuera. Todas las herramientas serias de IA hoy son, en el fondo, un modelo más un cuaderno bien organizado. <b>Esto lo remato en la slide siguiente</b>, que es donde se rompe la comparación.</p>
+    <p>Martes, nueve de la mañana. Llega otra vez. Y <b>no se acuerda de nada</b>: ni de vos, ni del informe, ni de lo que le corregiste. Si querés que se acuerde, <b>tenés que darle un cuaderno</b> — y el cuaderno no es él: se lo ponemos nosotros por fuera. Todas las herramientas serias de IA hoy son, en el fondo, un modelo más un cuaderno bien organizado. <b>Esto no lo digas todavía:</b> va en la banda de la slide siguiente (el repaso del día) y se remata en la de “dónde se rompe la comparación”.</p>
     <p class="n-use">→ Para qué te sirve (proyectado): “¿de dónde sacaste esto?”. Si no lo puede señalar, no lo sabe.</p>
     <p class="n-src">fuente: guion §4 momento 6 (L374-401) y “al día siguiente” (L403-413) · CHULETA filas Grounding / RAG / Memoria / Human-in-the-loop</p>
+  </aside>
+</section>
+
+<!-- ============ 10a · NUEVA v3 · repaso: el día entero del fichaje · guion §4 completo (L190-413) ============ -->
+<section class="slide s-light" data-sec="B1 · Repaso: el día entero, hora por hora">
+  <div class="hd">
+    <div><div class="kick">Todo el vocabulario de IA, en una jornada laboral</div><h2>El día del fichaje nuevo, de un vistazo</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:26px;display:flex;flex-direction:column;gap:26px">
+    <div class="day">
+      <div class="d"><span class="hr">9:00</span>
+        <div class="k">Lo que trae puesto</div>
+        <div class="v"><b class="mint-2">= el modelo</b><br>Sabe de todo. Y no sabe <b>nada de nosotros</b>.</div></div>
+      <div class="d"><span class="hr">9:15</span>
+        <div class="k">Los papeles<br>en la mesa</div>
+        <div class="v"><b class="mint-2">= el contexto</b><br>Y el tamaño de la mesa es la <b>ventana de contexto</b>.</div></div>
+      <div class="d"><span class="hr">9:30</span>
+        <div class="k">Las normas<br>de la casa</div>
+        <div class="v"><b class="mint-2">= instrucciones de sistema</b><br>Y lo que no puede hacer nunca: los <b>guardrails</b>.</div></div>
+      <div class="d"><span class="hr">10:00</span>
+        <div class="k">Cómo se hace<br>ESTO, acá</div>
+        <div class="v"><b class="mint-2">= la skill</b><br>El procedimiento de la casa, <b>escrito</b>.</div></div>
+      <div class="d"><span class="hr">11:00</span>
+        <div class="k">Las llaves y<br>los accesos</div>
+        <div class="v"><b class="mint-2">= las herramientas</b><br>Y con bucle deja de opinar: es un <b>agente</b>.</div></div>
+      <div class="d"><span class="hr">13:00</span>
+        <div class="k">“¿De dónde<br>sacaste esto?”</div>
+        <div class="v"><b class="mint-2">= grounding</b><br>Y “yo firmo” = <b>human-in-the-loop</b>.</div></div>
+    </div>
+    <div class="pull" style="color:var(--u-ink)">Ninguna de estas seis cosas es tecnología. <b>Son las seis cosas que ya hacés con una persona nueva</b> — y hay que hacerlas igual, en el mismo orden.</div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Y al día<br>siguiente…</span>
+    <span>Martes, nueve de la mañana. Llega otra vez — y <b>no se acuerda de nada</b>. Si querés que se acuerde, hay que darle un cuaderno: <b>eso es la memoria, y se la ponemos nosotros por fuera</b>. Toda herramienta seria de IA es, en el fondo, un modelo más un cuaderno bien organizado.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ 0:23 → 0:25 · cierre de §4 + “y al día siguiente…” (L403-413) · <b>slide nueva de la v3</b></p>
+    <p>Es el repaso de los seis momentos, y sirve para dos cosas: <b>recoger al que se perdió</b> y dejar el vocabulario ordenado antes de romper la comparación. Recorré las seis horas con el dedo, sin volver a explicar: una frase por columna, ocho segundos cada una.</p>
+    <p><b>El remate es la banda de abajo:</b> martes a las nueve, llega y no se acuerda de nada. Esa es la memoria — y el cuaderno no es de él: <b>se lo ponemos nosotros por fuera</b>. Con esa frase enganchás directo con la slide siguiente, que es donde se rompe la comparación.</p>
+    <p class="n-nota">[NOTA] Esta slide es una <b>buena candidata a fotografía</b>: es la chuleta entera en una imagen. Dejala tres segundos de más.</p>
+    <p class="n-src">fuente: guion §4 completo (L190-401) y “Y al día siguiente…” (L403-413) · CHULETA “Todo el vocabulario, como si contrataras a alguien”</p>
   </aside>
 </section>
 
@@ -695,6 +1122,10 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
   <div class="arc" style="width:300px;height:300px;bottom:-150px;left:-150px"></div>
   <div class="arc" style="width:300px;height:300px;bottom:-150px;right:-150px"></div>
   <div class="mid">
+    <div class="stk stk--pill" style="font-size:30px;margin-bottom:26px">
+      <svg width="40" height="40" viewBox="0 0 16 16" aria-hidden="true"><use href="#stacky-pixel"/></svg>
+      <span>Stacky</span>
+    </div>
     <div class="chip chip--ink" style="margin-bottom:28px">Bloque 2 · 20 minutos</div>
     <h1 class="h-xl mint-2">LA OPERATORIA</h1>
     <p class="h-s" style="margin-top:28px;color:var(--u-navy);max-width:900px">
@@ -744,11 +1175,58 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
   </aside>
 </section>
 
+<!-- ============ 16a · NUEVA v3 · presentación de Stacky (con el logo real) ============ -->
+<!-- fuente verificada: Stacky Agents/docs/sistema/01-overview.md · logo: frontend/public/stacky-pixel.svg (inline arriba) -->
+<section class="slide s-dark" data-sec="B2 · Esto es Stacky">
+  <div class="arc" style="width:700px;height:700px;top:-330px;right:-260px;opacity:.75"></div>
+  <div class="body" style="top:0;bottom:88px;display:grid;grid-template-columns:520px 1fr;gap:52px;align-items:center;padding-left:88px">
+    <div>
+      <div class="stk" style="font-size:76px">
+        <svg width="96" height="96" viewBox="0 0 16 16" aria-hidden="true"><use href="#stacky-pixel"/></svg>
+        <span>Stacky</span>
+      </div>
+      <p style="margin-top:26px;font-size:22px;line-height:1.36;color:var(--u-on-dark-2)">
+        La aplicación que <b style="color:#fff">orquesta a los agentes sobre los tickets</b> del gestor de tareas que el equipo ya usa
+        <span class="off">(Azure DevOps por defecto; también Jira y Mantis)</span>.
+      </p>
+      <p style="margin-top:18px;font-size:20px;line-height:1.34;color:#9db4bc">
+        Del brief de negocio a la épica; del análisis funcional y técnico al desarrollo, la prueba y el cierre.
+      </p>
+    </div>
+    <div class="cards" style="grid-template-columns:1fr;gap:14px">
+      <div class="card">
+        <h3>Entra y sale por el ticket</h3>
+        <p>El trabajo entra por el gestor de tareas y <b>vuelve ahí</b>, como Task o como comentario. <b>No es un chat aparte del que después hay que copiar y pegar.</b></p>
+      </div>
+      <div class="card" style="border-color:var(--u-green);background:rgba(31,227,164,.08)">
+        <h3 class="mint">El agente nunca publica</h3>
+        <p>Cada agente escribe su entregable <b>en un archivo</b>. Publicar en el gestor de tareas lo hace <b>Stacky</b>. Esa delegación es lo que permite que nada salga sin pasar por el sistema — y por una persona.</p>
+      </div>
+      <div class="card">
+        <h3>Un archivo por puesto</h3>
+        <p><b>Ocho agentes, ocho archivos de texto</b>, listados en un manifiesto con su huella (checksum). Cambiar cómo trabaja un puesto es <b>editar un archivo</b>, no programar.</p>
+      </div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Su propósito,<br>tal como está escrito</span>
+    <span><b>“Amplificar al operador humano, no reemplazarlo.”</b> <span class="off">— documentación del sistema, 01-overview</span></span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:02 → 0:03 · presentación de Stacky · <b>slide nueva de la v3</b></p>
+    <p>Dos frases y seguís: <b>Stacky es nuestro sistema para que los agentes trabajen sobre el ciclo real de desarrollo</b>. No es una demo ni un piloto de laboratorio: corre sobre los tickets del gestor de tareas del equipo.</p>
+    <p><b>La caja del medio es la importante</b> y conviene decirla en voz alta: el agente <b>no publica</b>. Escribe su archivo y Stacky publica. Es la misma idea del primer día de un fichaje: “dejá tu borrador en esta bandeja; quien lo manda al cliente es otro”.</p>
+    <p class="n-nota">[NOTA] El logo que ven proyectado es el mismo que está en la barra de la aplicación, al lado del de ubimia. Si hacés demo o mostrás una captura, la sala ya lo reconoce.</p>
+    <p class="n-nota">[NOTA] Si alguien pregunta “¿esto es un producto que vendemos?”, no improvises: <b>[PENDIENTE]</b> el encuadre comercial de Stacky no está en el material de esta sesión.</p>
+    <p class="n-src">fuente verificada: Stacky Agents/docs/sistema/01-overview.md (§Qué es, §Propósito, §Actores) · agents/manifest.json (8 agentes con checksum SHA256) · logo: frontend/public/stacky-pixel.svg</p>
+  </aside>
+</section>
+
 <!-- ============ 17 · los 8 agentes de Stacky ============ -->
 <!-- fuente verificada: Stacky Agents/backend/Stacky/agents/manifest.json (8 agentes, descripciones textuales) -->
 <section class="slide s-dark" data-sec="B2 · La plantilla completa: 8 agentes con nombre">
   <div class="hd">
-    <div><div class="kick">Stacky · un archivo por puesto</div><h2>La plantilla completa: ocho puestos con nombre</h2></div>
+    <div><div class="kick">Un archivo por puesto · columna izquierda: la cadena · derecha: los especialistas</div><h2>La plantilla completa: ocho puestos con nombre</h2></div>
     <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
   </div>
   <div class="body body--u" style="padding-top:24px">
@@ -771,10 +1249,212 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
     <p class="n-time">⏱ B2 · 0:02 → 0:04 · el bucle 1: el ciclo de vida de una tarea</p>
     <p>El flujo tiene dos bucles, y me interesa que se distingan. <b>Bucle 1: el ciclo de vida de una tarea.</b> Una cadena de agentes especializados, cada uno con su rol, sus normas de la casa y su acceso a la documentación. Ocho puestos, y cada puesto es un archivo.</p>
     <p>Nombrálos rápido, con la traducción de oficina que está en pantalla. Si alguien pregunta por los nombres en inglés: son los nombres reales de los archivos, no los traduzco para que quien los vea en pantalla los reconozca.</p>
-    <p class="n-h">Lo que dice el manifiesto de cada uno (por si preguntan)</p>
+    <p class="n-nota">[NOTA] ⚠ <b>Cambió en la v3:</b> acá solo presentás el reparto (30 segundos, los ocho nombres con su traducción de oficina). <b>No te metas en el detalle</b>: las tres slides siguientes son el flujo en orden y la pasada agente por agente.</p>
+    <p class="n-h">Lo que dice el manifiesto de cada uno (respaldo, por si preguntan antes de tiempo)</p>
     <p><b>BusinessAgent:</b> convierte texto libre del cliente (briefs, transcripciones, notas) en una épica de negocio con requisitos numerados; ante una ambigüedad asume la interpretación más razonable y sigue, dejándolo dicho. <b>FunctionalAnalyst:</b> analiza épicas y genera análisis funcional + plan de pruebas. <b>TechnicalAnalyst.v2:</b> traduce funcional → técnico, define alcance, plan de pruebas y pruebas unitarias. <b>Developer:</b> implementa lo que describió el técnico y deja rastro en el código. <b>QAUat1:</b> prueba tickets ya desarrollados sobre la pantalla real. <b>IncidentAnalyst:</b> funde negocio, funcional y técnico en una sola pasada sobre una incidencia con texto, capturas y registros. <b>DevOpsAgent:</b> diagnostica, propone y espera; es multi-turno. <b>Documentador:</b> documentación anti-alucinación.</p>
     <p><b>Y el detalle que es la mitad de la adopción:</b> todo esto corre <b>sobre el gestor de tareas que el equipo ya usa</b> y el resultado vuelve ahí, como tarea o como comentario. No es un chat aparte del que después hay que copiar y pegar. <b>En cada salto entre agentes hay una persona que aprueba.</b></p>
     <p class="n-src">fuente: Stacky Agents/backend/Stacky/agents/manifest.json + los 8 archivos *.agent.md · guion B2 §2 bucle 1 (L645-667)</p>
+  </aside>
+</section>
+
+<!-- ============ 17a · NUEVA v3 · EL FLUJO, EN ORDEN (diagrama) ============ -->
+<!-- fuente verificada: los 6 .agent.md citados (identidad/rol, FLUJO, handoff) + docs/sistema/10-grafo.md (aristas N3→N4→N5, N12→N11) -->
+<section class="slide s-light" data-sec="B2 · El flujo, en orden: quién entra primero y quién firma">
+  <div class="hd hd--mint">
+    <div><div class="kick">La cadena real, paso por paso</div><h2>El flujo, en orden: quién entra primero y quién firma</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:16px;display:flex;flex-direction:column;gap:10px">
+    <div class="cin">
+      <span style="font-family:var(--u-font-head);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--u-green-2);white-space:nowrap">Entra<br>por acá</span>
+      <span>Un <b>texto libre del cliente</b>: un correo, una nota de reunión. &nbsp;·&nbsp; O una <b>incidencia</b> con capturas y registros, por el atajo de <span style="font-family:var(--u-mono)">IncidentAnalyst</span>.</span>
+    </div>
+    <div class="chain">
+      <div class="cstep">
+        <span class="cn">1</span>
+        <div><div class="ca">BusinessAgent</div><div class="cr">“¿Qué pide el cliente?”</div></div>
+        <div class="co">Una <b>épica de negocio</b> con los requisitos numerados (RF-001, RF-002…).</div>
+        <div class="cg">Publica <b>Stacky</b>. El agente no toca el tracker.</div>
+      </div>
+      <div class="carr">▼</div>
+      <div class="cstep">
+        <span class="cn">2</span>
+        <div><div class="ca">FunctionalAnalyst</div><div class="cr">“¿Qué tiene que pasar acá?”</div></div>
+        <div class="co"><b>Análisis funcional + plan de pruebas</b>, con criterios DADO / CUANDO / ENTONCES.</div>
+        <div class="cg">Y <b>Stacky crea la Task</b> sola, colgando de la épica.</div>
+      </div>
+      <div class="carr">▼</div>
+      <div class="cstep">
+        <span class="cn">3</span>
+        <div><div class="ca">TechnicalAnalyst.v2</div><div class="cr">“¿Qué se toca, exactamente?”</div></div>
+        <div class="co">Archivos, clases y métodos · tablas · <b>tests unitarios</b> · datos de prueba reales.</div>
+        <div class="cg">Mira la base <b>solo con SELECT</b>. Publica Stacky.</div>
+      </div>
+      <div class="carr">▼</div>
+      <div class="cstep">
+        <span class="cn">4</span>
+        <div><div class="ca">Developer</div><div class="cr">“El cambio en el código”</div></div>
+        <div class="co">El código modificado siguiendo ese análisis, y el SQL de catálogos si hace falta.</div>
+        <div class="cg"><b>No se declara verde solo:</b> el build lo verifica la máquina.</div>
+      </div>
+      <div class="carr">▼</div>
+      <div class="cstep">
+        <span class="cn">5</span>
+        <div><div class="ca">QAUat1</div><div class="cr">“¿Funciona en la pantalla real?”</div></div>
+        <div class="co">Una prueba <b>ejecutada de verdad</b>, con capturas: <b>PASS / FAIL / BLOCKED</b>.</div>
+        <div class="cg">Clasifica toda falla. Tampoco toca el tracker.</div>
+      </div>
+      <div class="carr">▼</div>
+      <div class="cstep" style="border-color:var(--u-green-2);background:#EAF9F4">
+        <span class="cn">6</span>
+        <div><div class="ca">DevOpsAgent</div><div class="cr">“La puesta en marcha”</div></div>
+        <div class="co">El <b>plan exacto</b>: comandos, riesgo y cómo se vuelve atrás.</div>
+        <div class="cg">Espera la palabra <b>CONFIRMO</b>. “ok” y “dale” no alcanzan.</div>
+      </div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Dónde<br>termina</span>
+    <span>Donde empezó: <b>el resultado vuelve al gestor de tareas</b> como comentario o como Task, y el sistema cierra la ejecución. Y en paralelo, <span style="font-family:var(--u-mono);font-size:18px">Documentador</span> escribe el manual — con una <b>marca de confianza en cada afirmación</b>.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:04 → 0:06 · <b>slide nueva de la v3 — el diagrama que pidieron</b></p>
+    <p class="n-nota">[NOTA] ⚠ <b>No leas la columna de la derecha entera.</b> Recorré los seis pasos por la izquierda (nombre + la pregunta que responde cada uno) y comentá <b>solo tres puertas</b>: la 1 (el agente no publica), la 4 (el build lo verifica la máquina) y la 6 (CONFIRMO). Con eso se entiende el sistema completo.</p>
+    <p><b>La idea que tiene que quedar:</b> no es “una IA que hace todo”. Es <b>una cadena de puestos</b>, cada uno con un techo, y <b>una puerta entre puesto y puesto</b>. Exactamente como se organiza un equipo que funciona.</p>
+    <p><b>La columna de la derecha es el human-in-the-loop hecho arquitectura:</b> ningún agente publica en el gestor de tareas, ninguno ejecuta órdenes que cambien datos, y el estado “bloqueado” <b>nunca lo pone un agente</b>: es una decisión humana confirmada desde Stacky.</p>
+    <p class="n-h">Si preguntan por el “Revisor” que nombré en el bucle de calidad</p>
+    <p>El revisor de código existe en el registro del sistema como agente <span class="n-src">pr_review</span>, pero <b>no está entre los ocho archivos canónicos</b> que acabo de mostrar. Decilo así, sin adornar: los ocho son los que tienen procedimiento escrito y versionado.</p>
+    <p class="n-nota">[NOTA] Honestidad de la cadena: los pasos 1→2→3→4→5 están escritos como <b>handoff explícito</b> en los propios archivos de los agentes (cada uno dice de quién recibe y a quién entrega). El paso 6, DevOps, es <b>conversacional y multi-turno</b>: no cuelga formalmente del QA, se invoca cuando toca desplegar. Si alguien lo repregunta, no lo maquilles.</p>
+    <p class="n-src">fuente verificada: BusinessAgent.agent.md (identidad “el Analista Funcional corre después de vos”, §Flujo resumido, §Lo que NO hacés) · FunctionalAnalyst.agent.md (§7 Handoff para el Analista Técnico, Paso A.4 pending-task.json) · TechnicalAnalyst.v2.agent.md (§ROL, §FLUJO 5 pasos, §4 BD SOLO SELECT, PASO 5 entrega a Stacky) · Developer.agent.md (PASO 1 leer el análisis técnico, PASO 4 build-verify, PASO 5 entregar a Stacky) · QAUat1.agent.md (§Flujo de trabajo, §Clasificacion obligatoria de fallas, §Handoff obligatorio) · DevOpsAgent.agent.md (§R-HITL CONFIRMO) · Documentador.agent.md (§Reglas duras, marcas [V]/[INF]/[NV]) · docs/sistema/05-agentes-runtimes.md y 10-grafo.md</p>
+  </aside>
+</section>
+
+<!-- ============ 17b · NUEVA v3 · agente por agente (1/2): la cadena principal ============ -->
+<section class="slide s-dark" data-sec="B2 · Agente por agente (1/2) · la cadena principal">
+  <div class="hd">
+    <div><div class="kick">Qué hace cada uno, en criollo · 1 de 2</div><h2>La cadena principal: del pedido al código</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:14px;padding-bottom:22px">
+    <div class="cards cards--tight" style="grid-template-columns:1fr 1fr;gap:16px 20px">
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">BusinessAgent</span></h3>
+        <p><b style="color:#fff">= el que toma el pedido.</b> Convierte un correo o una transcripción en requisitos numerados, usando la terminología exacta del producto.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> convertir un brief en épica.<br>
+        <span class="off">Y no frena a preguntar: ante una ambigüedad <b>asume la interpretación más razonable, la marca como supuesto y sigue</b>.</span></p>
+      </div>
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">FunctionalAnalyst</span></h3>
+        <p><b style="color:#fff">= el analista funcional.</b> Dice si el producto <b>ya lo cubre</b>, si se resuelve con configuración o si es desarrollo nuevo.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> criterios de aceptación <span class="off">(DADO / CUANDO / ENTONCES)</span> y plan de pruebas.<br>
+        <span class="off">Y deja escrita la lista de <b>supuestos que asumió</b>, para que se los corrijas.</span></p>
+      </div>
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">TechnicalAnalyst.v2</span></h3>
+        <p><b style="color:#fff">= el analista técnico.</b> Busca en el código <b>primero</b>, después en el manual, y solo si hace falta consulta la base — <b>solo lectura</b>.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> el alcance exacto: qué archivos, qué tablas, qué tests.<br>
+        <span class="off">Su regla de oro: <b>“un bloqueante que se puede deducir no es un bloqueante: es un supuesto”</b>.</span></p>
+      </div>
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">Developer</span></h3>
+        <p><b style="color:#fff">= el programador.</b> Implementa lo que dice el análisis técnico, respetando las convenciones de la casa y dejando rastro en los comentarios del código.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> el cambio, compilado.<br>
+        <span class="off">Y lo mejor: <b>no puede declararse verde a sí mismo</b> — el build lo verifica la máquina.</span></p>
+      </div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">El patrón<br>que se repite</span>
+    <span>Los cuatro tienen <b>techo</b>: cada uno sabe dónde termina su trabajo y <b>no invade el del siguiente</b>. Eso no salió gratis — se escribió después de que un agente se metiera a decidir algo que no le tocaba.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:06 → 0:08 · <b>slide nueva de la v3</b> — la pasada agente por agente</p>
+    <p class="n-nota">[NOTA] ⚠ <b>No leas las cuatro tarjetas.</b> Decí el rol humano de cada uno (“el que toma el pedido”, “el analista funcional”, “el técnico”, “el programador”) y comentá <b>solo dos detalles</b>: el supuesto declarado del funcional y el <b>veredicto de máquina</b> del desarrollador. Son los dos que más impresionan al que sabe del oficio.</p>
+    <p><b>El “techo” de la banda inferior conecta con el fallo de Pacífico</b> que contás dos slides más adelante: el agente de negocio ya no puede fijar cuestiones técnicas <b>porque no es su trabajo</b>. Sembralo acá y cobralo allá.</p>
+    <p class="n-nota">[NOTA] “Lo que más se le pide” describe <b>el entregable principal de cada puesto según su propio procedimiento escrito</b>, no una estadística de uso. Si alguien pregunta cuál se usa más: <b>[PENDIENTE]</b> no hay una medición de uso por agente en el material de esta sesión.</p>
+    <p class="n-src">fuente verificada: BusinessAgent.agent.md (identidad y rol; “ambigüedad → [SUPUESTO] y seguís”) · FunctionalAnalyst.agent.md (identidad; §7 handoff con CA-XX; §8 supuestos asumidos) · TechnicalAnalyst.v2.agent.md (§ROL; §FUENTES 1-4; PASO 4 “un bloqueante inferible NO es un bloqueante”) · Developer.agent.md (§FLUJO pasos 1-4; PASO 4 “VEREDICTO DE MÁQUINA”)</p>
+  </aside>
+</section>
+
+<!-- ============ 17c · NUEVA v3 · agente por agente (2/2): los especialistas ============ -->
+<section class="slide s-dark" data-sec="B2 · Agente por agente (2/2) · los especialistas">
+  <div class="hd">
+    <div><div class="kick">Qué hace cada uno, en criollo · 2 de 2</div><h2>Los especialistas: prueba, guardia, sistemas y manual</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:14px;padding-bottom:22px">
+    <div class="cards cards--tight" style="grid-template-columns:1fr 1fr;gap:16px 20px">
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">QAUat1</span></h3>
+        <p><b style="color:#fff">= el de pruebas de aceptación.</b> Abre la pantalla real y la usa como la usaría una persona <span class="off">(con un robot que maneja el navegador)</span>.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> un veredicto <b>PASS / FAIL / BLOCKED</b> con capturas.<br>
+        <span class="off">Y toda falla se clasifica: <b>navegación · faltan datos · entorno · bug de verdad</b>. Nunca confunde “no hay datos” con “está roto”.</span></p>
+      </div>
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">IncidentAnalyst</span></h3>
+        <p><b style="color:#fff">= el de guardia, la primera línea.</b> Una incidencia con texto, capturas y registros → un desglose listo para desarrollo, <b>en una sola pasada</b>.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> pasos para reproducirlo y causa probable.<br>
+        <span class="off">Si su motor <b>no puede ver</b> las imágenes, lo dice: escribe “pendiente: verificar captura” <b>en vez de inventarla</b>.</span></p>
+      </div>
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">DevOpsAgent</span></h3>
+        <p><b style="color:#fff">= el de sistemas.</b> Conversa de a turnos: diagnostica, propone <b>el plan exacto</b> —comandos, riesgo y cómo se vuelve atrás— y se queda esperando.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> revisar una configuración y preparar un despliegue.<br>
+        <span class="off">Y <b>nunca imprime una contraseña</b>: la nombra por su ruta y su variable.</span></p>
+      </div>
+      <div class="card">
+        <h3><span style="font-family:var(--u-mono);font-size:20px" class="mint">Documentador</span></h3>
+        <p><b style="color:#fff">= el que escribe el manual.</b> Y esta es la parte buena: <b>cada afirmación lleva marca</b>.<br>
+        <b style="color:#fff">Lo que más se le pide:</b> documentar lo que no está documentado.<br>
+        <span class="off"><b>[V]</b> verificado contra el código, citando archivo y línea · <b>[INF]</b> deducido · <b>[NV]</b> no se pudo comprobar.</span></p>
+      </div>
+    </div>
+  </div>
+  <div class="useband">
+    <span class="lbl">Fíjense en<br>el detalle</span>
+    <span>Tres de estos cuatro tienen escrito, en su procedimiento, <b>qué hacer cuando NO saben</b>: decirlo, marcarlo o esperar. <b>Eso no lo trae el modelo. Se lo escribimos nosotros.</b></span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:08 → 0:09 · <b>slide nueva de la v3</b></p>
+    <p class="n-nota">[NOTA] ⚠ Traducí en el momento: <b>“un robot que maneja el navegador”</b> (es Playwright) y <b>“el de guardia”</b> (primera línea de incidencias). Si decís los nombres técnicos sin traducir, media sala se baja acá.</p>
+    <p><b>La tarjeta del Documentador es la que le interesa a los responsables:</b> documentación que dice en voz alta de qué parte de sí misma desconfiar. Es exactamente la idea de las marcas de fiabilidad que vas a contar en Pacífico — señalá la conexión.</p>
+    <p><b>Y la banda de abajo es el remate de todo el bloque:</b> la charla empezó diciendo “la IA nunca dice no lo sé”. Acá se ve el precio de conseguir que lo diga: <b>hay que escribirlo, puesto por puesto</b>.</p>
+    <p class="n-src">fuente verificada: QAUat1.agent.md (§Principio principal, §Clasificacion obligatoria de fallas NAV/DATA/ENV/APP, §Flujo de trabajo, §Handoff) · IncidentAnalyst.agent.md (identidad “UNA pasada”, §2 attachments-manifest “[PENDIENTE: verificar captura]”, §3 “NUNCA inventes un id de épica”) · DevOpsAgent.agent.md (§R-INTERACTIVO, §R-HITL, §R-SCOPE “nunca imprimas secretos”) · Documentador.agent.md (§Reglas duras 1-3)</p>
+  </aside>
+</section>
+
+<!-- ============ 17d · NUEVA v3 · el runtime (el motor) ============ -->
+<!-- fuente verificada: Stacky Agents/docs/sistema/05-agentes-runtimes.md §Runtimes y despacho + §Regla de NO-fallback -->
+<section class="slide s-light" data-sec="B2 · El runtime: dónde corre el agente">
+  <div class="hd hd--mint">
+    <div><div class="kick">La palabra que faltaba traducir</div><h2>El runtime: el motor que ejecuta al agente</h2></div>
+    <div class="mono"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="M7 5v21a17 17 0 0 0 34 0V5" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/><path d="M41 5v38" fill="none" stroke="currentColor" stroke-width="6.5" stroke-linecap="round"/></svg></div>
+  </div>
+  <div class="body body--u" style="padding-top:22px;display:flex;flex-direction:column;justify-content:center;gap:20px">
+    <p style="font-size:21px;line-height:1.34;color:#2c4d59">
+      El procedimiento escrito es <b style="color:var(--u-ink)">el mismo</b>. El <b style="color:var(--u-ink)">runtime</b> es <b style="color:var(--u-ink)">quién lo ejecuta</b>:
+      como mandar el mismo encargo, con las mismas instrucciones, a <b style="color:var(--u-ink)">tres empresas de trabajo temporal distintas</b>. Mismo procedimiento, distinta forma de trabajar — y distinto precio.
+    </p>
+    <div class="cards" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="card"><h3 style="color:var(--u-ink);font-size:22px">GitHub Copilot</h3><p>El camino estándar: el agente corre <b>dentro de la propia aplicación</b>.</p></div>
+      <div class="card"><h3 style="color:var(--u-ink);font-size:22px">Codex CLI</h3><p>El agente corre como <b>un programa de terminal aparte</b>, con su propia ejecución.</p></div>
+      <div class="card"><h3 style="color:var(--u-ink);font-size:22px">Claude Code CLI</h3><p>Ídem, con el otro motor. <b>El operador elige cuál corre cada agente</b>, tarea por tarea.</p></div>
+    </div>
+    <div class="vb"><span class="who">La regla dura del sistema · sin repuesto</span>
+      Si elegís un motor y ese motor falla, la ejecución <b>se marca como error de verdad</b>. <b>NUNCA</b> se cambia sola a otro motor por atrás.</div>
+  </div>
+  <div class="useband">
+    <span class="lbl">→ Para qué<br>te sirve</span>
+    <span>Cuando una herramienta de IA te falle, preguntá siempre <b>qué motor la corrió</b> y <b>si cambió solo</b>. Un sistema que se cambia de motor sin avisar no te está ayudando: <b>te está escondiendo el error</b>.</span>
+  </div>
+  <aside class="notes">
+    <p class="n-time">⏱ B2 · 0:09 → 0:10 · <b>slide nueva de la v3</b> · cierra la palabra que quedó abierta en el bloque 1</p>
+    <p>Es la última palabra del vocabulario y la más fácil: <b>runtime = el motor</b>. El mismo procedimiento escrito lo puede ejecutar un motor u otro. Y en la práctica se elige por proyecto y por tarea.</p>
+    <p class="n-nota">[NOTA] ⚠ <b>No entres en comparativa de motores</b> ni en precios: no es el tema y se te va el reloj. Si preguntan “¿cuál es mejor?”, es la misma respuesta que la del bloque 1: <b>la pregunta correcta no es cuál es mejor, es cuál necesitás para esta tarea</b>.</p>
+    <p><b>La regla de la caja gris es la que vale la pena contar</b>, porque es una decisión de diseño y se entiende sin saber nada: si el motor que pediste falla, <b>el sistema no disimula cambiando a otro</b>. Falla, y te lo dice. Un “reintento silencioso” es cómodo hasta el día que te oculta que llevás tres semanas corriendo con el motor equivocado.</p>
+    <p class="n-nota">[NOTA] Esta slide es <b>la primera candidata a recorte</b> del bloque 2 si vas mal de tiempo: el mensaje central de la charla se sostiene sin ella.</p>
+    <p class="n-nota">[NOTA] ⚠ <b>No digas cuál es el motor “por defecto”.</b> La propia documentación del sistema se contradice: una línea dice que el default es GitHub Copilot y otra, más abajo, dice que se cambió a Claude Code CLI. Si te lo preguntan, contestá lo que sí es cierto: <b>lo elige el operador por ejecución</b>. <b>[PENDIENTE]</b> confirmar el default real antes del 04/08 si querés afirmarlo.</p>
+    <p class="n-src">fuente verificada: Stacky Agents/docs/sistema/05-agentes-runtimes.md — §“Runtimes y despacho (agent_runner.run_agent)” (tabla github_copilot / codex_cli / claude_code_cli) y §“Regla de NO-fallback (invariante)”</p>
   </aside>
 </section>
 
@@ -805,6 +1485,7 @@ table.mx td.no{color:var(--u-red-ink);width:32%}
     <p>Esto es la slide de los guardrails de la primera parte, pero de verdad. <b>Son citas textuales de los archivos de nuestros agentes</b>, no un resumen mío. Y fíjense que están escritas igual que las normas del primer día de una persona nueva.</p>
     <p class="n-nota">[NOTA] ⚠ Traducí <b>DML</b> en el momento (“las órdenes que cambian datos: insertar, actualizar, borrar”) y <b>tracker</b> (“el gestor de tareas: Azure DevOps, Jira, Mantis”). Si no lo traducís, esta slide no le sirve a la mitad de la sala.</p>
     <p>El técnico y el desarrollador <b>pueden mirar la base de datos, pero solo leer</b>. Si hace falta cambiar un dato, no lo cambian: <b>escriben la sentencia y la firma una persona</b>. El de DevOps propone un despliegue y se queda esperando la palabra CONFIRMO. El de negocio no publica en el gestor de tareas: prepara la épica y publica Stacky <i>después</i> de que el operador aprueba.</p>
+    <p class="n-nota">[NOTA] ⚠ <b>Cuidado con esta frase concreta.</b> La cita proyectada (“Stacky publica la épica con la aprobación del operador”) es <b>textual del archivo del agente</b>, pero la documentación del sistema describe el flujo brief→épica como <b>auto-publicación</b>, marcada ahí mismo como excepción al human-in-the-loop. Lo que es cierto en los dos casos —y es lo que conviene decir— es que <b>el agente no toca el tracker: publica Stacky</b>. <b>[PENDIENTE]</b> confirmar si hoy la épica se publica con aprobación o automáticamente, antes del 04/08.</p>
     <p>Y una cosa que a mí me parece la más elegante: el desarrollador <b>no puede crear archivos donde quiera</b>. Solo dentro de su carpeta de salidas. Es el equivalente a “podés dejar tus borradores en esta bandeja, no en el escritorio de los demás”.</p>
     <p class="n-src">fuente verbatim: agents/manifest.json (descripciones de Developer, DevOpsAgent, BusinessAgent) · TechnicalAnalyst.v2.agent.md §ROL y §4 “Base de datos (SOLO SELECT)”</p>
   </aside>

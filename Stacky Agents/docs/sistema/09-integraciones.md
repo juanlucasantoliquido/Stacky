@@ -21,6 +21,58 @@ Cada sync devuelve `{project, fetched, created, updated, removed}`. Errores de c
   auto-publicar (`STACKY_EPIC_AUTOPUBLISH_BACKEND`, default true). [V: tickets.py:5699; config.py:702-704]
 - Requiere `ADO_PAT` (`<REDACTADO>`). El preflight grita si falta y auto-create está ON. [V: app.py:170-177; config.py:437]
 
+## GitLab — TLS de la sonda, errores tipados y match de webhooks (Plan 295)
+
+### El TLS de la sonda de configuración
+- `run_gitlab_checks` monta el adaptador OpenSSL del plan 276 (`gitlab_client._AdaptadorOpenSSL`) con el
+  `ca_bundle` del proyecto, sobre una `requests.Session` propia y **sólo para el prefijo de ese host**.
+  [V: services/gitlab_setup_check.py:_sesion_para]
+- **Por qué `verify=<bundle>` NO alcanza:** `app.py:26` llama `truststore.inject_into_ssl()`, que reemplaza
+  `ssl.SSLContext` para **todo el proceso** — necesario por la inspección TLS de la red, y letal para un GitLab
+  interno (verifica por Windows CryptoAPI e ignora `VERIFY_X509_PARTIAL_CHAIN`). Por eso el `requests.get()`
+  pelado que tenía esta sonda **nacía roto**. [V: services/tls_openssl_context.py:3-13]
+- El bundle se resuelve con `tls_pinning.resolver_ca_bundle` (parámetro > `STACKY_GITLAB_CA_BUNDLE` >
+  `REQUESTS_CA_BUNDLE`), igual que el cliente: saltearlo haría que la sonda hable **otro TLS** que el sync.
+- Chequeo nuevo `chk-tls`, **antes** de `chk-instancia` (el handshake ocurre antes de que exista un status HTTP).
+  Distingue **certificado** de **red**: antes un cert que no cerraba salía como `chk-instancia = fail`
+  "No se pudo llegar a esa dirección" — culpaba a la red con el sync funcionando.
+- `run_gitlab_checks` devuelve **SIEMPRE 6 resultados** (eran 5) en **todos** sus caminos de salida: la UI pinta
+  la lista que recibe. Flag reusada: `STACKY_GITLAB_TLS_ADAPTER_ENABLED` (OFF ⇒ sesión pelada, conducta previa).
+
+### Los errores de la API de GitLab
+- `TrackerApiError` **NO es hermana** de `AdoApiError`: deriva de `TrackerError(RuntimeError)`
+  [V: services/tracker_provider.py:46,52-57]. Por eso la lista de `except` de `/sync` y `/sync-v2` **se veía
+  completa sin estarlo** y un PAT vencido salía como `500 {"error":"unexpected"}`.
+- Ahora hay `_gitlab_sync_error_response`, simétrico a `_ado_sync_error_response`: **502** + `kind` + copy
+  accionable que nombra GitLab. Los **siete** `kind` reales tienen copy propio —
+  `auth`, `not_found`, `rate_limited`, `server`, `tls`, `network` y **`unknown`** (el default de
+  `TrackerApiError.__init__` y lo que `_kind_for_status` devuelve para 400/409/422).
+- **`.status`, NO `.status_code`**: ese segundo nombre es de `AdoApiError`; confundirlos hace que el handler
+  lea `None` siempre.
+- Breaker propio `"gitlab_sync"`, cuya key de proyecto es **`stacky_project_name`**, nunca `ado_breaker_project`:
+  en GitLab el token, la URL y el `ca_bundle` son **por proyecto**. Sólo abren los `kind` **terminales de
+  configuración** (`auth`, `not_found`); `rate_limited`/`server`/`network`/`tls` son transitorios y abrir por
+  ellos apagaría GitLab hasta 6 h por un blip de red. [V: services/integration_breaker.py:classify_gitlab_error]
+- El breaker se consulta **después** de resolver el tracker: antes vivía arriba de `resolve_project_context` y un
+  proyecto GitLab podía recibir `{"error":"ado_degraded"}` por el breaker de Azure DevOps de **otro** proyecto —
+  el mismo defecto que el 281 F4 arregló en el arranque (`app.py:204-209`) y dejó vivo en `sync-v2`.
+- Flag: `STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED` (ON). OFF ⇒ el `except` re-lanza y vuelve el 500 de antes.
+
+### El match de los webhooks entrantes
+- **`ado_id` NO es único**: es `nullable=False` pero no `unique=True`; el único índice único es la **terna**
+  `(stacky_project_name, tracker_type, external_id)`. [V: models.py:42, models.py:77-83]
+- En GitLab `ado_id` lleva el **IID**, que se repite entre proyectos [V: services/gitlab_sync.py:12-16]. Los dos
+  receptores de `api/phase6.py` macheaban por `ado_id` pelado: con dos proyectos GitLab que tuvieran un issue
+  #42, el webhook tomaba el del proyecto **equivocado** y corría el DebugAgent sobre él.
+- Ahora los dos filtran por proyecto vía `_ticket_del_webhook`, con la misma tolerancia del `or_` de
+  `api/tickets.py` para las filas históricas con `stacky_project_name` NULL (siguen macheando por `project`).
+- El placeholder auto-creado escribe los **tres** campos del índice único (`stacky_project_name`,
+  `tracker_type`, `external_id`) y el `project` del contexto — antes ponía `"RSPacifico"` hardcodeado y sin
+  `tracker_type`, o sea un ticket ADO sintético dentro de un proyecto GitLab.
+  Flag: `STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED` (ON; OFF ⇒ 404 accionable en vez de crear).
+- **Deuda declarada:** `api/phase6.py:192` corre el DebugAgent siempre con `runtime="github_copilot"` y
+  `project_name=None`. Es preexistente; el plan 295 la declara y no la cambia.
+
 ## Webhooks salientes (`services/webhooks.py`)
 - FA-52 — emite eventos a otros sistemas (CI/Slack/dashboards) sin polling al aprobarse una ejecución. [V: webhooks.py docstring]
 - Tabla `Webhook` (con columna `format`, default `raw`). [V: db.py:44, db.py:114]

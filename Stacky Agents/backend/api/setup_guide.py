@@ -107,6 +107,10 @@ def verify_gitlab_setup():
             # body se IGNORA a proposito (el cliente no puede forzar un verde).
             engine_enabled=_flag("STACKY_GITLAB_ENABLED", default=False),
             engine_will_enable=bool(body.get("gitlab_enable_engine", False)),
+            # Plan 295 F5 — el certificado que el operador ACABA de tipear (no el
+            # guardado): mismo criterio que el token. Sin esto la sonda hablaba un
+            # TLS distinto del que usa el sync y daba rojo con el producto andando.
+            ca_bundle=str(body.get("gitlab_ca_bundle") or "").strip() or None,
         )
     except Exception as exc:
         logger.warning("setup-guide verify gitlab: fallo inesperado: %s", type(exc).__name__)

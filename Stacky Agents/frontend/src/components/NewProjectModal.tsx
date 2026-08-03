@@ -936,6 +936,8 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
         gitlab_project: form.gitlab_project ?? "",
         gitlab_token: form.gitlab_token ?? "",
         gitlab_enable_engine: form.gitlab_enable_engine !== false,
+        // Plan 295 F5 — cuarta pata del conducto del ca_bundle.
+        gitlab_ca_bundle: form.gitlab_ca_bundle ?? "",
       }}
       canRunVerify={flags.setupGuideVerify}
     />

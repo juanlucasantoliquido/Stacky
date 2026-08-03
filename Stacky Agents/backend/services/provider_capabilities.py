@@ -73,6 +73,57 @@ _CAPABILITY_TO_PORT_METHOD: dict[str, str] = {
     "identity.me": "get_authenticated_user",
 }
 
+# Plan 295 F3 — SEGUNDO eje del detector de mentiras. _CAPABILITY_TO_PORT_METHOD
+# solo cubre las capacidades que SON un método del puerto: 17 de las 71 claves.
+# Toda capacidad TRANSVERSAL (TLS, rate limit, webhooks, deep links, sync) era
+# invisible para el gate, y por eso el plan 295 F2 tuvo que corregir a mano dos
+# entradas que mentían desde los planes 276 y 292.
+#
+# CONTRATO: {capability: {provider: "modulo.dotted.path:SIMBOLO"}}
+#   * status full/partial  => el símbolo TIENE que existir en ese módulo.
+#   * status absent        => el símbolo NO tiene que existir.
+#   * capability/provider ausente de este mapa => el gate no opina (ratchet, F4).
+#
+# El símbolo se nombra por NOMBRE, nunca por línea: un anclaje de línea caduca
+# con el primer commit ajeno y este mapa tiene que sobrevivir a la serie entera.
+#
+# REGLA DURA (test_ningun_simbolo_se_repite_entre_capacidades, F3): dentro de un
+# mismo proveedor, dos capacidades NO pueden compartir el mismo `modulo:simbolo`.
+# Un símbolo "grande" (una clase de cliente, un router) existe SIEMPRE y volvería
+# el gate un adorno. Cada capacidad se ancla al símbolo que HACE ESE trabajo.
+_CAPABILITY_TO_SYMBOL: dict[str, dict[str, str]] = {
+    "tracker.sync.incremental": {
+        # NO `sync_gitlab_tickets`: esa función hace el sync COMPLETO también, así
+        # que existiría igual con el incremental apagado. Lo que hace el trabajo
+        # INCREMENTAL es la decisión de modo (gitlab_sync.py:259-262 la llama).
+        "gitlab": "services.gitlab_sync_watermark:decidir_modo_de_sync",
+        "azure_devops": "services.ado_sync:upsert_single_work_item",
+    },
+    "tracker.rate_limit.clamp": {
+        "gitlab": "services.gitlab_client:_resolver_retry_after",
+        "azure_devops": "services.ado_client:_RETRY_AFTER_MAX",
+    },
+    "tracker.auth.html_redirect": {
+        "gitlab": "services.gitlab_client:_validar_base_url",
+    },
+    # Las DOS de webhook apuntan a un módulo que HOY NO EXISTE, y eso es el punto:
+    # la matriz las declara `absent`, así que el gate asertá que NO existan y pasa.
+    # El día que el PLAN DEL WEBHOOK cree api/tracker_webhooks.py y se olvide de
+    # actualizar la matriz, este gate se pone ROJO y lo obliga.
+    "events.webhook.inbound": {
+        "gitlab": "api.tracker_webhooks:recibir_webhook_gitlab",
+    },
+    "events.webhook.verify": {
+        "gitlab": "api.tracker_webhooks:verificar_firma_gitlab",
+    },
+    "links.item": {
+        "gitlab": "services.gitlab_deep_links:compose_issue_url",
+    },
+    "tracker.sync.full": {
+        "gitlab": "services.gitlab_sync:sync_gitlab_tickets",
+    },
+}
+
 
 def _f(evidence: str) -> dict:
     return {"status": "full", "evidence": evidence, "loss": ""}
@@ -94,7 +145,8 @@ def _na(evidence: str = "") -> dict:
 # Carga inicial verificada contra el código el 2026-07-25 (§6 del plan).
 CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
     "azure_devops": {
-        "tracker.items.list": _f("services/ado_client.py:319"),
+        # Plan 295 F4 — anclado por SÍMBOLO (AdoClient.fetch_open_work_items, :319).
+        "tracker.items.list": _f("services/ado_client.py:fetch_open_work_items"),
         # Degradado de `full` a `partial` por el contrato conductual de F3 (2026-07-25):
         # el adaptador propaga AdoApiError crudo, que NO es de la jerarquía del puerto.
         "tracker.items.get": _p(
@@ -130,7 +182,8 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
         "tracker.iterations.list": _f("services/pm/ado_pm_collector.py:36"),
         "tracker.milestones.list": _a(),
         "tracker.labels.ensure": _a(),
-        "tracker.rate_limit.clamp": _f("services/ado_client.py:49"),
+        # Plan 295 F4 — anclado por SÍMBOLO: la constante que HACE el clamp.
+        "tracker.rate_limit.clamp": _f("services/ado_client.py:_RETRY_AFTER_MAX"),
         "tracker.auth.html_redirect": _f("services/ado_client.py:88"),
         "repo.file.read": _a(),
         "repo.file.commit": _f("services/ado_provider.py:146"),
@@ -198,8 +251,11 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
         "links.epic": _a(),
     },
     "gitlab": {
-        "tracker.items.list": _f("services/gitlab_provider.py:155"),
-        "tracker.items.get": _f("services/gitlab_provider.py:164"),
+        # Plan 295 F4 — el anclaje :155 CADUCÓ: cae dentro de _normalize_issue
+        # (:145), no de la capacidad. fetch_open_items está en :324.
+        "tracker.items.list": _f("services/gitlab_provider.py:fetch_open_items"),
+        # Plan 295 F4 — ídem: :164 también cae en _normalize_issue. get_item está en :333.
+        "tracker.items.get": _f("services/gitlab_provider.py:get_item"),
         "tracker.items.create": _f("services/gitlab_provider.py:252"),
         "tracker.items.update_state": _f("services/gitlab_provider.py:218"),
         "tracker.items.update_assignee": _p(
@@ -246,8 +302,10 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
         # no `fetch_item_updates` (que vive en `:606`); y las sub-consultas SÍ se
         # hacen (`resource_label_events` en `:613`, `resource_state_events` en
         # `:630`). Lo silenciado son los ERRORES de esas sub-consultas.
+        # Plan 295 F4 — :606 CADUCÓ: cae dentro de find_child_by_marker (:587).
+        # fetch_item_updates está en :619. Se ancla por SÍMBOLO.
         "tracker.updates.history": _p(
-            "services/gitlab_provider.py:606",
+            "services/gitlab_provider.py:fetch_item_updates",
             "las tres sub-consultas (etiquetas, estados y notas del sistema) atrapan "
             "su error con un except mudo: si una falla, el historial sale incompleto "
             "y no hay forma de distinguirlo de un ticket sin actividad",
@@ -256,7 +314,12 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
         # Antes era `_a("api/tickets.py:692")` (ausente), que era la deuda que
         # `api/tickets.py` delegaba a un "Plan 220" que nunca se escribió.
         "tracker.sync.full": _f("services/gitlab_sync.py:sync_gitlab_tickets"),
-        "tracker.sync.incremental": _a(),
+        # Plan 295 F2 — DEJA DE MENTIR. El plan 292 implementó el sync incremental
+        # para GitLab y nace ON: `decidir_modo_de_sync` elige "incremental" y emite
+        # TrackerQuery(state="all", updated_after=marca) — 1 request. La matriz lo
+        # declaraba ausente y el panel de Diagnóstico lo mostraba así.
+        # Evidencia por SÍMBOLO (F4): una línea se corre con el primer commit ajeno.
+        "tracker.sync.incremental": _f("services/gitlab_sync.py:sync_gitlab_tickets"),
         "tracker.epics.list": _a(),
         "tracker.epics.create_native": _p(
             "services/gitlab_provider.py:104",
@@ -272,12 +335,14 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
             "las etiquetas type::* se envían al crear el ítem, pero no se garantiza que "
             "existan en el proyecto (GitLab las crea implícitas, sin color ni descripción)",
         ),
-        "tracker.rate_limit.clamp": _p(
-            "services/gitlab_client.py:146",
-            "no clampea Retry-After: un valor hostil bloquea el hilo (ADO lo clampea a 30 s)",
-        ),
+        # Plan 295 F2 — el 276 F9 puso el clamp a 30 s en _resolver_retry_after y la
+        # matriz seguía declarando la pérdida YA RESUELTA. Además el anclaje
+        # "gitlab_client.py:146" estaba CADUCO: el clamp vive en _resolver_retry_after
+        # (hoy línea 40) y _RETRY_AFTER_MAX en la 37. Se ancla por SÍMBOLO.
+        "tracker.rate_limit.clamp": _f("services/gitlab_client.py:_resolver_retry_after"),
+        # Plan 295 F4 — anclado por SÍMBOLO: _validar_base_url vive hoy en :81.
         "tracker.auth.html_redirect": _p(
-            "services/gitlab_client.py:164",
+            "services/gitlab_client.py:_validar_base_url",
             "ante el HTML de login devuelve el texto crudo en vez de un error tipado de auth",
         ),
         "repo.file.read": _a("services/gitlab_provider.py:564"),
@@ -319,8 +384,12 @@ CAPABILITY_MATRIX: dict[str, dict[str, dict]] = {
         "identity.members.list": _a(),
         "identity.groups.list": _a(),
         "identity.token.scopes": _a(),
-        "events.webhook.inbound": _a("services/webhooks.py:123"),
-        "events.webhook.verify": _a("services/webhooks.py:70"),
+        # Plan 295 F4 — evidencia BORRADA a propósito: services/webhooks.py es el
+        # EMISOR de webhooks SALIENTES de Stacky (fire :123 / _sign :70), no un
+        # receptor entrante. Un puntero falso es peor que ninguno: manda al lector
+        # a leer código que no tiene nada que ver. `absent` no exige evidencia.
+        "events.webhook.inbound": _a(),
+        "events.webhook.verify": _a(),
         "links.item": _f("services/gitlab_deep_links.py:38"),
         "links.mr": _f("services/gitlab_deep_links.py:47"),
         "links.commit": _f("services/gitlab_deep_links.py:56"),

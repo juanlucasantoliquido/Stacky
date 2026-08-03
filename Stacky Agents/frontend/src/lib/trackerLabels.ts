@@ -133,6 +133,24 @@ export function sugerenciasDeEstadoFinal(tipo: string | undefined | null): strin
   return k ? [...ESTADOS_FINALES[k]] : [];
 }
 
+/** Plan 295 F11 — cómo se llama en cada tracker el nivel intermedio y el nivel
+ *  hoja de una descomposición.
+ *
+ *  Azure DevOps tiene tipos nativos de work item. GitLab NO los tiene: el plan
+ *  277 F4 clasifica LOCALMENTE con etiquetas `type::*`, así que el vocabulario
+ *  honesto para GitLab es genérico. Un tracker desconocido cae al vocabulario de
+ *  Azure DevOps, que es el que la pantalla mostraba antes de este plan: degrada
+ *  al comportamiento de hoy, nunca a una pantalla en blanco.
+ */
+export function nombreDeNivel(
+  tipo: string | undefined | null,
+  nivel: "intermedio" | "hoja",
+): string {
+  const t = (tipo ?? "").trim().toLowerCase();
+  if (t === "gitlab") return nivel === "intermedio" ? "Grupo" : "Tarea";
+  return nivel === "intermedio" ? "Feature" : "Task";
+}
+
 /** [ADICIÓN ARQUITECTO A3] Rótulo del tab, ruteado por tracker, SIN tocar TAB_META.
  *
  *  Por qué existe: `TAB_META` (components/shell/shellNav.ts) es un

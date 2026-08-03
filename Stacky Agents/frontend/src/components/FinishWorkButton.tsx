@@ -241,7 +241,17 @@ export default function FinishWorkButton({ ticket, disabled, onCompleted }: Prop
                 className={styles.input}
                 value={targetState}
                 onChange={(e) => setTargetState(e.target.value)}
-                placeholder="Ej: Done, Closed, Resolved"
+                // Plan 295 F11 — el placeholder sale de la MISMA fuente que el
+                // datalist de abajo, que ya rutea por tracker. Antes traia el
+                // vocabulario de Azure DevOps hardcodeado, contradiciendo al
+                // datalist que esta tres lineas mas abajo.
+                // El .slice(0, 3) es deliberado: el placeholder tiene que caber en
+                // el input; con 8 estados se cortaria y no se veria ninguno entero.
+                placeholder={
+                  sugerenciasDeEstadoFinal(trackerDelTicket).length > 0
+                    ? `Ej: ${sugerenciasDeEstadoFinal(trackerDelTicket).slice(0, 3).join(", ")}`
+                    : "Estado final del ítem"
+                }
                 disabled={isBusy}
                 list="ado-state-suggestions"
               />

@@ -19,6 +19,7 @@ from services import (
     egress_policies, embeddings, live_db, macros, parallel_runs,
     slash_commands, typecheck,
 )
+from services.project_context import resolve_project_context  # Plan 295 F9
 from ._helpers import current_user
 
 bp = Blueprint("phase6", __name__, url_prefix="")
@@ -147,6 +148,71 @@ def run_macro_route(mid: int):
     return jsonify(result)
 
 
+# ── Plan 295 F9 — resolución del ticket de un webhook, SIN ambigüedad ────────
+
+def _plan295_autocrear_habilitado() -> bool:
+    import config
+
+    return bool(getattr(config.config, "STACKY_WEBHOOK_TICKET_AUTOCREATE_ENABLED", True))
+
+
+def _ado_id_del_payload(p: dict) -> int:
+    """`ticket_ado_id` numérico, o `400` accionable. Antes un valor no numérico
+    reventaba en `int()` y salía como 500."""
+    crudo = p.get("ticket_ado_id")
+    if not crudo:
+        abort(400, "ticket_ado_id required")
+    try:
+        return int(crudo)
+    except (TypeError, ValueError):
+        abort(400, "ticket_ado_id debe ser numérico")
+
+
+def _ticket_del_webhook(session, ado_id: int, payload: dict):
+    """Plan 295 F9 — resuelve el ticket de un webhook entrante SIN ambigüedad.
+
+    POR QUÉ EXISTE: `filter_by(ado_id=...)` pelado es un bug latente GARANTIZADO en
+    GitLab. `ado_id` no es único (models.py:42; el único es la terna
+    `(stacky_project_name, tracker_type, external_id)`, models.py:77-83) y en GitLab
+    lleva el IID, que se repite entre proyectos (gitlab_sync.py:12-16). Dos proyectos
+    GitLab con el issue #42 y el webhook macheaba el del proyecto equivocado -- y el
+    DebugAgent corría sobre él.
+
+    Stacky es MONO-OPERADOR: si el payload no nombra el proyecto, el proyecto activo
+    es la respuesta correcta y honesta. NO se adivina por `ado_id`.
+
+    Devuelve (ticket|None, ctx|None). NO crea nada: crear es decisión del llamador.
+    """
+    from sqlalchemy import and_, or_
+
+    from models import Ticket
+
+    # 1. ¿El payload nombra el proyecto? Se aceptan las DOS claves: la nueva,
+    #    explícita, y la vieja `project`, que en la práctica trae el tracker_project.
+    #    `resolve_project_context` acepta las dos formas (su docstring :381-386).
+    nombrado = (payload.get("stacky_project") or payload.get("project") or "").strip() or None
+    ctx = resolve_project_context(project_name=nombrado)   # sin nombre => proyecto ACTIVO
+
+    if ctx is None:
+        return None, None
+
+    # 2. Filtro por PROYECTO, con la misma tolerancia que _ticket_project_filter
+    #    de api/tickets.py:362-371: las filas viejas tienen stacky_project_name NULL
+    #    y solo `project` (el tracker_project). Ignorar eso rompería los tickets
+    #    ADO históricos, que es exactamente lo que este plan NO puede hacer.
+    filtro_proyecto = or_(
+        Ticket.stacky_project_name == ctx.stacky_project_name,
+        and_(Ticket.stacky_project_name.is_(None), Ticket.project == ctx.tracker_project),
+    )
+    fila = (
+        session.query(Ticket)
+        .filter(Ticket.ado_id == ado_id)
+        .filter(filtro_proyecto)
+        .first()
+    )
+    return fila, ctx
+
+
 # ── FA-29 — CI failure webhook ───────────────────────────────
 
 @bp.post("/ci/failure-webhook")
@@ -159,17 +225,33 @@ def ci_webhook():
     from models import Ticket
 
     p = request.get_json(force=True, silent=True) or {}
-    ado_id = p.get("ticket_ado_id")
-    if not ado_id:
-        abort(400, "ticket_ado_id required")
+    ado_id = _ado_id_del_payload(p)
 
     with session_scope() as session:
-        t = session.query(Ticket).filter_by(ado_id=int(ado_id)).first()
+        t, ctx = _ticket_del_webhook(session, ado_id, p)
+        if ctx is None:
+            # Plan 295 F9 — sin proyecto resoluble no se puede saber A QUÉ proyecto
+            # pertenece este ticket. Crear a ciegas era peor: metía un ticket con
+            # project="RSPacifico" HARDCODEADO y sin tracker_type (=> default
+            # azure_devops, models.py:49), o sea un ticket ADO sintético dentro de
+            # un proyecto GitLab, que después el 286 tiene que adivinar.
+            abort(409, "no hay proyecto activo ni el payload nombra uno: no se puede "
+                       "resolver a qué proyecto pertenece este ticket")
         if t is None:
-            # Auto-crear ticket placeholder si no existe
+            if not _plan295_autocrear_habilitado():
+                abort(404, f"no existe el ticket {ado_id} en el proyecto "
+                           f"'{ctx.stacky_project_name}'")
+            # Placeholder con la IDENTIDAD COMPLETA. Los tres campos que faltaban
+            # (stacky_project_name, tracker_type, external_id) son los del índice
+            # único de models.py:77-83: sin ellos el upsert del sync crea un DUPLICADO.
             t = Ticket(
-                ado_id=int(ado_id), project=p.get("project", "RSPacifico"),
-                title=f"CI failure ADO-{ado_id}", ado_state="To Do",
+                ado_id=ado_id,
+                external_id=ado_id,
+                project=ctx.tracker_project,
+                stacky_project_name=ctx.stacky_project_name,
+                tracker_type=ctx.tracker_type,
+                title=f"Fallo de CI — ítem {ado_id}",
+                ado_state="To Do",
             )
             session.add(t); session.flush()
         ticket_id = t.id
@@ -206,21 +288,30 @@ def ci_webhook():
 
 @bp.post("/pr/review-webhook")
 def pr_review_webhook():
-    """Triggered by ADO Repos / GitHub when reviewer mentions @stacky-bot.
-    Payload: { pr_id, ticket_ado_id, diff, description }
+    """Recibe el aviso de una revisión de PR/MR y dispara el agente de revisión.
+
+    Lo disparan Azure DevOps Repos, GitHub o GitLab (Merge Request) cuando un
+    revisor menciona a @stacky-bot. Payload: { pr_id, ticket_ado_id, diff,
+    description, stacky_project? }.
+
+    `ticket_ado_id` conserva su nombre por compatibilidad con los webhooks ya
+    configurados en los servidores del operador: en GitLab lleva el IID del issue.
+    Plan 295 F9 — el match es por (ado_id + proyecto), NUNCA por ado_id solo: el iid
+    se repite entre proyectos de GitLab.
     """
     import agent_runner
-    from models import Ticket
 
     p = request.get_json(force=True, silent=True) or {}
-    ado_id = p.get("ticket_ado_id")
-    if not ado_id:
-        abort(400, "ticket_ado_id required")
+    ado_id = _ado_id_del_payload(p)
 
     with session_scope() as session:
-        t = session.query(Ticket).filter_by(ado_id=int(ado_id)).first()
+        t, ctx = _ticket_del_webhook(session, ado_id, p)
+        if ctx is None:
+            abort(409, "no hay proyecto activo ni el payload nombra uno")
         if t is None:
-            abort(404, f"ticket ADO-{ado_id} not found")
+            # NO auto-crea: este endpoint nunca lo hizo y no es el momento de empezar.
+            abort(404, f"no existe el ticket {ado_id} en el proyecto "
+                       f"'{ctx.stacky_project_name}'")
         ticket_id = t.id
 
     blocks = [

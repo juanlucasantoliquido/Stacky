@@ -10,7 +10,7 @@
 | Proveedor | completa | parcial | ausente | no aplica |
 |---|---|---|---|---|
 | azure_devops | 38 | 8 | 25 | 0 |
-| gitlab | 33 | 14 | 22 | 2 |
+| gitlab | 36 | 13 | 20 | 2 |
 
 Total de capacidades declaradas: **71**.
 
@@ -22,8 +22,8 @@ estado es parcial, y la evidencia `archivo:línea` que lo respalda.
 | Capacidad | Azure DevOps | GitLab | Pérdida declarada | Evidencia ADO | Evidencia GitLab |
 |---|---|---|---|---|---|
 | **tracker.\*** | | | | | |
-| `tracker.items.list` | completa | completa | — | `services/ado_client.py:319` | `services/gitlab_provider.py:155` |
-| `tracker.items.get` | parcial | completa | **ADO:** propaga AdoApiError crudo en vez de TrackerApiError(kind='not_found'): el consumidor no puede distinguir 'no existe' de 'se cayó la API' | `services/ado_provider.py:66` | `services/gitlab_provider.py:164` |
+| `tracker.items.list` | completa | completa | — | `services/ado_client.py:fetch_open_work_items` | `services/gitlab_provider.py:fetch_open_items` |
+| `tracker.items.get` | parcial | completa | **ADO:** propaga AdoApiError crudo en vez de TrackerApiError(kind='not_found'): el consumidor no puede distinguir 'no existe' de 'se cayó la API' | `services/ado_provider.py:66` | `services/gitlab_provider.py:get_item` |
 | `tracker.items.create` | completa | completa | — | `services/ado_provider.py:101` | `services/gitlab_provider.py:252` |
 | `tracker.items.update_state` | completa | completa | — | `services/ado_provider.py:81` | `services/gitlab_provider.py:218` |
 | `tracker.items.update_assignee` | completa | parcial | **GitLab:** si el usuario no resuelve, silencia el error y BORRA el asignado en vez de levantar un error tipado | `services/ado_provider.py:120` | `services/gitlab_provider.py:363` |
@@ -40,16 +40,16 @@ estado es parcial, y la evidencia `archivo:línea` que lo respalda.
 | `tracker.attachments.link` | completa | completa | — | `services/ado_client.py:736` | `services/gitlab_provider.py:325` |
 | `tracker.hierarchy.link_parent` | completa | parcial | **GitLab:** sin licencia Premium no hay épicas nativas: cae a issue-links, que no son jerarquía real (no hay padre único) | `services/ado_provider.py:101` | `services/gitlab_provider.py:104` |
 | `tracker.hierarchy.find_child` | completa | parcial | **GitLab:** devuelve el PADRE como proxy del hijo cuando no hay épica nativa | `services/ado_provider.py:115` | `services/gitlab_provider.py:381` |
-| `tracker.updates.history` | completa | parcial | **GitLab:** las sub-consultas de resource_state_events / resource_label_events están silenciadas: sin historial de estado ni de etiquetas | `services/ado_provider.py:137` | `services/gitlab_provider.py:413` |
-| `tracker.sync.full` | completa | ausente | — | `services/ado_sync.py:102` | `api/tickets.py:692` |
-| `tracker.sync.incremental` | parcial | ausente | **ADO:** upsert_single_work_item procesa de a un ítem: no hay ventana incremental por fecha ni cursor persistido | `services/ado_sync.py:235` | — |
+| `tracker.updates.history` | completa | parcial | **GitLab:** las tres sub-consultas (etiquetas, estados y notas del sistema) atrapan su error con un except mudo: si una falla, el historial sale incompleto y no hay forma de distinguirlo de un ticket sin actividad | `services/ado_provider.py:137` | `services/gitlab_provider.py:fetch_item_updates` |
+| `tracker.sync.full` | completa | completa | — | `services/ado_sync.py:102` | `services/gitlab_sync.py:sync_gitlab_tickets` |
+| `tracker.sync.incremental` | parcial | completa | **ADO:** upsert_single_work_item procesa de a un ítem: no hay ventana incremental por fecha ni cursor persistido | `services/ado_sync.py:235` | `services/gitlab_sync.py:sync_gitlab_tickets` |
 | `tracker.epics.list` | completa | ausente | — | `services/ado_provider.py:487` | — |
 | `tracker.epics.create_native` | completa | parcial | **GitLab:** requiere licencia GitLab Premium; sin ella cae al fallback de issue-links | `services/ado_provider.py:101` | `services/gitlab_provider.py:104` |
 | `tracker.iterations.list` | completa | ausente | — | `services/pm/ado_pm_collector.py:36` | — |
 | `tracker.milestones.list` | ausente | parcial | **GitLab:** solo se puede FILTRAR por milestone; no hay listado ni CRUD por el puerto | — | `services/gitlab_provider.py:48` |
 | `tracker.labels.ensure` | ausente | parcial | **GitLab:** las etiquetas type::* se envían al crear el ítem, pero no se garantiza que existan en el proyecto (GitLab las crea implícitas, sin color ni descripción) | — | `services/gitlab_provider.py:45` |
-| `tracker.rate_limit.clamp` | completa | parcial | **GitLab:** no clampea Retry-After: un valor hostil bloquea el hilo (ADO lo clampea a 30 s) | `services/ado_client.py:49` | `services/gitlab_client.py:146` |
-| `tracker.auth.html_redirect` | completa | parcial | **GitLab:** ante el HTML de login devuelve el texto crudo en vez de un error tipado de auth | `services/ado_client.py:88` | `services/gitlab_client.py:164` |
+| `tracker.rate_limit.clamp` | completa | completa | — | `services/ado_client.py:_RETRY_AFTER_MAX` | `services/gitlab_client.py:_resolver_retry_after` |
+| `tracker.auth.html_redirect` | completa | parcial | **GitLab:** ante el HTML de login devuelve el texto crudo en vez de un error tipado de auth | `services/ado_client.py:88` | `services/gitlab_client.py:_validar_base_url` |
 | **repo.\*** | | | | | |
 | `repo.file.read` | ausente | ausente | — | — | `services/gitlab_provider.py:564` |
 | `repo.file.commit` | completa | completa | — | `services/ado_provider.py:146` | `services/gitlab_provider.py:592` |
@@ -91,8 +91,8 @@ estado es parcial, y la evidencia `archivo:línea` que lo respalda.
 | `identity.groups.list` | ausente | ausente | — | — | — |
 | `identity.token.scopes` | ausente | ausente | — | — | — |
 | **events.\*** | | | | | |
-| `events.webhook.inbound` | ausente | ausente | — | `services/webhooks.py:123` | `services/webhooks.py:123` |
-| `events.webhook.verify` | ausente | ausente | — | `services/webhooks.py:70` | `services/webhooks.py:70` |
+| `events.webhook.inbound` | ausente | ausente | — | `services/webhooks.py:123` | — |
+| `events.webhook.verify` | ausente | ausente | — | `services/webhooks.py:70` | — |
 | **links.\*** | | | | | |
 | `links.item` | parcial | completa | **ADO:** ADO no tiene módulo de deep links: solo la URL del work item, compuesta a mano | `services/ado_provider.py:69` | `services/gitlab_deep_links.py:38` |
 | `links.mr` | ausente | completa | — | — | `services/gitlab_deep_links.py:47` |

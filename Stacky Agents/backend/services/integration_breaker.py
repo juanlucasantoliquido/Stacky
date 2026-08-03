@@ -29,6 +29,10 @@ REASON_JIRA_NOT_CONFIGURED= "jira_not_configured"
 REASON_LOCAL_LLM_DOWN     = "local_llm_unavailable"
 REASON_ADO_IDENTITY_UNRESOLVED = "ado_identity_unresolved"
 REASON_UNKNOWN            = "unknown"
+# Plan 295 F7 — GitLab tiene su propio breaker ("gitlab_sync"). Hasta ahora un
+# GitLab con PAT vencido se golpeaba en cada sync, cada 45 s, indefinidamente.
+REASON_GITLAB_TOKEN_INVALID   = "gitlab_token_invalid"
+REASON_GITLAB_PROJECT_MISSING = "gitlab_project_not_found"
 
 def _now() -> float: return time.time()
 def _iso(ts: float) -> str:
@@ -150,3 +154,32 @@ def classify_ado_error(exc) -> tuple[str, str]:
     if getattr(exc, "status_code", None) in (401, 403):
         return REASON_PAT_EXPIRED, "ADO rechazó el PAT (401/403). Renovalo en la Caja Fuerte."
     return REASON_UNKNOWN, str(exc)[:200]
+
+
+def classify_gitlab_error(kind: str, mensaje: str) -> tuple[str, str] | None:
+    """Plan 295 F7 — traduce un `kind` de TrackerApiError a (reason, message), o
+    None si ese kind NO debe abrir el breaker.
+
+    SOLO abren el breaker los fallos TERMINALES DE CONFIGURACIÓN: los que no se
+    arreglan reintentando. `rate_limited`, `server`, `network` y `tls` son
+    TRANSITORIOS o de entorno: abrir por ellos dejaría a GitLab apagado hasta 6 h
+    por un blip de red, que es peor que el problema. El hermano ADO usa el mismo
+    criterio (classify_ado_error, arriba: solo PAT y proyecto inexistente).
+
+    Recibe el `kind` (un str), NO la excepción: este módulo vive en `services/` y
+    NO puede importar de `api/` ni conocer los tipos del adaptador. Con un str
+    queda PURO y testeable sin construir excepciones. El hermano `classify_ado_error`
+    sí recibe `exc` y clasifica por substrings del mensaje: es más frágil y NO se
+    replica acá.
+    """
+    if kind == "auth":
+        return REASON_GITLAB_TOKEN_INVALID, (
+            "El token de GitLab no sirve: venció, fue revocado o está mal copiado. "
+            "Renovalo en la configuración del proyecto."
+        )
+    if kind == "not_found":
+        return REASON_GITLAB_PROJECT_MISSING, (
+            "El proyecto de GitLab configurado no existe o el token no tiene acceso. "
+            "Revisá el campo 'Proyecto' (grupo/proyecto) del proyecto."
+        )
+    return None

@@ -1,6 +1,6 @@
 # Plan 295 — La integración con GitLab deja de mentir sobre sí misma
 
-**Versión: v1 -> v2.** **Estado:** **v2 — CRITICADO Y CORREGIDO (sin implementar).** 2026-08-02, rama `docs/plan-279`.
+**Versión: v1 -> v2.** **Estado:** **v2 — IMPLEMENTADO (F0..F12 + F2a), sin push.** 2026-08-02, rama `docs/plan-279`.
 **Autor:** StackyArchitectaUltraEficientCode. **Serie:** continúa 286 · 289 · 290 · 291 · 292.
 **Juez v2: subagente independiente, misma corrida, contexto limpio.**
 
@@ -64,20 +64,20 @@ Una entrada por hallazgo resuelto. **Nada se resolvió borrando un criterio, un 
 
 | Fase | Estado | Commit | Evidencia (conteo + mitad de contraste ejecutada) |
 |---|---|---|---|
-| **F0** — línea base medida | PENDIENTE | (sin commit propio) | B1..B6 + baseline MEDIDO de 11 archivos + `tsc --noEmit` |
-| **F1** — dead code `gitlabProfileModel` | PENDIENTE | | |
-| **F2** — la matriz deja de mentir | PENDIENTE | | |
-| **F2a** — el guardián del 218 admite evidencia por SÍMBOLO | PENDIENTE | | |
-| **F3** — gate de las transversales | PENDIENTE | | |
-| **F4** — ratchet de evidencias | PENDIENTE | | |
-| **F5** — la sonda habla el TLS del proyecto | PENDIENTE | | |
-| **F6** — `except TrackerApiError` ⇒ 502 | PENDIENTE | | |
-| **F7** — breaker `gitlab_sync` | PENDIENTE | | |
-| **F8** — el breaker se consulta tras rutear | PENDIENTE | | |
-| **F9** — webhooks por proyecto+tracker | PENDIENTE | | |
-| **F10** — el intervalo es del operador | PENDIENTE | | |
-| **F11** — rótulos ruteados (2 pantallas) | PENDIENTE | | |
-| **F12** — paridad, docs y no-regresión | PENDIENTE | | |
+| **F0** — línea base medida | **IMPLEMENTADA** | (sin commit propio) | B1 71/17 · B2 **104** · B3 **501** (el plan decía 495) · B4 sh **852** / ps1 **788**, brecha **64** · B5 `gitlab_sync` **0** · B6 **1** · B7 allowlist **194** (tope 197) · `tsc --noEmit` **0 errores**. **Dos baselines del plan estaban desactualizados**: `test_harness_ratchet_meta.py` falla por `test_plan294_trigger_vars.py` (NO `test_plan293_commit.py`, que la sesión paralela ya registró) y `test_plan276_gitlab_sync.py` medía **4F/17P** |
+| **F1** — dead code `gitlabProfileModel` | **IMPLEMENTADA** | | ROJO: casos 1 y 2 `expected true to be false`, caso 3 verde. VERDE: **3 passed**. K8 `grep` = **0** |
+| **F2a** — el guardián del 218 admite evidencia por SÍMBOLO | **IMPLEMENTADA** | | ROJO: `AssertionError: gitlab/tracker.sync.full: evidencia inválida 'services/gitlab_sync.py:sync_gitlab_tickets'`. VERDE: caso 5 pasa; el 218 va de `2 failed, 8 passed` a `1 failed, 9 passed`. **2ª mitad ejecutada y revertida**: con el regex nuevo, `services/gitlab_provider.py` (sin ancla) **sigue fallando** |
+| **F2** — la matriz deja de mentir | **IMPLEMENTADA** | | ROJO: `assert 'absent' == 'full'`, `assert 'partial' == 'full'`, evidencia sin ancla, `supports() is False`. VERDE: **7 passed**; el 218 de `2 failed, 8 passed` a **10 passed** (mejora declarada +2) |
+| **F3** — gate de las transversales | **IMPLEMENTADA** | | ROJO: `ImportError: cannot import name '_CAPABILITY_TO_SYMBOL'`. VERDE: **10 passed**, K1 = **24 de 71**. **Las DOS mitades de contraste ejecutadas y revertidas**: (a) `absent` con símbolo vivo ⇒ rojo; (b) creando `api/tracker_webhooks.py` ⇒ `events.webhook.inbound declarado ABSENT pero ... YA EXISTE` |
+| **F4** — ratchet de evidencias | **IMPLEMENTADA** | | ROJO: `103 evidencias ancladas por LÍNEA (tope 95)` — **103, no 102**: confirma la aritmética corregida de C13. VERDE: **4 passed**, K2 = **95** (104 → 95) |
+| **F5** — la sonda habla el TLS del proyecto | **IMPLEMENTADA** | | ROJO: `TypeError: run_gitlab_checks() got an unexpected keyword argument 'ca_bundle'` + guard de red disparándose (prueba de que hoy no pasa por `Session`). VERDE: **14 passed** backend (8 casos + el 7 parametrizado ×6) y **3 passed** frontend. 259 api **27 passed**, 259 data **14 passed** |
+| **F6** — `except TrackerApiError` ⇒ 502 | **IMPLEMENTADA** | | ROJO: `assert 500 == 502`, `assert 'unexpected' == 'gitlab_api'`, `KeyError: 'kind'`. VERDE: **11 passed**. Caso 9 (no-regresión ADO) pasa antes y después |
+| **F7** — breaker `gitlab_sync` | **IMPLEMENTADA** | | ROJO: `AttributeError: ... has no attribute 'classify_gitlab_error'` y `get_state("gitlab_sync").open == False`. VERDE: casos 1-9. **Mitad extra ejecutada y revertida**: con `record_failure("ado_sync")` el caso 6 falla con `assert True is False` |
+| **F8** — el breaker se consulta tras rutear | **IMPLEMENTADA** | | ROJO: caso 11 `'ado_degraded' != 'ado_degraded'` (un proyecto GitLab recibiendo el error de ADO), casos 13-14 `KeyError`. VERDE: **14 passed**, K4 = **6**. Caso 12 (no-regresión ADO) pasa antes y después |
+| **F9** — webhooks por proyecto+tracker | **IMPLEMENTADA** | | ROJO: `assert 'ProyA' == 'ProyB'` (el webhook macheó el proyecto EQUIVOCADO), `'azure_devops' == 'gitlab'`, `'RSPacifico' == 'grupo/proy-b'`, `1 == 0` (ticket fantasma). VERDE: **12 passed**, K6 = **0**. Caso 11 (fila ADO histórica) pasa antes y después |
+| **F10** — el intervalo es del operador | **IMPLEMENTADA** | | ROJO: `no está en FLAG_REGISTRY (505 specs)`, `assert 45000 == 180000`, **`assert 999 == 180000`** (el endpoint leía el ENTORNO). VERDE: **8 passed** backend, **4 passed** frontend. **F10.5.bis ejecutada**: borrando `_FROZEN_BOUNDS` el caso 8 da `G5 ... = None` y `test_harness_flags_bounds.py` sigue diciendo **`1 failed, 17 passed`** — el guardián viejo NO discrimina, el nuevo sí |
+| **F11** — rótulos ruteados (2 pantallas) | **IMPLEMENTADA** | | ROJO: los 6 casos (`nombreDeNivel is not a function` + los dos censos). VERDE: **6 passed**, K9 = **0** y **0**. **Hallazgo**: había un CUARTO rótulo no enumerado por el plan (`EpicChildrenPanel.tsx:90`, el `confirm`), ruteado con el mismo helper |
+| **F12** — paridad, docs y no-regresión | **IMPLEMENTADA** | | **12 passed**. Mitad de contraste ejecutada y revertida (inyectando `codex` ⇒ `pasó de 0 a 1 menciones`). Los **9** archivos registrados en los DOS ratchets: brecha `solo_en_sh` = **64** (el máximo), `test_plan259_ratchet_script_parity.py` **12 passed**. `docs/sistema/09-integraciones.md` con las 3 secciones. Los 9 KPI medidos |
 
 ---
 

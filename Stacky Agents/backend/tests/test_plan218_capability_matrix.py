@@ -28,7 +28,17 @@ from services.provider_capabilities import (  # noqa: E402
 )
 
 _DOC = _BACKEND.parent / "docs" / "_roadmap" / "PARIDAD_ADO_GITLAB.md"
-_EVIDENCE_RE = re.compile(r"^[\w/\.]+\.py:\d+$")
+# Plan 295 F2a — el guardián exige evidencia CON ANCLA, no evidencia con NÚMERO.
+# ANTES: r"^[\w/\.]+\.py:\d+$" -- sólo archivo.py:LÍNEA. Eso contradecía al ratchet
+# del plan 295 F4 (los anclajes por línea caducan con el primer commit ajeno) y ya
+# estaba ROJO porque el plan 292 ancló tracker.sync.full por SÍMBOLO.
+# AHORA: archivo.py:LÍNEA  o  archivo.py:SIMBOLO_PYTHON_VALIDO.
+# LO QUE SIGUE RECHAZANDO, sin ceder nada:
+#   ""                              -> evidencia vacía
+#   "services/x.py"                 -> archivo sin ancla
+#   "services/x.py:"                -> ancla vacía
+#   "services/x.py:no es simbolo"   -> ancla que no es un identificador
+_EVIDENCE_RE = re.compile(r"^[\w/\.]+\.py:(?:\d+|[A-Za-z_][A-Za-z0-9_]*)$")
 
 # SHA-256 de "\n".join(CAPABILITY_KEYS) CONGELADO por el Plan 218 §3.1.
 # Agregar claves es aditivo y actualiza este hash a propósito; RENOMBRAR una clave
@@ -63,7 +73,8 @@ def test_full_y_partial_exigen_evidencia():
             if entry["status"] in ("full", "partial"):
                 assert _EVIDENCE_RE.match(entry.get("evidence", "")), (
                     f"{provider}/{key}: evidencia inválida {entry.get('evidence')!r} "
-                    "(se espera 'ruta/archivo.py:linea')"
+                    "(se espera 'ruta/archivo.py:linea' o 'ruta/archivo.py:nombre_de_simbolo'; "
+                    "el plan 295 F4 lleva un ratchet que empuja las de LÍNEA a SÍMBOLO)"
                 )
 
 

@@ -1,7 +1,14 @@
-"""Plan 259 F4 — Endpoints de la guia + los 5 chequeos en vivo.
+"""Plan 259 F4 — Endpoints de la guia + los 6 chequeos en vivo.
 
 CERO RED REAL: se monkeypatchea el simbolo `requests` DENTRO de
 services.gitlab_setup_check (guard de red del plan 154).
+
+Plan 295 F5 — eran CINCO chequeos y ahora son SEIS: se agrego `chk-tls`, que
+distingue "el certificado no cerro" de "no se pudo llegar a esa direccion". El
+doble de `requests` tuvo que crecer en consecuencia (ver FakeRequests): el modulo
+bajo prueba ahora usa `requests.Session()` para poder montar el adaptador OpenSSL
+del plan 276 en el prefijo del host, y `requests.exceptions.SSLError` para
+distinguir el fallo de certificado del fallo de red.
 """
 from __future__ import annotations
 
@@ -10,7 +17,9 @@ import json
 import pytest
 
 _TOKEN = "glpat-" + "SECRETO0DEPRUEBA"
-_CHECK_IDS = ["chk-flag", "chk-instancia", "chk-token", "chk-scope", "chk-proyecto"]
+_CHECK_IDS = [
+    "chk-flag", "chk-tls", "chk-instancia", "chk-token", "chk-scope", "chk-proyecto",
+]
 
 
 class FakeResponse:
@@ -32,6 +41,18 @@ class FakeRequests:
     """
 
     RequestException = Exception
+
+    class exceptions:  # noqa: N801 -- imita el namespace real `requests.exceptions`
+        """Plan 295 F5 — el modulo bajo prueba distingue `SSLError` (el certificado
+        no cerro) del resto de `RequestException` (no se pudo llegar). Sin este
+        namespace en el doble, el `except requests.exceptions.SSLError` muere con
+        AttributeError y `chk-tls` no puede dar su veredicto."""
+
+        class SSLError(Exception):
+            pass
+
+        RequestException = Exception
+
     calls: list[dict] = []
     routes: dict = {}
     raise_on: set = set()
@@ -52,6 +73,22 @@ class FakeRequests:
             if frag in url:
                 return resp
         return FakeResponse(404)
+
+    class Session:
+        """Plan 295 F5 — el modulo bajo prueba pasa por una `Session` para poder
+        montar el adaptador OpenSSL SOLO en el prefijo del GitLab del proyecto
+        (truststore reemplaza ssl.SSLContext en TODO el proceso, app.py:26, asi
+        que un `verify=<bundle>` a secas no alcanza). El doble redirige a la misma
+        `FakeRequests.get` de siempre: cero red, mismos escenarios."""
+
+        def __init__(self):
+            self.montados: list[tuple] = []
+
+        def mount(self, prefijo, adaptador):
+            self.montados.append((prefijo, adaptador))
+
+        def get(self, url, **kw):
+            return FakeRequests.get(url, **kw)
 
 
 def test_el_doble_expone_requestexception():
@@ -150,8 +187,13 @@ def test_verify_todo_ok(client):
 
 
 @pytest.mark.parametrize("escenario", ["sin_url", "url_caida", "sin_token", "proyecto_404"])
-def test_verify_devuelve_siempre_5_chequeos(client, escenario):
-    """INVARIANTE que la UI necesita para pintar la lista."""
+def test_verify_devuelve_siempre_6_chequeos(client, escenario):
+    """INVARIANTE que la UI necesita para pintar la lista.
+
+    Plan 295 F5 — eran 5 y ahora son 6 (`chk-tls`). El invariante NO se relaja:
+    se sigue exigiendo la MISMA cantidad y la MISMA lista de ids en TODOS los
+    caminos de salida; sólo cambió el número, que es el contrato que F5 mueve a
+    proposito."""
     if escenario == "sin_url":
         FakeRequests.reset(_todo_ok())
         resp = _verify(client, gitlab_url="")
@@ -168,7 +210,7 @@ def test_verify_devuelve_siempre_5_chequeos(client, escenario):
         resp = _verify(client)
 
     checks = resp.get_json()["checks"]
-    assert len(checks) == 5, f"{escenario}: {checks}"
+    assert len(checks) == 6, f"{escenario}: {checks}"
     assert [c["id"] for c in checks] == _CHECK_IDS
 
 
@@ -190,8 +232,13 @@ def test_verify_redirect_no_reenvia_token(client):
     resp = _verify(client)
 
     assert _by_id(resp)["chk-instancia"]["status"] == "fail"
-    assert len(FakeRequests.calls) == 1, FakeRequests.calls
-    assert "PRIVATE-TOKEN" not in FakeRequests.calls[0]["headers"]
+    # Plan 295 F5 — ahora son DOS llamadas a /version, no una: `chk-tls` sondea el
+    # handshake ANTES de que exista un status HTTP, y recién después corre
+    # chk-instancia. El invariante anti-fuga se ENDURECE en vez de relajarse: se
+    # exige que NINGUNA de las llamadas lleve el header, no sólo la primera.
+    assert len(FakeRequests.calls) == 2, FakeRequests.calls
+    for llamada in FakeRequests.calls:
+        assert "PRIVATE-TOKEN" not in llamada["headers"], llamada
 
 
 def test_verify_token_401(client):

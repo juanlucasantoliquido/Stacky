@@ -968,6 +968,8 @@ export default function EditProjectModal({ project, onClose, onSaved, onDelete }
         gitlab_project: String(form.gitlab_project ?? ""),
         gitlab_token: String(form.gitlab_token ?? ""),
         gitlab_enable_engine: false,
+        // Plan 295 F5 — cuarta pata del conducto del ca_bundle.
+        gitlab_ca_bundle: String(form.gitlab_ca_bundle ?? ""),
       }}
       canRunVerify={flags259.setupGuideVerify}
     />

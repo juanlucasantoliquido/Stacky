@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
 import { Tickets } from "../api/endpoints";
 import { useConfirm } from "./ui";
 import { useWorkbench } from "../store/workbench";
-import { nombreDeTracker } from "../lib/trackerLabels";
+import { nombreDeTracker, nombreDeNivel } from "../lib/trackerLabels";
 
 interface ChildNode {
   work_item_type: string;
@@ -87,7 +87,7 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
   const handleCreate = async () => {
     if (!(await askConfirm({
       title: `Crear hijos en ${nombreDeTracker(trackerType)}`,
-      message: `¿Crear ${preview.total_children} hijos en ${nombreDeTracker(trackerType)} (${preview.features.length} Feature(s) + Tasks)?\nEsta acción es idempotente: reintentar no duplica.`,
+      message: `¿Crear ${preview.total_children} hijos en ${nombreDeTracker(trackerType)} (${preview.features.length} ${nombreDeNivel(trackerType, "intermedio")}(s) + ${nombreDeNivel(trackerType, "hoja")}s)?\nEsta acción es idempotente: reintentar no duplica.`,
       confirmLabel: "Crear",
     }))) return;
 
@@ -122,16 +122,17 @@ export default function EpicChildrenPanel({ output, epicAdoId, projectName }: Pr
         Descomposición vertical — {preview.total_children} hijos propuestos
       </div>
       <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>
-        {preview.features.length} Feature(s) derivada(s) de los bloques RF de la épica:
+        {/* Plan 295 F11 — el rotulo sigue al tracker del proyecto activo. */}
+        {preview.features.length} {nombreDeNivel(trackerType, "intermedio")}(s) derivada(s) de los bloques RF de la épica:
       </div>
       <ul style={{ margin: 0, paddingLeft: 16, fontSize: 12 }}>
         {preview.features.map((feat, fi) => (
           <li key={fi} style={{ marginBottom: 4 }}>
-            <strong>[Feature]</strong> {feat.title}
+            <strong>[{nombreDeNivel(trackerType, "intermedio")}]</strong> {feat.title}
             {feat.children.length > 0 && (
               <ul style={{ paddingLeft: 16, marginTop: 2 }}>
                 {feat.children.map((task, ti) => (
-                  <li key={ti}><strong>[Task]</strong> {task.title}</li>
+                  <li key={ti}><strong>[{nombreDeNivel(trackerType, "hoja")}]</strong> {task.title}</li>
                 ))}
               </ul>
             )}

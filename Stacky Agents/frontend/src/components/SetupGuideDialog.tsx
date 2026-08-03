@@ -22,6 +22,9 @@ interface Props {
     gitlab_project: string;
     gitlab_token: string;
     gitlab_enable_engine: boolean;
+    /** Plan 295 F5 — ruta del certificado de la empresa. Se LEE de values y se
+     *  manda; este dialogo NO lo guarda en su estado, igual que el token. */
+    gitlab_ca_bundle: string;
   };
   /** STACKY_SETUP_GUIDE_VERIFY_ENABLED: si está apagada, se oculta el bloque. */
   canRunVerify: boolean;
@@ -96,6 +99,9 @@ export default function SetupGuideDialog({
         // estado de este diálogo.
         gitlab_token: values.gitlab_token,
         gitlab_enable_engine: values.gitlab_enable_engine,
+        // Plan 295 F5 — sin esta linea el backend nunca recibe el certificado y
+        // chk-tls evalua un TLS distinto del que usa el sync del proyecto.
+        gitlab_ca_bundle: values.gitlab_ca_bundle,
       });
       if (res.ok && res.data?.checks) {
         setChecks(res.data.checks);

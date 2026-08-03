@@ -37,7 +37,11 @@ from services.project_context import (
     tracker_efectivo_de_ticket,  # Plan 286 F4 — columna explícita > proyecto > default
     tracker_is_azure_devops,  # F2 — el gate del provider es tracker-aware
 )
-from services.tracker_provider import get_tracker_provider, TrackerConfigError  # Plan 70 F2
+from services.tracker_provider import (  # Plan 70 F2
+    get_tracker_provider,
+    TrackerConfigError,
+    TrackerApiError,  # Plan 295 F6 — NO es hermana de AdoApiError (rama propia)
+)
 from services.provider_capabilities import capability_status, capability_loss, supports  # Plan 287
 from services.ci_provider import get_ci_provider, ItemRef, ItemPipelineResult  # Plan 71 F5
 from services.client_profile import load_effective_client_profile  # Plan 79
@@ -356,6 +360,118 @@ def _ado_sync_error_response(
         "auth_path": auth_path,
         "auth_exists": auth_exists,
         "ado_status_code": status_code,
+    }), 502
+
+
+# ── Plan 295 F6/F7/F8 — el par simétrico de _ado_sync_error_response, para GitLab ──
+
+def _flag_i2() -> bool:
+    """La perilla única de las TRES fases de I2 (F6 error routing, F7 breaker, F8
+    consulta tras rutear). Van juntas porque revertir una sin las otras deja un
+    estado sin sentido: un breaker que se alimenta y nadie consulta.
+
+    `config` en tickets.py es el MÓDULO (`import config`, :39) => `config.config`.
+    Leerlo por `config` pelado es un error real que ya pasó en este archivo (:315).
+    """
+    return bool(getattr(config.config, "STACKY_GITLAB_SYNC_ERRORS_ROUTED_ENABLED", True))
+
+
+# Plan 295 F6 — copy ACCIONABLE por kind. Cada mensaje nombra (a) el sistema
+# GitLab, y (b) QUÉ tiene que hacer el operador. Ninguno dice "unexpected".
+_COPY_GITLAB_POR_KIND: dict[str, str] = {
+    "auth": (
+        "GitLab rechazó las credenciales del proyecto (401/403). El token venció, "
+        "fue revocado o está mal copiado: renovalo en la configuración del proyecto."
+    ),
+    "not_found": (
+        "GitLab respondió 'no existe' (404). Revisá el campo 'Proyecto' del proyecto "
+        "(tiene que ser grupo/proyecto) y que la dirección del servidor NO incluya el "
+        "namespace pegado."
+    ),
+    "rate_limited": (
+        "GitLab está limitando los pedidos (429) y los reintentos automáticos se "
+        "agotaron. Esperá hasta 30 segundos y volvé a sincronizar."
+    ),
+    "server": (
+        "El servidor de GitLab devolvió un error propio (5xx). No es un problema de "
+        "Stacky ni de tus credenciales: reintentá en unos minutos."
+    ),
+    "tls": (
+        "El certificado del GitLab no cerró la cadena de confianza. Pegá el "
+        "certificado de la empresa en el campo 'Certificado de la empresa' del "
+        "proyecto y verificá la configuración desde la guía."
+    ),
+    "network": (
+        "No se pudo llegar al servidor de GitLab. Revisá la dirección del servidor y "
+        "la conexión de red o la VPN."
+    ),
+    # Plan 295 F6 [v2, C12] — SÉPTIMA entrada, y NO es un caso hipotético.
+    # _kind_for_status (gitlab_client.py:103-123) devuelve "unknown" para TODO status
+    # que no sea 401/403/404/429/>=500 -- o sea 400, 409 y 422, que en GitLab son los
+    # errores de VALIDACIÓN más comunes. Y TrackerApiError.__init__ tiene
+    # `kind: str = "unknown"` por default. Sin esta entrada, el caso más frecuente
+    # después de auth caía en el fallback genérico, que es el copy MENOS accionable.
+    "unknown": (
+        "GitLab rechazó el pedido y no dijo por qué de forma estándar (suele ser un "
+        "400, 409 o 422: un dato del pedido que GitLab no acepta). El detalle técnico "
+        "está en 'detail'. Si se repite, revisá la configuración del proyecto en "
+        "Stacky contra el proyecto real de GitLab."
+    ),
+}
+# Sólo para un kind que NO esté en el mapa: un kind nuevo que agregue un plan futuro.
+# Los siete que el cliente produce HOY están todos arriba.
+_COPY_GITLAB_FALLBACK = (
+    "GitLab devolvió un error que Stacky no pudo clasificar. El detalle técnico va "
+    "en el campo 'detail'."
+)
+
+
+def _gitlab_sync_error_response(exc, *, route_label: str, project_name: str | None):
+    """Plan 295 F6 — el par simétrico de _ado_sync_error_response, para GitLab.
+
+    POR QUÉ EXISTE: TrackerApiError NO es hermana de AdoApiError (rama separada
+    desde TrackerError(RuntimeError), tracker_provider.py:46,52), así que la lista
+    de `except` de estos endpoints se VEÍA completa y no lo estaba: un PAT vencido
+    caía en `except Exception` y salía como 500 "unexpected".
+
+    502, no 500: el fallo es de un sistema AGUAS ARRIBA, no de Stacky. Mismo código
+    que el camino ADO (:328, :359).
+    """
+    kind = str(getattr(exc, "kind", "") or "unknown")
+    # OJO: TrackerApiError usa `.status`, NO `.status_code` (que es de AdoApiError).
+    status_upstream = getattr(exc, "status", None)
+    mensaje = _COPY_GITLAB_POR_KIND.get(kind, _COPY_GITLAB_FALLBACK)
+
+    ctx = resolve_project_context(project_name=project_name)
+    nombre = (ctx.stacky_project_name if ctx else project_name) or "<sin proyecto>"
+
+    # El log NO incluye el token ni el cuerpo de la respuesta: solo la clasificación.
+    logger.warning(
+        "GitLab %s — api fallo (project=%s kind=%s status=%s): %s",
+        route_label, nombre, kind, status_upstream, str(exc)[:200],
+    )
+
+    # Plan 295 F7 — alimentar el breaker "gitlab_sync". Key propia (NUNCA
+    # ado_breaker_project: mezclaría dos proveedores, ver app.py:204-208). En GitLab
+    # la unidad de fallo es el proyecto de STACKY, porque el token, la URL y el
+    # ca_bundle son por proyecto. Solo los kind TERMINALES abren:
+    # classify_gitlab_error devuelve None para el resto.
+    if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True) and _flag_i2():
+        from services import integration_breaker as _brk
+        clasificado = _brk.classify_gitlab_error(kind, str(exc))
+        if clasificado is not None:
+            reason, message = clasificado
+            _brk.record_failure("gitlab_sync", nombre, reason, message)
+
+    return jsonify({
+        "ok": False,
+        "error": "gitlab_api",          # machine-readable, distinto de "ado_api"
+        "kind": kind,                   # auth|not_found|rate_limited|server|tls|network|unknown
+        "message": mensaje,             # copy accionable que NOMBRA GitLab
+        "detail": str(exc)[:300],       # técnico, para el que sabe leerlo
+        "gitlab_status_code": status_upstream,
+        "project_name": nombre,
+        "tracker_type": "gitlab",
     }), 502
 
 
@@ -1246,6 +1362,15 @@ def sync_from_ado():
         return jsonify({"ok": False, "error": "config", "message": str(e)}), 400
     except AdoApiError as e:
         return _ado_sync_error_response(e, route_label="sync", project_name=project_name)
+    except TrackerApiError as e:
+        # Plan 295 F6 — ídem sync-v2. Este endpoint lo dispara el operador A MANO
+        # desde el selector de tickets, así que es EL camino donde un 500
+        # "unexpected" es más visible y más confuso.
+        # Con la flag OFF el `except` NO se borra: se hace TRANSPARENTE (re-lanza y
+        # vuelve a caer en `except Exception` => 500, byte-idéntico a antes de F6).
+        if not _flag_i2():
+            raise
+        return _gitlab_sync_error_response(e, route_label="sync", project_name=project_name)
     except Exception as e:
         logger.exception("ADO sync — fallo inesperado")
         return jsonify({"ok": False, "error": "unexpected", "message": str(e)}), 500
@@ -6625,23 +6750,50 @@ def sync_from_ado_v2():
     triggered_by = request.headers.get("X-Stacky-Trigger", "manual")
     project_name = _request_project_name()
 
+    ctx = resolve_project_context(project_name=project_name)
+
+    # ── Plan 295 F8 — el breaker se consulta DESPUÉS de saber qué tracker es ──
     # Plan 148 F3.1 (aditivo) — backoff honesto: si el breaker ADO ya esta
     # abierto (PAT vencido/proyecto inexistente), no golpear la red de nuevo;
     # el board ya tolera !ok con syncError y puede respetar retry_after.
     # [C1] `config` en tickets.py es el MODULO -> leer por `config.config`.
+    #
+    # ANTES este bloque vivía ARRIBA de resolve_project_context, así que un proyecto
+    # GitLab podía recibir {"error":"ado_degraded"} por el breaker de Azure DevOps de
+    # OTRO proyecto. Es el mismo defecto que el plan 281 F4 arregló en el arranque
+    # (app.py:204-209 lo dice textual) y dejó vivo acá, en su propia lista de diferidos.
+    #
+    # El camino ADO queda BYTE-IDÉNTICO: mismo `if` de la flag maestra, misma key
+    # (ado_breaker_project), mismo cuerpo de respuesta, mismo 200. Lo único que cambia
+    # es CUÁNDO se evalúa y que ahora hay un `elif` para GitLab.
+    # Costo del reordenamiento: resolve_project_context pasa a correr siempre. No
+    # tiene efectos de red ni de BD (resolución de config en memoria, memo por mtime).
     if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True):
         from services import integration_breaker as _brk
-        _bkey_v2 = _brk.ado_breaker_project(project_name)  # [C3] misma key que _startup_sync/ado-user
-        if _brk.should_skip("ado_sync", _bkey_v2):
-            st = _brk.get_state("ado_sync", _bkey_v2)
-            return jsonify({
-                "ok": False, "error": "ado_degraded", "degraded": True,
-                "reason": st.reason, "message": st.message,
-                "retry_after": st.retry_after,
-                "seconds_until_retry": st.seconds_until_retry,
-            }), 200  # 200 "degradado", no red
+        _tipo_v2 = (getattr(ctx, "tracker_type", None) or "azure_devops").strip().lower()
+        if _tipo_v2 == "azure_devops":
+            _bkey_v2 = _brk.ado_breaker_project(project_name)  # [C3] misma key que _startup_sync/ado-user
+            if _brk.should_skip("ado_sync", _bkey_v2):
+                st = _brk.get_state("ado_sync", _bkey_v2)
+                return jsonify({
+                    "ok": False, "error": "ado_degraded", "degraded": True,
+                    "reason": st.reason, "message": st.message,
+                    "retry_after": st.retry_after,
+                    "seconds_until_retry": st.seconds_until_retry,
+                }), 200  # 200 "degradado", no red
+        elif _tipo_v2 == "gitlab" and _flag_i2():
+            # Plan 295 F8 — el gemelo. Misma forma, error DISTINTO: el frontend puede
+            # distinguir qué integración está degradada sin adivinar por el mensaje.
+            _bkey_gl = (getattr(ctx, "stacky_project_name", None) or project_name)
+            if _brk.should_skip("gitlab_sync", _bkey_gl):
+                st = _brk.get_state("gitlab_sync", _bkey_gl)
+                return jsonify({
+                    "ok": False, "error": "gitlab_degraded", "degraded": True,
+                    "reason": st.reason, "message": st.message,
+                    "retry_after": st.retry_after,
+                    "seconds_until_retry": st.seconds_until_retry,
+                }), 200
 
-    ctx = resolve_project_context(project_name=project_name)
     sync_scope = ctx.stacky_project_name if ctx else "__global__"
     last_sync_ts = _last_sync_ts_by_project.get(sync_scope, 0.0)
 
@@ -6683,6 +6835,16 @@ def sync_from_ado_v2():
     except AdoApiError as e:
         _sync_in_progress_by_project.discard(sync_scope)
         return _ado_sync_error_response(e, route_label="sync-v2", project_name=project_name)
+    except TrackerApiError as e:
+        # Plan 295 F6 — el hueco: esta excepción NO es hermana de AdoApiError y caía
+        # en el `except Exception` de abajo => 500 "unexpected".
+        # El `discard` es redundante con el `finally` de más abajo; se pone igual por
+        # simetría con los hermanos (un lector que ve 4 `except` con discard y 1 sin
+        # él va a asumir que es un bug).
+        _sync_in_progress_by_project.discard(sync_scope)
+        if not _flag_i2():
+            raise
+        return _gitlab_sync_error_response(e, route_label="sync-v2", project_name=project_name)
     except _CapabilityUnavailable:
         # Plan 276 F6 — una carencia DECLARADA no puede caer en el `except
         # Exception` de abajo y salir como 500 "unexpected": eso esconde el hueco
@@ -6705,6 +6867,22 @@ def sync_from_ado_v2():
 
     duration_ms = int((_sync_time.monotonic() - t_start) * 1000)
     idempotent = result.get("created", 0) == 0 and result.get("updated", 0) == 0 and result.get("removed", 0) == 0
+
+    # Plan 295 F7 — el breaker de GitLab se CIERRA al primer éxito. Sin esto queda
+    # abierto para siempre y el operador tiene que reiniciar el backend.
+    # `record_success` es idempotente (si la key no está no hace nada) y sólo
+    # loguea si venía abierta (integration_breaker.py:107-112).
+    # [v2, C9] El bloque va DENTRO del ruteo por tracker: correrlo en todo sync
+    # exitoso reintroduciría en el camino de ÉXITO el acoplamiento cross-proveedor
+    # que F8 elimina del de fallo.
+    if getattr(config.config, "STACKY_INTEGRATION_DEGRADATION_ENABLED", True) and _flag_i2():
+        _tipo_ok = (getattr(ctx, "tracker_type", None) or "azure_devops").strip().lower()
+        if _tipo_ok == "gitlab":
+            from services import integration_breaker as _brk
+            _brk.record_success(
+                "gitlab_sync",
+                (getattr(ctx, "stacky_project_name", None) or project_name),
+            )
 
     from services.stacky_logger import logger as stacky_logger
     stacky_logger.info(
@@ -6775,7 +6953,14 @@ def frontend_config():
     """
     from config import config as _cfg
     return jsonify({
-        "ticket_sync_interval_ms": int(os.environ.get("STACKY_TICKET_SYNC_INTERVAL_MS", 45000)),
+        # Plan 295 F10 — se lee de config.config, NO de os.environ: el panel de flags
+        # escribe en config, y leyendo el entorno la perilla era inmovible desde la UI.
+        # `config` en tickets.py es el MÓDULO (import config, :39) => `config.config`.
+        # Las otras dos claves de este endpoint (sync_min_interval_sec,
+        # stale_threshold_sec) siguen leyendo os.environ: fuera de alcance (§D-5).
+        "ticket_sync_interval_ms": int(
+            getattr(config.config, "STACKY_TICKET_SYNC_INTERVAL_MS", 45000)
+        ),
         "sync_min_interval_sec": int(os.environ.get("STACKY_SYNC_MIN_INTERVAL_SEC", _SYNC_MIN_INTERVAL_SEC)),
         "stale_threshold_sec": int(os.environ.get("STACKY_STALE_THRESHOLD_SEC", 120)),
         # Plan 45 F3 — feature flag de Issues desde brief, expuesto al frontend

@@ -26,6 +26,7 @@ import {
 import { readQueryParam } from "../utils/queryParams";
 import { parseRoute, serializeRoute } from "../services/routes";
 import { type SubTab, isValidSubTab } from "../services/settingsSubTabs";
+import ReposGitPanel from "../components/ReposGitPanel";
 import { Input, Select, Checkbox, Button } from "../components/ui";
 import { isAutoShowEnabled, setAutoShow, safeStorage } from "../services/onboarding";
 import { useOnboardingStore } from "../store/onboardingStore";
@@ -240,6 +241,12 @@ export default function SettingsPage({ subTab }: { subTab?: string | null }) {
         >
           Apariencia
         </button>
+        <button
+          className={`${styles.subTab} ${sub === "repos" ? styles.active : ""}`}
+          onClick={() => setSub("repos")}
+        >
+          Repositorios
+        </button>
       </div>
 
       <div className={styles.content}>
@@ -252,6 +259,7 @@ export default function SettingsPage({ subTab }: { subTab?: string | null }) {
         {sub === "harness" && <HarnessFlagsPanel highlightKey={highlightFlagKey} />}
         {sub === "playground" && <LocalLlmPlaygroundPanel />}
         {sub === "appearance" && <AppearanceSettings />}
+        {sub === "repos" && <ReposGitPanel />}
       </div>
     </div>
   );

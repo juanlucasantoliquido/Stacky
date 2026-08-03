@@ -81,7 +81,7 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
     from config import config as _cfg
     if not getattr(_cfg, "STACKY_INCIDENT_DEV_PR_ENABLED", False):
         return
-    if agent_type != "incident_dev" or final_status != "completed":
+    if agent_type != "incident_dev":
         return
     from services import incident_dev_pr
     intent = incident_dev_pr.get_intent(execution_id)
@@ -89,6 +89,23 @@ def maybe_open_pr_for_incident_dev(*, ticket_id, execution_id, final_status, age
         return
     if intent.get("status") in _TERMINAL_STATUSES:
         return  # idempotente: ya se procesó este execution_id
+
+    if final_status != "completed":
+        # 2026-08-02 — el `return` mudo de acá era el defecto más caro de todos.
+        # Medido en la base del operador: los intents 164..167 (2026-07-26)
+        # quedaron con `open_pr:true` y SIN `status` porque los cuatro runs
+        # terminaron en 'error'. El operador tildó "Abrir PR" cuatro veces y no
+        # recibió una sola señal de que el PR jamás iba a existir; el intent
+        # queda huérfano y cualquier lector lo interpreta como "todavía viene".
+        # No se comenta en la Issue a propósito: el run fallido ya se ve en
+        # Stacky y comentar por cada reintento llenaría el tracker de ruido.
+        incident_dev_pr.mark_intent(
+            execution_id, status="skipped",
+            error=(f"La ejecución terminó en '{final_status}', no en 'completed': "
+                   "no se abrió el PR automático."),
+        )
+        logger.info("auto-PR exec=%s: run en '%s', no se abre PR", execution_id, final_status)
+        return
 
     # C4 — el post-hook recibe la PK LOCAL del Ticket. Para comentar en el tracker
     # hace falta el ado_id; para el proveedor MR, el stacky_project_name. Una vez.

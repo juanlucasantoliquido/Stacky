@@ -26,6 +26,7 @@ import {
 } from "../incidents/incidentQueue";
 import type { AgentRuntime } from "../types";
 import { useModelCatalog } from "../hooks/useModelCatalog";
+import AvisoCatalogoModelos from "./AvisoCatalogoModelos";  // Plan 288 F9
 import { Dialog } from "./ui";
 import { resolveModalInit } from "./incidentModalInit";
 import { AgentConsole } from "./IncidentAgentConsole";
@@ -425,6 +426,8 @@ export default function IncidentResolverModal({ onClose, initialText, initialFil
                     if (effort) setSelectedEffort(effort as EffortLevel);
                   }}
                 />
+                {/* Plan 288 F9 — de dónde salió esta lista y qué se descartó. */}
+                <AvisoCatalogoModelos runtime="claude_code_cli" />
               </div>
             )}
 

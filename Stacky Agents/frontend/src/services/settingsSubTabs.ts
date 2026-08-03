@@ -6,14 +6,14 @@
 
 export type SubTab =
   | "flow" | "sections" | "client-profile" | "transfer" | "webhooks"
-  | "notifications" | "harness" | "playground" | "appearance";
+  | "notifications" | "harness" | "playground" | "appearance" | "repos";
 
 export const SETTINGS_SUB_TABS: readonly SubTab[] = [
   "flow", "sections", "client-profile", "transfer", "webhooks",
-  "notifications", "harness", "playground", "appearance",
+  "notifications", "harness", "playground", "appearance", "repos",
 ];
 
-/** true si x es una de las 9 claves de SubTab (pura, testeable sin jsdom). */
+/** true si x es una de las claves de SubTab (pura, testeable sin jsdom). */
 export function isValidSubTab(x: unknown): x is SubTab {
   return typeof x === "string" && (SETTINGS_SUB_TABS as readonly string[]).includes(x);
 }

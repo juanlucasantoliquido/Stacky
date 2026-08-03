@@ -1276,20 +1276,27 @@ def run_incident_dev():
     # agente, para que el post-hook F4 aísle exactamente lo que ESTE run tocó.
     # Best-effort: nunca bloquea el run. Sin repo git real del proyecto → no hay
     # auto-PR (corta de raíz el fallback cwd al repo de Stacky).
+    # El chequeo de repo git ahora es EXPLÍCITO y comparte fuente con el que la UI
+    # corre antes de ofrecer el tilde (`incident_dev_pr.preflight_repo`), para que
+    # el motivo que ve el operador al tildar sea EL MISMO que decide acá.
     _pr_baseline = None
     _pr_repo_root = None
+    _pr_preflight: dict | None = None
     if open_pr:
         try:
-            from services import incident_dev_pr, project_context
-            _ctx = project_context.resolve_project_context(project_name)
-            _ws = _ctx.workspace_root if _ctx else None
-            _pr_repo_root = incident_dev_pr.resolve_repo_root(_ws)
-            if _pr_repo_root:
+            from services import incident_dev_pr
+            _pr_preflight = incident_dev_pr.preflight_repo(project_name)
+            if _pr_preflight.get("ok"):
+                _pr_repo_root = _pr_preflight.get("repo_root")
                 _pr_baseline = incident_dev_pr.snapshot_worktree(_pr_repo_root)
-        except Exception:  # noqa: BLE001 — el auto-PR es best-effort, nunca 500
+        except Exception as _exc_pf:  # noqa: BLE001 — el auto-PR es best-effort, nunca 500
             logger.info("run_incident_dev: no se pudo snapshotear baseline para auto-PR", exc_info=True)
             _pr_repo_root = None
             _pr_baseline = None
+            _pr_preflight = {
+                "ok": False, "reason": "error_interno",
+                "message": f"No se pudo preparar el auto-PR: {_exc_pf}",
+            }
 
     try:
         execution_id = agent_runner.run_agent(
@@ -1327,6 +1334,8 @@ def run_incident_dev():
     # Plan 177 F3 — registrar el intent del PR keyeado por execution_id (el
     # post-hook F4 lo lee al completar el run). Store en disco, NO en
     # metadata_json (evita clobber con el runner, G9).
+    _auto_pr_info = {"requested": bool(payload.get("open_pr")), "accepted": False,
+                     "reason": None, "message": ""}
     if open_pr and _pr_repo_root and _pr_baseline is not None:
         try:
             from services import incident_dev_pr
@@ -1335,8 +1344,42 @@ def run_incident_dev():
                 "repo_root": _pr_repo_root,
                 "baseline": _pr_baseline,
             })
-        except Exception:  # noqa: BLE001 — best-effort; sin intent, no se abre PR
+            _auto_pr_info["accepted"] = True
+        except Exception as _exc_ri:  # noqa: BLE001 — best-effort; sin intent, no se abre PR
             logger.info("run_incident_dev: no se pudo registrar intent de auto-PR exec=%s", execution_id, exc_info=True)
+            _auto_pr_info["reason"] = "error_interno"
+            _auto_pr_info["message"] = f"No se pudo registrar el pedido de PR: {_exc_ri}"
+    elif _auto_pr_info["requested"]:
+        # El operador TILDÓ y el PR no va a salir. Antes esto era un `if` sin
+        # `else`: no se registraba intent, el post-hook cortaba en
+        # `get_intent() -> None` (incident_dev_autocommit.py:88) y el operador
+        # no recibía NINGÚN aviso.
+        _pf = _pr_preflight or {}
+        _auto_pr_info["reason"] = _pf.get("reason") or (
+            "feature_disabled" if not open_pr else "sin_baseline"
+        )
+        _auto_pr_info["message"] = _pf.get("message") or (
+            "El auto-PR está apagado en la configuración."
+            if not open_pr else
+            "No se pudo tomar la foto previa del working tree; no se abrirá el PR."
+        )
+        # Con la flag apagada NO se escribe intent: el motivo ya viaja en la
+        # respuesta y un archivo por run sería basura en disco de una capacidad
+        # que el operador desactivó. Sólo se persiste el skip cuando la capacidad
+        # está ENCENDIDA y falló el repo, que es el caso que hay que poder mirar
+        # después desde la UI.
+        if open_pr:
+            try:
+                from services import incident_dev_pr
+                incident_dev_pr.record_intent(execution_id, {
+                    "open_pr": False,
+                    "status": "skipped",
+                    "error": _auto_pr_info["message"],
+                    "reason": _auto_pr_info["reason"],
+                })
+            except Exception:  # noqa: BLE001 — best-effort final
+                logger.info("run_incident_dev: no se pudo registrar el skip del auto-PR exec=%s",
+                            execution_id, exc_info=True)
 
     # Plan 200 R1 — el dev-resolutor arranca desde un TICKET, así que la
     # incidencia se resuelve por su tracker_id. Sin incidencia asociada es un
@@ -1363,7 +1406,8 @@ def run_incident_dev():
                      execution_id, _exc255)
         logger.debug("run_incident_dev: traza del link fallido", exc_info=True)
 
-    return jsonify({"execution_id": execution_id, "status": "running"}), 202
+    return jsonify({"execution_id": execution_id, "status": "running",
+                    "auto_pr": _auto_pr_info}), 202
 
 
 @bp.get("/autoprofile/<project>")
@@ -1504,6 +1548,7 @@ def model_catalog_route():
         "cached_at": catalog["loaded_at"],  # C2/C8: real, sin time.time()
         "ttl_sec": TTL_SEC,
         "fallback_used": catalog["fallback_used"],
+        "error": catalog.get("error"),               # Plan 288 — ya estaba en el dict, no viajaba
         "runtimes": runtimes,
     })
 

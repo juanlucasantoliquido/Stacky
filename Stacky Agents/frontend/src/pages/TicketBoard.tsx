@@ -7,8 +7,13 @@ import AgentRuntimeSelector from "../components/AgentRuntimeSelector";
 import ModelEffortPicker from "../components/ModelEffortPicker";
 import { useRovingFocus } from "../hooks/useRovingFocus";
 import { useModelCatalog } from "../hooks/useModelCatalog";
+import AvisoCatalogoModelos from "../components/AvisoCatalogoModelos";  // Plan 288 F9
 import { useModelPickerEnabled } from "../hooks/useModelPickerEnabled";
 import { useTicketSync, DEFAULT_INTERVAL_MS as TICKET_SYNC_INTERVAL_MS } from "../hooks/useTicketSync";
+// Plan 295 F10 — el import de DEFAULT_INTERVAL_MS SE CONSERVA: es el fallback si el
+// endpoint de config no responde. Borrarlo convertiria un fallo de ese endpoint en
+// un tablero sin auto-sync.
+import { intervaloDeSync } from "./ticketSyncIntervalo";
 import { SyncStatusBar } from "../components/SyncStatusBar";
 import IntegrationHealthBanner from "../components/IntegrationHealthBanner";
 import TicketGraphView from "../components/TicketGraphView";
@@ -53,7 +58,13 @@ import {
 // filtro "Solo abiertos" no filtraba nada y todos los badges caian al mismo gris.
 import { colorDeEstado, esEstadoCerrado, sugerenciasDeEstadoCerrado } from "../lib/trackerEstados";
 import { canResolveWithAgent } from "../incidents/devResolverModel";
-import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incidentDevPrModel";
+import {
+  DEFAULT_OPEN_PR,
+  describeOpenPrControl,
+  describePrResult,
+  debeSeguirConsultando,
+  PREFLIGHT_CAIDO,
+} from "../incidents/incidentDevPrModel";
 import { detectInconsistencyFromRunning } from "../utils/inconsistencyDetector";
 import { resolveSuggestedAgent } from "../utils/resolveSuggestedAgent";
 import styles from "./TicketBoard.module.css";
@@ -240,6 +251,8 @@ function RunModal({
               }}
             />
           )}
+          {/* Plan 288 F9 — de dónde salió esta lista y qué se descartó. */}
+          <AvisoCatalogoModelos runtime={agentRuntime} />
           {runtimeRequiresVsCodeAgent(agentRuntime) && !resolvedFilename && (
             <p className={styles.modalEmpty}>
               Este runtime necesita un agente VS Code asignado para el ticket seleccionado.
@@ -449,13 +462,47 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
     enabled: Boolean(devResolverEnabled),
     closedStates: sugerenciasDeEstadoCerrado(tt),
   });
-  // Plan 177 — checkbox "Abrir PR" (premarcado); solo visible si dev_pr_enabled.
+  // Plan 177 — checkbox "Abrir PR" (premarcado).
   const [openPr, setOpenPr] = useState(DEFAULT_OPEN_PR);
-  const showOpenPr = shouldShowOpenPrCheckbox({ canResolve: canResolveIncident, devPrEnabled: Boolean(devPrEnabled) });
+
+  // 2026-08-02 — CHEQUEO PREVIO de repositorio git. Corre sólo cuando el ticket
+  // admite el resolutor (no gasta un request por tarjeta del board). Sin esto el
+  // operador tildaba "Abrir PR" a ciegas y, si el proyecto no tenía repo git, no
+  // pasaba absolutamente nada ni había mensaje.
+  const prPreflightQ = useQuery({
+    queryKey: ["dev-pr-preflight", activeProjectName],
+    queryFn: () => Incidents.devPrPreflight(activeProjectName),
+    // Sólo con la tarjeta abierta (ahí viven los botones de lanzamiento). La
+    // queryKey es por PROYECTO, así que N tarjetas abiertas siguen siendo 1 request.
+    enabled: expanded && canResolveIncident && Boolean(devPrEnabled),
+    staleTime: 60_000,
+  });
+  // Si el chequeo mismo se cae (backend abajo), NO se puede quedar en
+  // "Verificando…" para siempre: se degrada a deshabilitado CON motivo.
+  const preflight = prPreflightQ.data ?? (prPreflightQ.isError ? PREFLIGHT_CAIDO : null);
+  const prControl = describeOpenPrControl({
+    canResolve: canResolveIncident,
+    devPrEnabled: Boolean(devPrEnabled),
+    preflight,
+    deseado: openPr,
+  });
+
+  // Resultado del auto-PR del ÚLTIMO run del resolutor sobre este ticket. Va por
+  // TICKET y no por execution_id en memoria: así el resultado sigue ahí después
+  // de recargar la página, que es cuando el operador vuelve a mirarlo.
+  const prResultQ = useQuery({
+    queryKey: ["dev-pr-result", ticket.id],
+    queryFn: () => Incidents.devPrResultByTicket(ticket.id),
+    enabled: expanded && canResolveIncident && Boolean(devPrEnabled),
+    refetchInterval: (q) => (debeSeguirConsultando(q.state.data ?? null) ? 5_000 : false),
+  });
+  const [prLaunchAviso, setPrLaunchAviso] = useState<string | null>(null);
+  const prResultado = describePrResult(prResultQ.data ?? null);
 
   const handleResolveWithAgent = useCallback(async () => {
     setIsResolvingIncident(true);
     setLaunchError(null);
+    setPrLaunchAviso(null);
     try {
       // El resolutor no abre el modal de run, así que no hay elección por
       // corrida que propagar: el backend usa su default/selector adaptativo.
@@ -464,20 +511,30 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
         ticket_id: ticket.id,
         runtime: agentRuntime,
         project: activeProjectName,
-        open_pr: showOpenPr ? openPr : false, // Plan 177 — solo si el checkbox está visible
+        // Sólo se pide el PR si el chequeo previo dio verde Y el operador lo dejó
+        // tildado: `prControl.checked` ya combina ambas cosas.
+        open_pr: prControl.checked,
       });
+      // El backend declara qué pasó con el pedido de PR: si lo rechazó, se dice
+      // ACÁ y no se espera en vano un PR que nunca va a llegar.
+      if (result.auto_pr?.requested && !result.auto_pr.accepted) {
+        setPrLaunchAviso(result.auto_pr.message || "No se pudo pedir el PR automático.");
+      }
       openConsoleIfCliRuntime(agentRuntime, result, (id) => setCodexConsoleExecution(id, false));
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["tickets", activeProjectName] }),
         qc.invalidateQueries({ queryKey: ["tickets-hierarchy", activeProjectName] }),
         qc.invalidateQueries({ queryKey: ["executions"] }),
+        // El run recién lanzado ya tiene su intent: que el bloque de resultado
+        // lo tome sin esperar al próximo tick del polling.
+        qc.invalidateQueries({ queryKey: ["dev-pr-result", ticket.id] }),
       ]);
     } catch (error) {
       setLaunchError(humanizeAgentLaunchError(error));
     } finally {
       setIsResolvingIncident(false);
     }
-  }, [activeProjectName, agentRuntime, qc, setCodexConsoleExecution, ticket.id, openPr, showOpenPr]);
+  }, [activeProjectName, agentRuntime, qc, setCodexConsoleExecution, ticket.id, prControl.checked]);
 
   return (
     <>
@@ -681,23 +738,58 @@ function TicketCard({ ticket, runningExecution, vsCodeAgents, memoryBadge, flowC
                   {isResolvingIncident ? "⏳ Lanzando…" : "🔧 Resolver con agente"}
                 </button>
               )}
-              {/* Plan 177 — checkbox "Abrir PR" (premarcado), solo si dev_pr_enabled. */}
-              {showOpenPr && (
+              {/* Plan 177 + 2026-08-02 — tilde "Abrir PR". Cuando el PR no puede
+                  salir el control NO desaparece: queda deshabilitado con el
+                  motivo a la vista (degradación visible). */}
+              {prControl.visible && (
                 <label
                   className={styles.openPrCheckbox}
                   onClick={(e) => e.stopPropagation()}
-                  title="Al terminar, abrir un Pull Request con el fix y los tests"
+                  title={prControl.motivo || "Al terminar, abrir un Pull Request con el fix y los tests"}
                 >
                   <input
                     type="checkbox"
-                    checked={openPr}
+                    checked={prControl.checked}
                     onChange={(e) => setOpenPr(e.target.checked)}
-                    disabled={isResolvingIncident}
+                    disabled={isResolvingIncident || prControl.disabled}
                   />
-                  Abrir PR
+                  {prControl.etiqueta}
                 </label>
               )}
             </div>
+
+            {/* Motivo por el que el tilde está deshabilitado / aviso del chequeo
+                previo de repo git. Sin esto la casilla gris no explica nada. */}
+            {prControl.visible && prControl.motivo && (
+              <div className={styles.openPrMotivo} onClick={(e) => e.stopPropagation()}>
+                {prControl.disabled ? "⚠ " : "ℹ "}
+                {prControl.motivo}
+              </div>
+            )}
+
+            {/* Aviso inmediato del lanzamiento: el backend rechazó el pedido de PR. */}
+            {prLaunchAviso && (
+              <div className={styles.openPrMotivo} onClick={(e) => e.stopPropagation()}>
+                ⚠ {prLaunchAviso}
+              </div>
+            )}
+
+            {/* RESULTADO del auto-PR: creado (con link), no creado (con motivo)
+                o fallado (con el error). Antes esto sólo existía como comentario
+                en la Issue del tracker; desde Stacky era invisible. */}
+            {prResultado.visible && (
+              <div
+                className={`${styles.openPrResultado} ${styles[`openPrTono_${prResultado.tono}`] ?? ""}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span>{prResultado.texto}</span>
+                {prResultado.url && (
+                  <a href={prResultado.url} target="_blank" rel="noreferrer noopener">
+                    Ver el PR
+                  </a>
+                )}
+              </div>
+            )}
 
             {pipelineQ.data && (
               <div className={styles.ticketPipelineBox}>
@@ -1019,12 +1111,28 @@ export default function TicketBoard({ ticket = null }: { ticket?: number | null 
   // P7: hook de auto-refresh con Page Visibility API y backoff.
   // Plan 156 F4: el reloj "hace Xs"/stale vive ahora en SyncStatusBar (hoja);
   // el hook ya no expone secondsSinceSync/isStale.
+  // Plan 295 F10 — el intervalo sale del backend (flag del operador), con el 45 000
+  // historico como fallback. UNA sola fuente para los DOS consumidores: el hook de
+  // aca abajo y la barra de estado (mas abajo, en el JSX). Si solo se alimentara el
+  // hook, la barra derivaria "stale" contra 45 s mientras el sync corre cada 180 s,
+  // y el operador veria la barra en rojo permanente.
+  const { data: cfgSync } = useQuery({
+    queryKey: ["tickets", "config", "frontend"],
+    queryFn: () => Tickets.frontendConfig(),
+    staleTime: Infinity,   // se lee UNA vez al montar; no es un dato que cambie solo
+    retry: false,          // si falla, el fallback alcanza: no hay que insistir
+  });
+  const intervaloSync = intervaloDeSync(
+    cfgSync?.ticket_sync_interval_ms,
+    TICKET_SYNC_INTERVAL_MS,
+  );
+
   const {
     lastSyncedAt,
     isSyncing: isSyncingV2,
     syncError: syncErrorV2,
     triggerSync,
-  } = useTicketSync({ intervalMs: TICKET_SYNC_INTERVAL_MS, syncOnMount: true });
+  } = useTicketSync({ intervalMs: intervaloSync, syncOnMount: true });
 
   const { data: tickets, isLoading, isError: isTicketsError, error: ticketsError, refetch: refetchTickets } = useQuery<Ticket[]>({
     queryKey: ["tickets", activeProjectName],
@@ -1267,7 +1375,7 @@ export default function TicketBoard({ ticket = null }: { ticket?: number | null 
         isSyncing={isSyncingV2}
         syncError={syncErrorV2}
         onSyncClick={triggerSync}
-        intervalMs={TICKET_SYNC_INTERVAL_MS}
+        intervalMs={intervaloSync}
       />
 
       {/* Banner global de tickets en ejecución */}

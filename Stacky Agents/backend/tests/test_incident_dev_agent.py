@@ -157,14 +157,34 @@ def _pr_flags(resolver: bool, pr: bool):
 @contextmanager
 def _patch_pr_deps(repo_root="/repo", baseline=None):
     """Parchea las deps de F3 (project_context + incident_dev_pr) para no tocar git."""
-    from services import incident_dev_pr, project_context
+    from services import incident_dev_pr, merge_request_provider, project_context
     if baseline is None:
         baseline = {"head": "abc", "entries": {}}
     ctx = MagicMock()
-    ctx.workspace_root = "/ws" if repo_root else None
+    # El workspace SIEMPRE está configurado; lo que discrimina el caso "no es repo
+    # git" es `resolve_repo_root -> None`. Atarlos (como estaba) mezclaba dos
+    # motivos distintos ("sin_workspace" vs "no_es_repo_git") en un solo fixture.
+    ctx.workspace_root = "/ws"
+    # 2026-08-02 — el chequeo previo de repo git (`incident_dev_pr.preflight_repo`)
+    # mira el tracker: un MagicMock crudo acá no es ningún tracker conocido y el
+    # preflight lo rechazaría por "tracker_sin_pr". El proyecto real siempre tiene
+    # uno (tracker_provider.py:132 defaultea a azure_devops).
+    ctx.tracker_type = "azure_devops"
     record = MagicMock()
+    # El chequeo previo le pregunta a la FABRICA si el proyecto puede abrir PRs
+    # (no tiene lista propia de trackers): sin esto pediría credenciales reales.
+    _mrp = MagicMock()
+    _mrp.name = "azure_devops"
     with patch.object(project_context, "resolve_project_context", MagicMock(return_value=ctx)), \
-         patch.object(incident_dev_pr, "resolve_repo_root", MagicMock(return_value=repo_root)), \
+         patch.object(merge_request_provider, "get_merge_request_provider",
+                      MagicMock(return_value=_mrp)), \
+         patch.object(incident_dev_pr, "detect_repo", MagicMock(return_value={
+             "ok": bool(repo_root),
+             "reason": None if repo_root else "no_es_repo_git",
+             "repo_root": repo_root, "workspace_root": "/ws",
+             "es_subdirectorio": False, "pista": None,
+         })), \
+         patch.object(incident_dev_pr, "remote_origin_url", MagicMock(return_value=None)), \
          patch.object(incident_dev_pr, "snapshot_worktree", MagicMock(return_value=baseline)), \
          patch.object(incident_dev_pr, "record_intent", record):
         yield record
@@ -219,7 +239,14 @@ def test_run_incident_dev_no_intent_when_pr_flag_off():
     record.assert_not_called()
 
 
-def test_run_incident_dev_no_intent_when_not_a_git_repo():
+def test_run_incident_dev_sin_repo_git_registra_el_skip_con_motivo():
+    """ACTUALIZADO 2026-08-02 (antes: `..._no_intent_when_not_a_git_repo`).
+
+    El comportamiento viejo era NO registrar nada: el post-hook cortaba en
+    `get_intent() -> None` y el operador que había tildado "Abrir PR" no recibía
+    ningún aviso de que el PR jamás iba a existir. Ahora sigue sin abrirse el PR
+    (eso no cambia) pero queda un intent `skipped` con el motivo, consultable por
+    GET /api/incidents/dev-pr/result/<id>, y la respuesta lo declara."""
     ticket = _fake_ticket(work_item_type="Issue")
     app = _make_app()
     with _pr_flags(True, True):
@@ -231,4 +258,9 @@ def test_run_incident_dev_no_intent_when_not_a_git_repo():
                         json={"ticket_id": 1, "open_pr": True},
                     )
     assert resp.status_code == 202
-    record.assert_not_called()
+    record.assert_called_once()
+    args, _ = record.call_args
+    assert args[1]["open_pr"] is False        # NO se abre PR: el fondo no cambió
+    assert args[1]["status"] == "skipped"
+    assert resp.get_json()["auto_pr"]["accepted"] is False
+    assert resp.get_json()["auto_pr"]["reason"] == "no_es_repo_git"

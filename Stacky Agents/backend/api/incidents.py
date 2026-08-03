@@ -31,6 +31,119 @@ def incidents_status():
     })
 
 
+def _pidio_refrescar() -> bool:
+    """`?refresh=1` — el operador quiere que se vuelva a mirar el disco.
+
+    Es opt-in a propósito: si cada consulta tirara el memo, la detección se
+    convertiría en un `git rev-parse` por render y por poll, que es justo lo que
+    el memo viene a evitar.
+    """
+    return (request.args.get("refresh") or "").strip().lower() in ("1", "true", "on", "yes")
+
+
+@bp.get("/dev-pr/preflight")
+def dev_pr_preflight():
+    """Chequeo PREVIO de repo git para el tilde "Abrir PR" del ticket.
+
+    200 SIEMPRE, incluso con la flag apagada o el proyecto roto: el wrapper
+    `api.*` del frontend LANZA en non-2xx (client.ts) y dejaria el control en el
+    limbo. El fallo viaja en el body (`ok`/`reason`/`message`) para que el tilde
+    se muestre DESHABILITADO con el motivo a la vista.
+    """
+    from services import incident_dev_pr
+    project = (request.args.get("project") or "").strip() or None
+    try:
+        if _pidio_refrescar():
+            # El operador pide re-mirar el disco (recién hizo `git init`, o
+            # arregló la ruta): sin esto contestaría el memo y el resultado
+            # seguiría siendo el viejo.
+            incident_dev_pr.invalidate_repo_detection()
+        return jsonify(incident_dev_pr.preflight_repo(project))
+    except Exception as exc:  # noqa: BLE001 — nunca 500: rompería el board entero
+        return jsonify({
+            "ok": False, "reason": "error_interno",
+            "message": f"No se pudo verificar el repositorio git: {exc}",
+            "warning": None, "warning_message": "",
+            "repo_root": None, "origin": None, "workspace_root": None,
+            "tracker_type": None, "provider_label": None, "project": project,
+        })
+
+
+@bp.get("/dev-pr/result/<int:execution_id>")
+def dev_pr_result(execution_id: int):
+    """Resultado del auto-PR de un run: creado (con URL), no creado (con motivo)
+    o fallado (con el error). 200 siempre, por la misma razón que el preflight."""
+    from services import incident_dev_pr
+    try:
+        return jsonify(incident_dev_pr.result_for_execution(execution_id))
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"ok": False, "found": False, "status": "error",
+                        "terminal": True, "execution_id": int(execution_id),
+                        "error": str(exc)})
+
+
+@bp.get("/dev-pr/preflight-all")
+def dev_pr_preflight_all():
+    """Estado del auto-PR de TODOS los proyectos configurados, de un vistazo.
+
+    Existe para que el operador no tenga que ir cambiando de proyecto activo y
+    tildando de a uno para descubrir cuáles tienen git reconocido. El estado de
+    git se calcula aunque el auto-PR esté apagado: son dos preguntas distintas
+    y `dev_pr_enabled` viaja aparte.
+    """
+    from config import config as _cfg
+    from services import incident_dev_pr
+    habilitado = bool(getattr(_cfg, "STACKY_INCIDENT_DEV_PR_ENABLED", False))
+    try:
+        if _pidio_refrescar():
+            incident_dev_pr.invalidate_repo_detection()
+        filas = incident_dev_pr.preflight_all_projects()
+    except Exception as exc:  # noqa: BLE001 — 200 siempre: no rompe la pantalla
+        return jsonify({
+            "ok": False, "projects": [], "total": 0, "con_git": 0,
+            "dev_pr_enabled": habilitado,
+            "message": f"No se pudo verificar el estado de los proyectos: {exc}",
+        })
+    return jsonify({
+        "ok": True,
+        "projects": filas,
+        "total": len(filas),
+        "con_git": sum(1 for f in filas if f.get("ok")),
+        "dev_pr_enabled": habilitado,
+        "message": "",
+    })
+
+
+@bp.get("/dev-pr/result-by-ticket/<int:ticket_id>")
+def dev_pr_result_by_ticket(ticket_id: int):
+    """Resultado del auto-PR del ÚLTIMO run del Dev Resolutor sobre este ticket.
+
+    Existe para que el resultado sobreviva a un refresh: consultarlo sólo por
+    `execution_id` obligaría a la UI a recordarlo en memoria y el operador que
+    recarga la página perdería el resultado del PR para siempre.
+    """
+    from services import incident_dev_pr
+    _vacio = {"ok": True, "found": False, "status": "no_solicitado",
+              "terminal": True, "execution_id": None}
+    try:
+        from db import session_scope
+        from models import AgentExecution
+        with session_scope() as session:
+            fila = (
+                session.query(AgentExecution)
+                .filter(AgentExecution.ticket_id == ticket_id,
+                        AgentExecution.agent_type == "incident_dev")
+                .order_by(AgentExecution.id.desc())
+                .first()
+            )
+            execution_id = fila.id if fila is not None else None
+        if execution_id is None:
+            return jsonify(_vacio)
+        return jsonify(incident_dev_pr.result_for_execution(execution_id))
+    except Exception as exc:  # noqa: BLE001 — 200 siempre; nunca rompe el board
+        return jsonify({**_vacio, "ok": False, "status": "error", "error": str(exc)})
+
+
 @bp.post("")
 def create_incident_endpoint():
     from config import config as _cfg

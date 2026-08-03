@@ -52,7 +52,11 @@ import {
   resolveInboxActionsEnabled,
   skippedNotice,
 } from "../incidents/incidentInboxActionsModel";
-import { DEFAULT_OPEN_PR, shouldShowOpenPrCheckbox } from "../incidents/incidentDevPrModel";
+import {
+  DEFAULT_OPEN_PR,
+  describeOpenPrControl,
+  PREFLIGHT_CAIDO,
+} from "../incidents/incidentDevPrModel";
 import {
   copyText,
   resolveCopyExportEnabled,
@@ -176,10 +180,22 @@ export default function IncidentInboxPage() {
   });
   const devResolverEnabled = Boolean(incidentsStatusQ.data?.dev_resolver_enabled);
   const devPrEnabled = Boolean(incidentsStatusQ.data?.dev_pr_enabled);
-  const showOpenPr = shouldShowOpenPrCheckbox({
-    canResolve: actionsEnabled && devResolverEnabled,
-    devPrEnabled,
+  const puedeResolverAlgo = actionsEnabled && devResolverEnabled;
+  // 2026-08-02 — chequeo PREVIO de repositorio git, igual que en el tablero: el
+  // tilde no se esconde cuando el PR no puede salir, se deshabilita CON motivo.
+  const prPreflightQ = useQuery({
+    queryKey: ["dev-pr-preflight", activeProjectName],
+    queryFn: () => Incidents.devPrPreflight(activeProjectName),
+    enabled: puedeResolverAlgo && devPrEnabled,
+    staleTime: 60 * 1000,
   });
+  const prControl = describeOpenPrControl({
+    canResolve: puedeResolverAlgo,
+    devPrEnabled,
+    preflight: prPreflightQ.data ?? (prPreflightQ.isError ? PREFLIGHT_CAIDO : null),
+    deseado: openPr,
+  });
+  const showOpenPr = prControl.visible;
 
   const dto = itemsQ.data?.data ?? null;
   const raw = useMemo(() => dto?.items ?? [], [dto]);
@@ -253,14 +269,20 @@ export default function IncidentInboxPage() {
   // el post-hook commitea lo que toco y abre el Pull Request.
   const resolverUna: BulkWorker = useCallback(
     async (ticketId: number) => {
-      await Incidents.runDevResolver({
+      const r = await Incidents.runDevResolver({
         ticket_id: ticketId,
         runtime: agentRuntime,
         project: activeProjectName,
-        open_pr: showOpenPr ? openPr : false,
+        // `checked` ya combina el tilde del operador con el chequeo de repo git.
+        open_pr: prControl.checked,
       });
+      // El backend dice si aceptó el pedido de PR; si no, se avisa en el acto en
+      // vez de dejar al operador esperando un PR que nunca va a existir.
+      if (r.auto_pr?.requested && !r.auto_pr.accepted) {
+        setToast({ variant: "error", body: r.auto_pr.message || "No se pudo pedir el PR automático." });
+      }
     },
-    [agentRuntime, activeProjectName, openPr, showOpenPr],
+    [agentRuntime, activeProjectName, prControl.checked],
   );
 
   const resolverFila = useCallback(
@@ -422,15 +444,21 @@ export default function IncidentInboxPage() {
             </datalist>
           </div>
         )}
-        {showOpenPr && (
+        {prControl.visible && (
           <Checkbox
-            label="Abrir PR al resolver"
+            label={`${prControl.etiqueta} al resolver`}
             labelClassName={styles.inlineToggle}
-            checked={openPr}
+            checked={prControl.checked}
             onChange={(e) => setOpenPr(e.target.checked)}
-            disabled={bulkRunning}
-            title="Al terminar el agente, commitea lo que toco y abre el Pull Request"
+            disabled={bulkRunning || prControl.disabled}
+            title={prControl.motivo || "Al terminar el agente, commitea lo que toco y abre el Pull Request"}
           />
+        )}
+        {prControl.visible && prControl.motivo && (
+          <span className={styles.inlineToggle} title={prControl.motivo}>
+            {prControl.disabled ? "⚠ " : "ℹ "}
+            {prControl.motivo}
+          </span>
         )}
         {copiarHabilitado && (
           <Button variant="ghost" size="sm" className={styles.copyBtn} onClick={() => void copiarLista()}>

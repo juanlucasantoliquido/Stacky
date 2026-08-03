@@ -139,11 +139,23 @@ def test_noop_when_agent_type_not_incident_dev():
     h["mark"].assert_not_called()
 
 
-def test_noop_when_final_status_not_completed():
+def test_no_abre_pr_cuando_el_run_no_termino_completed_pero_LO_DICE():
+    """ACTUALIZADO 2026-08-02 (antes: `test_noop_when_final_status_not_completed`,
+    que exigía `mark.assert_not_called()`).
+
+    La invariante que importa NO cambió: con un run que no llegó a 'completed'
+    NO se abre ningún PR. Lo que cambió es que ya no es un no-op MUDO: se marca
+    el intent para que el operador que tildó "Abrir PR" pueda enterarse de que
+    el PR no va a existir. Medido en la base viva: los intents 164..167 llevaban
+    desde el 2026-07-26 con `open_pr:true` y sin `status`, indistinguibles de un
+    PR que todavía está por venir."""
     with _patched(intent={"open_pr": True}) as h:
         _call(final_status="failed")
-    assert h["mrp"].created == []
-    h["mark"].assert_not_called()
+    assert h["mrp"].created == []          # el fondo NO cambió: cero PRs
+    assert h["writer"].commits == []       # ni un commit
+    skipped = _mark_status(h["mark"], "skipped")
+    assert len(skipped) == 1
+    assert "failed" in skipped[0].kwargs["error"]
 
 
 def test_idempotent_when_already_opened():

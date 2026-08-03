@@ -607,6 +607,61 @@
 .openPrCheckbox input {
   cursor: pointer;
 }
+.openPrCheckbox input:disabled {
+  cursor: not-allowed;
+}
+.openPrCheckbox:has(input:disabled) {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+/* 2026-08-02 — motivo del chequeo previo de repo git. Un tilde deshabilitado
+   sin explicación es indistinguible de una funcionalidad que no existe. */
+.openPrMotivo {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--status-warning-solid);
+  background: var(--status-warning-bg);
+  border: 1px solid var(--status-warning-border);
+}
+
+/* Resultado del auto-PR: creado (con link), no creado o fallado. */
+.openPrResultado {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+}
+.openPrResultado a {
+  font-weight: 700;
+  text-decoration: underline;
+  color: inherit;
+}
+.openPrTono_ok {
+  color: var(--status-success-text);
+  background: var(--status-success-bg);
+  border-color: var(--status-success-border);
+}
+.openPrTono_error {
+  color: var(--status-danger-text);
+  background: var(--status-danger-bg);
+  border-color: var(--status-danger-border);
+}
+.openPrTono_info,
+.openPrTono_pendiente {
+  color: var(--status-info-text);
+  background: var(--status-info-bg);
+  border-color: var(--status-info-border);
+}
 
 /* B6 — Botón cancelar run (rojo, junto a Finish work) */
 .cancelRunBtn {

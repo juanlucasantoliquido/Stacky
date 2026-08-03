@@ -18,9 +18,10 @@ import AgentRuntimeSelector from "./AgentRuntimeSelector";
 import ModelEffortPicker from "./ModelEffortPicker";
 import ClaudeCliConfigModal from "./ClaudeCliConfigModal";
 import IntentPreflightModal from "./IntentPreflightModal";
-import { canGenerateEpic } from "../services/uiGuards";
+import { canGenerateEpic, sealedWorkItemId } from "../services/uiGuards";
 import { clearBriefDraft, readBriefDraft, writeBriefDraft } from "../services/briefDraft";
 import { useModelCatalog } from "../hooks/useModelCatalog";
+import AvisoCatalogoModelos from "./AvisoCatalogoModelos";  // Plan 288 F9
 import type { AgentRuntime } from "../types";
 import styles from "./EpicFromBriefModal.module.css";
 
@@ -220,7 +221,10 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
           // autónoma al cerrar la run. Si ya hay sello, NO re-publicar (evita
           // épica duplicada); si hay error de publicación, mostrarlo.
           const md = (exec.metadata ?? {}) as Record<string, unknown>;
-          const sealedAdoId = typeof md.epic_ado_id === "number" ? md.epic_ado_id : null;
+          // El sello se lee con `sealedWorkItemId`, NO con `typeof === "number"`:
+          // los providers no-ADO estringan los ids del tracker, y ese guard daba
+          // null en GitLab ⇒ el modal republicaba y salía una épica DUPLICADA.
+          const sealedAdoId = sealedWorkItemId(md);
           const publishErr = typeof md.epic_publish_error === "string" ? md.epic_publish_error : null;
           if (sealedAdoId !== null) {
             setCreatedAdoId(sealedAdoId);
@@ -410,6 +414,11 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
         brief: brief.trim(),
         project_name: activeProjectName ?? undefined,
         confirm: true,
+        // Clave de idempotencia. El guard de arriba (`sealedWorkItemId`) es la
+        // primera línea, pero vive en el navegador: si este POST se repite por
+        // reintento de red, doble render o F5, el que tiene que decir "esa épica
+        // ya existe" es el servidor. Sin este campo NO puede.
+        execution_id: executionId ?? undefined,
       });
       setCreatedAdoId(res.ado_id);
       clearBriefDraft(window.sessionStorage, activeProjectName);
@@ -497,6 +506,8 @@ export default function EpicFromBriefModal({ onClose, onCreated }: EpicFromBrief
                   if (n.effort) setSelectedEffort(n.effort as EffortLevel);
                 }}
               />
+              {/* Plan 288 F9 — de dónde salió esta lista y qué se descartó. */}
+              <AvisoCatalogoModelos runtime={agentRuntime} />
               {issueEnabled && (
                 <label className={styles.label}>
                   Tipo de work item

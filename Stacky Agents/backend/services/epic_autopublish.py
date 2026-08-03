@@ -354,3 +354,85 @@ def maybe_autopublish_epic(*, ticket_id, execution_id, final_status, agent_type,
 
 def register(register_post_hook) -> None:
     register_post_hook(maybe_autopublish_epic)
+
+
+# ── superficie publica para el OTRO escritor del mismo hecho ──────────────────
+#
+# `POST /api/tickets/epics/from-brief` (api/tickets.py:7958) publica la MISMA
+# epica que este post-hook. Son dos escritores del mismo hecho, y hasta ahora no
+# se conocian: el endpoint no tenia idempotencia NINGUNA y toda la defensa vivia
+# en un `if` del navegador. Estos tres helpers le dan al endpoint el mismo
+# registro de idempotencia (el sello) y el MISMO claim atomico que usa el hook,
+# para que la exclusion sea real y no un check-then-act de cada lado.
+
+_SEAL_KEYS = ("epic_ado_id", "issue_ado_id")
+
+
+def sealed_work_item_id(execution_id: int) -> int | None:
+    """El id de la epica/issue YA publicada para esta run, o None.
+
+    Tolera el sello guardado como string: los providers no-ADO normalizan los ids
+    del tracker a str (gitlab_provider.py:131-132) y las runs viejas de GitLab
+    quedaron con el sello estringado. Un `isinstance(v, int)` acá revive
+    exactamente la doble publicacion que este modulo existe para evitar.
+    """
+    run = _load_run(execution_id)
+    if run is None:
+        return None
+    md = run["metadata"] or {}
+    for key in _SEAL_KEYS:
+        valor = md.get(key)
+        if isinstance(valor, bool):          # `True` no es un id
+            continue
+        if isinstance(valor, int):
+            return valor or None
+        if isinstance(valor, str) and valor.strip():
+            try:
+                return int(valor) or None
+            except ValueError:
+                continue
+    return None
+
+
+def claim_publication(execution_id: int) -> bool:
+    """True solo para el PRIMER escritor. MISMA clave que usa el post-hook, a
+    proposito: si el hook ya esta publicando, el endpoint tiene que quedarse afuera."""
+    return _claim(execution_id)
+
+
+def release_claim(execution_id: int) -> None:
+    """Devuelve el claim cuando la publicacion FALLO.
+
+    Sin esto, un 502 del tracker dejaria la run marcada como reclamada para
+    siempre y ni el operador ni el post-hook podrian reintentar: la epica no
+    existiria y nadie volveria a intentarlo. Solo se llama en el camino de error,
+    nunca despues de un exito.
+    """
+    def _once() -> None:
+        from db import session_scope
+        from models import AgentExecution
+
+        with session_scope() as session:
+            row = session.get(AgentExecution, execution_id)
+            if row is None:
+                return
+            md = dict(row.metadata_dict or {})
+            if md.pop(_CLAIM_KEY, None) is None:
+                return
+            row.metadata_dict = md
+
+    _retry(_once, "release_claim")
+
+
+def seal_published(execution_id: int, ado_id: int, *, is_issue: bool = False) -> None:
+    """Sella el resultado en la MISMA clave que lee el post-hook (`:326-328`).
+
+    Si el endpoint publicara sin sellar, el post-hook correria despues, no veria
+    sello y publicaria una SEGUNDA epica: el bug de origen, con los papeles
+    invertidos.
+    """
+    _merge_metadata(execution_id, {
+        "issue_ado_id" if is_issue else "epic_ado_id": int(ado_id),
+        "epic_publish": _publish_seal({}, outcome="published", error_kind=None,
+                                      recovery_method="published_by_endpoint"),
+    })

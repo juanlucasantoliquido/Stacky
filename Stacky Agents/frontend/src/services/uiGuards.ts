@@ -64,3 +64,26 @@ export function restoreConsoleDecision(
 export function toggleNavTab(current: string): "team" | "tickets" {
   return current === "team" ? "tickets" : "team";
 }
+
+/** Lee el SELLO de publicación que el backend deja en `AgentExecution.metadata`
+ *  al crear la épica/issue del brief (`epic_ado_id` / `issue_ado_id`,
+ *  services/epic_autopublish.py:280-282). Devuelve null solo si NO hay sello.
+ *
+ *  Es el guard anti-doble-publicación: si el backend ya publicó, el modal NO
+ *  debe volver a llamar a `POST /api/tickets/epics/from-brief` (ese endpoint no
+ *  tiene idempotencia: api/tickets.py:7906 publica siempre que lo llamen).
+ *
+ *  Acepta number Y string A PROPÓSITO: los providers no-ADO normalizan los ids
+ *  del tracker a string, así que un guard `typeof === "number"` daba null en
+ *  GitLab y el modal publicaba una SEGUNDA épica REAL. También mira
+ *  `issue_ado_id`, que es el sello cuando el work item es un Issue. */
+export function sealedWorkItemId(
+  metadata: Record<string, unknown> | null | undefined,
+): number | null {
+  const md = metadata ?? {};
+  const raw = md.epic_ado_id ?? md.issue_ado_id;
+  if (typeof raw === "number") return Number.isFinite(raw) && raw !== 0 ? raw : null;
+  if (typeof raw !== "string" || raw.trim() === "") return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed !== 0 ? parsed : null;
+}
